@@ -55,13 +55,16 @@ type UploadState = 'PENDING' | 'UPLOADING' | 'PROCESSING' | 'ACTIVE' | 'FAILED';
 
 interface MediaFile {
   id: string;
-  file: File;
+  file?: File;
   status: UploadState;
   name?: string;
   uri?: string;
   mimeType?: string;
   previewUrl?: string;
-  firestoreId?: string; // ID of the file in Firestore
+  firestoreId?: string;
+  progress?: number;
+  size?: number;
+  type?: 'video' | 'audio' | 'image';
 }
 
 interface AttachedFile {
@@ -70,6 +73,8 @@ interface AttachedFile {
   type: string;
   size: number;
   data: string; // base64
+  uri?: string;
+  mimeType?: string;
 }
 
 export default function App() {
@@ -239,15 +244,41 @@ export default function App() {
         uploadedFile = await ai.files.get({ name: uploadResult.name });
       }
 
-      if (uploadedFile.state === "FAILED") {
-        throw new Error(`Cloud processing failed for ${file.name}`);
+      const uploadedFileWithId = await ai.files.get({ name: uploadResult.name });
+      
+      let base64 = "";
+      if (file.size < 800 * 1024) {
+        base64 = await fileToBase64(file);
+      }
+
+      let firestoreId = "";
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          const fileDoc = {
+            userId: user.uid,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: base64,
+            createdAt: serverTimestamp(),
+            uri: uploadedFileWithId.uri,
+            mimeType: uploadedFileWithId.mimeType
+          };
+          const fileRef = await addDoc(collection(db, "files"), fileDoc);
+          firestoreId = fileRef.id;
+        } catch (fErr) {
+          console.error("Optional firestore file save failed:", fErr);
+        }
       }
 
       setMediaFiles(prev => prev.map(v => v.id === id ? { 
         ...v, 
         status: 'ACTIVE', 
-        uri: uploadedFile.uri,
-        mimeType: uploadedFile.mimeType
+        uri: uploadedFileWithId.uri,
+        mimeType: uploadedFileWithId.mimeType,
+        firestoreId,
+        base64
       } : v));
 
     } catch (err: any) {
@@ -469,7 +500,7 @@ LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
 
 AVAILABLE MEDIA ASSETS FOR CONTEXTUAL PLACEMENT:
-${readyVideos.map(v => `- [File: ${v.file.name}]: Reference ID: MEDIA_ID_${v.id} (Type: ${v.file.type})`).join('\n')}
+${readyVideos.map(v => `- [File: ${v.file.name}]: Reference ID: MEDIA_ID_${(v as any).firestoreId || v.id} (Type: ${v.file.type})`).join('\n')}
 
 INSTRUCTIONS:
 1. Analyze the media thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details, context, and how they relate to the overall topic.
@@ -513,15 +544,16 @@ Please generate the blog post now:`;
       setBlogPost(generatedContent);
       setOriginalContent(generatedContent);
 
-      // 1. Save Files to Firestore and Generation
-      try {
-        const fileIds: string[] = [];
-        const attachedFiles: AttachedFile[] = [];
+    try {
+      const fileIds: string[] = [];
+      const attachedFiles: AttachedFile[] = [];
 
-        for (const vf of readyVideos) {
-          // Only store as base64 if small enough for Firestore doc (1MB limit)
-          // We use ~800KB as a safe limit
-          let base64 = "";
+      for (const vf of readyVideos) {
+        // Find if this file was already saved to Firestore during upload
+        let fileId = (vf as any).firestoreId;
+        let base64 = (vf as any).base64 || "";
+
+        if (!fileId) {
           if (vf.file.size < 800 * 1024) {
             base64 = await fileToBase64(vf.file);
           }
@@ -536,30 +568,33 @@ Please generate the blog post now:`;
           };
 
           const fileRef = await addDoc(collection(db, "files"), fileDoc);
-          fileIds.push(fileRef.id);
-          attachedFiles.push({
-            id: fileRef.id,
-            name: vf.file.name,
-            type: vf.file.type,
-            size: vf.file.size,
-            data: base64
-          });
+          fileId = fileRef.id;
         }
 
-        setCurrentAttachedFiles(attachedFiles);
+        fileIds.push(fileId);
+        attachedFiles.push({
+          id: fileId,
+          name: vf.file.name,
+          type: vf.file.type,
+          size: vf.file.size,
+          data: base64
+        });
+      }
 
-        const generationData = {
-          userId: user.uid,
-          content: generatedContent,
-          title: generatedContent.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Blog Post",
-          preferences: preferences,
-          fileIds: fileIds, // Use fileIds instead of mediaIds
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        };
-        const docRef = await addDoc(collection(db, "generations"), generationData);
-        setCurrentGenerationId(docRef.id);
-      } catch (err) {
+      setCurrentAttachedFiles(attachedFiles);
+
+      const generationData = {
+        userId: user.uid,
+        content: generatedContent,
+        title: generatedContent.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Blog Post",
+        preferences: preferences,
+        fileIds: fileIds,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      const docRef = await addDoc(collection(db, "generations"), generationData);
+      setCurrentGenerationId(docRef.id);
+    } catch (err) {
         handleFirestoreError(err, OperationType.CREATE, "generations/files");
       }
     } catch (err: any) {
@@ -712,17 +747,33 @@ Please generate the blog post now:`;
         const files: AttachedFile[] = fileSnaps
           .filter(snap => snap.exists())
           .map(snap => {
-            const data = snap.data();
+            const data = snap.data() as any;
             return {
               id: snap.id,
               name: data.name,
               type: data.type,
               size: data.size,
-              data: data.data
+              data: data.data,
+              uri: data.uri,
+              mimeType: data.mimeType
             };
           });
         
         setCurrentAttachedFiles(files);
+        
+        // Populate mediaFiles so the preview can find them
+        const restoredMedia: MediaFile[] = files.map(f => ({
+          id: f.id,
+          name: f.name,
+          type: (f.type.includes('video') ? 'video' : f.type.includes('audio') ? 'audio' : 'image') as any,
+          status: 'ACTIVE',
+          progress: 100,
+          previewUrl: f.data ? `data:${f.type};base64,${f.data}` : undefined,
+          size: f.size,
+          mimeType: f.type,
+          uri: (f as any).uri
+        }));
+        setMediaFiles(restoredMedia);
       } catch (err) {
         console.error("Error fetching attached files:", err);
       }
@@ -952,15 +1003,15 @@ Please generate the blog post now:`;
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3 overflow-hidden flex-1">
-                          {v.file.type.includes('audio') ? (
+                          {v.mimeType?.includes('audio') || (v.file && v.file.type.includes('audio')) ? (
                             <FileAudio className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
-                          ) : v.file.type.includes('image') ? (
+                          ) : v.mimeType?.includes('image') || (v.file && v.file.type.includes('image')) ? (
                             <FileImage className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
                           ) : (
                             <FileVideo className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
                           )}
-                          <span className="text-xs font-mono truncate">{v.file.name}</span>
-                          <span className="text-[10px] opacity-40">{(v.file.size / (1024 * 1024)).toFixed(1)}MB</span>
+                          <span className="text-xs font-mono truncate">{v.name || v.file?.name}</span>
+                          <span className="text-[10px] opacity-40">{( (v.size || v.file?.size || 0) / (1024 * 1024)).toFixed(1)}MB</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <button 
@@ -971,7 +1022,15 @@ Please generate the blog post now:`;
                             <Eye className="w-3 h-3" />
                           </button>
                           <button 
-                            onClick={() => downloadLocalFile(v.file)}
+                            onClick={() => {
+                              if (v.file) downloadLocalFile(v.file);
+                              else if (v.previewUrl) {
+                                const link = document.createElement('a');
+                                link.href = v.previewUrl;
+                                link.download = v.name || 'download';
+                                link.click();
+                              }
+                            }}
                             className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
                             title="Download File"
                           >
@@ -1481,15 +1540,18 @@ Please generate the blog post now:`;
                                 const id = src.replace('MEDIA_ID_', '');
                                 const media = mediaFiles.find(m => m.id === id);
                                 if (media && media.previewUrl) {
-                                  if (media.file.type.includes('image')) {
+                                  const type = media.mimeType || media.file?.type || '';
+                                  const name = media.name || media.file?.name || 'Asset';
+
+                                  if (type.includes('image')) {
                                     return (
                                       <div className="my-10 space-y-2">
-                                        <img src={media.previewUrl} alt={alt || media.file.name} className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]`} />
-                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Visual Reference: {alt || media.file.name}</p>
+                                        <img src={media.previewUrl} alt={alt || name} className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]`} />
+                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Visual Reference: {alt || name}</p>
                                       </div>
                                     );
                                   }
-                                  if (media.file.type.includes('video')) {
+                                  if (type.includes('video')) {
                                     return (
                                       <div className="my-12 space-y-4">
                                           <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
@@ -1503,7 +1565,7 @@ Please generate the blog post now:`;
                                       </div>
                                     );
                                   }
-                                  if (media.file.type.includes('audio')) {
+                                  if (type.includes('audio')) {
                                     return (
                                         <div className={`my-10 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)]`}>
                                         <div className="flex items-center gap-4 mb-6">
@@ -1512,7 +1574,7 @@ Please generate the blog post now:`;
                                           </div>
                                           <div>
                                             <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1">Audio_Asset</span>
-                                            <span className="block text-xs font-bold uppercase tracking-tight">{media.file.name}</span>
+                                            <span className="block text-xs font-bold uppercase tracking-tight">{name}</span>
                                           </div>
                                         </div>
                                         <audio src={media.previewUrl} controls className="w-full h-10" />
