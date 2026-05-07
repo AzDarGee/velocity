@@ -19,10 +19,16 @@ const getStripe = () => {
 };
 
 const CREDIT_PACKS = {
-  "pack-50": { credits: 50, priceInCents: 100, name: "Starter Pack (50 Credits)" },
-  "pack-200": { credits: 200, priceInCents: 100, name: "Content Pack (200 Credits)" },
-  "pack-500": { credits: 500, priceInCents: 100, name: "Pro Pack (500 Credits)" },
-  "pack-1000": { credits: 1000, priceInCents: 100, name: "Enterprise Pack (1000 Credits)" },
+  "pack-50": { credits: 50, priceInCents: 1000, name: "Starter Pack (50 Credits)" },
+  "pack-200": { credits: 200, priceInCents: 2500, name: "Content Pack (200 Credits)" },
+  "pack-500": { credits: 500, priceInCents: 4500, name: "Pro Pack (500 Credits)" },
+  "pack-1000": { credits: 1000, priceInCents: 9900, name: "Enterprise Pack (1000 Credits)" },
+};
+
+const SUBSCRIPTION_PLANS = {
+  "sub-weekly": { credits: 50, priceInCents: 700, name: "Weekly Content Tier", interval: "week" as const },
+  "sub-monthly": { credits: 200, priceInCents: 1900, name: "Monthly Content Tier", interval: "month" as const },
+  "sub-yearly": { credits: 1200, priceInCents: 9900, name: "Yearly Content Tier", interval: "year" as const },
 };
 
 async function startServer() {
@@ -48,7 +54,6 @@ async function startServer() {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       console.log(`Payment successful for user ${session.metadata?.userId}`);
-      // In AI Studio preview environment without service accounts, we handle credit syncing locally in the browser
     }
 
     res.json({ received: true });
@@ -62,16 +67,19 @@ async function startServer() {
     try {
       const { packId, userId, userEmail } = req.body;
       const pack = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS];
+      const subscription = SUBSCRIPTION_PLANS[packId as keyof typeof SUBSCRIPTION_PLANS];
 
-      if (!pack || !userId) {
-        return res.status(400).json({ error: "Invalid pack or user identity" });
+      if (!pack && !subscription || !userId) {
+        return res.status(400).json({ error: "Invalid plan or user identity" });
       }
 
       const appUrl = req.headers.origin || req.headers.referer || "http://localhost:3000";
-      // Removing trailing slash if any
-      const baseUrl = appUrl.endsWith('/') ? appUrl.slice(0, -1) : appUrl;
+      const baseUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
 
       const stripe = getStripe();
+      const isSubscription = !!subscription;
+      const plan = subscription || pack;
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         line_items: [
@@ -79,21 +87,27 @@ async function startServer() {
             price_data: {
               currency: "usd",
               product_data: {
-                name: pack.name,
-                description: `Purchase ${pack.credits} credits for generation.`,
+                name: plan.name,
+                description: `Purchase ${plan.credits} credits ${isSubscription ? `per ${subscription.interval}` : "for generation"}.`,
               },
-              unit_amount: pack.priceInCents,
+              unit_amount: plan.priceInCents,
+              ...(isSubscription && {
+                recurring: {
+                  interval: subscription.interval,
+                },
+              }),
             },
             quantity: 1,
           },
         ],
-        mode: "payment",
+        mode: isSubscription ? "subscription" : "payment",
         customer_email: userEmail,
         success_url: `${baseUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/?payment=cancelled`,
         metadata: {
           userId,
           packId,
+          type: isSubscription ? "subscription" : "pack",
         },
       });
 
@@ -111,14 +125,20 @@ async function startServer() {
       const stripe = getStripe();
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-      if (session.payment_status === "paid" && session.metadata?.userId === userId) {
+      if (
+        (session.payment_status === "paid" || session.status === "complete") &&
+        session.metadata?.userId === userId
+      ) {
         const packId = session.metadata?.packId;
-        if (packId && CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS]) {
-          const creditsToAdd = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS].credits;
+        const pack = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS];
+        const subscription = SUBSCRIPTION_PLANS[packId as keyof typeof SUBSCRIPTION_PLANS];
+
+        if (pack || subscription) {
+          const creditsToAdd = (pack || subscription)!.credits;
           return res.json({ success: true, creditsToAdd, sessionId });
         }
       }
-      
+
       res.json({ success: false, status: session.payment_status });
     } catch (error: any) {
       console.error("Stripe Session Verification Error:", error);
@@ -134,21 +154,27 @@ async function startServer() {
 
       const stripe = getStripe();
       const sessions = await stripe.checkout.sessions.list({ limit: 100 });
-      
+
       const validSessions = sessions.data
-        .filter(session => session.payment_status === "paid" && session.metadata?.userId === userId)
-        .map(session => {
-           const packId = session.metadata?.packId;
-           let creditsToAdd = 0;
-           if (packId && CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS]) {
-             creditsToAdd = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS].credits;
-           }
-           return {
-             sessionId: session.id,
-             creditsToAdd
-           };
+        .filter(
+          (session) =>
+            (session.payment_status === "paid" || session.status === "complete") &&
+            session.metadata?.userId === userId
+        )
+        .map((session) => {
+          const packId = session.metadata?.packId;
+          let creditsToAdd = 0;
+          const pack = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS];
+          const subscription = SUBSCRIPTION_PLANS[packId as keyof typeof SUBSCRIPTION_PLANS];
+          if (pack || subscription) {
+            creditsToAdd = (pack || subscription)!.credits;
+          }
+          return {
+            sessionId: session.id,
+            creditsToAdd,
+          };
         })
-        .filter(s => s.creditsToAdd > 0);
+        .filter((s) => s.creditsToAdd > 0);
 
       res.json({ success: true, validSessions });
     } catch (error: any) {

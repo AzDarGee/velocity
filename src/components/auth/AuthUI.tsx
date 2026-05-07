@@ -213,6 +213,8 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const [isBuying, setIsBuying] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  const [topUpMode, setTopUpMode] = useState<'packs' | 'subs'>('packs');
+  
   useEffect(() => {
     if (!user) return;
     
@@ -500,8 +502,31 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                 </button>
               </div>
 
+              <div className={`flex border p-1 ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'}`}>
+                <button
+                  onClick={() => setTopUpMode('packs')}
+                  className={`flex-1 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                    topUpMode === 'packs' 
+                      ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') 
+                      : 'opacity-50 hover:opacity-100'
+                  }`}
+                >
+                  One-time_Packs
+                </button>
+                <button
+                  onClick={() => setTopUpMode('subs')}
+                  className={`flex-1 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                    topUpMode === 'subs' 
+                      ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') 
+                      : 'opacity-50 hover:opacity-100'
+                  }`}
+                >
+                  Subscription_Tiers
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
+                {topUpMode === 'packs' ? [
                   { id: 'pack-50', name: 'Starter', credits: 50, price: '$10' },
                   { id: 'pack-200', name: 'Content', credits: 200, price: '$25', tag: 'Best Value' },
                   { id: 'pack-500', name: 'Pro', credits: 500, price: '$45' },
@@ -543,6 +568,51 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                         <>
                           <CreditCard className="w-3 h-3" />
                           Authorize_Stripe_Transfer
+                        </>
+                      )}
+                    </div>
+                  </button>
+                )) : [
+                  { id: 'sub-weekly', name: 'Weekly', credits: 50, price: '$7', interval: 'week' },
+                  { id: 'sub-monthly', name: 'Monthly', credits: 200, price: '$19', interval: 'month', tag: 'Most Popular' },
+                  { id: 'sub-yearly', name: 'Yearly', credits: 1200, price: '$99', interval: 'year', tag: 'Best Value' }
+                ].map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => handleBuy(plan.id)}
+                    disabled={isBuying !== null}
+                    className={`p-6 border-2 flex flex-col items-start gap-4 transition-all relative group
+                      ${theme === 'dark' 
+                        ? 'border-[#333] bg-[#141414] hover:border-white shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
+                        : 'border-black bg-white hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}
+                      active:shadow-none active:translate-x-[2px] active:translate-y-[2px] overflow-hidden ${plan.id === 'sub-yearly' ? 'md:col-span-2' : ''}`}
+                  >
+                    <div className="flex items-start justify-between w-full">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-mono tracking-widest opacity-40">{plan.name}_Subscription</span>
+                        <div className="text-2xl font-bold font-mono">{plan.credits} <span className="text-xs italic opacity-60">CRD / {plan.interval === 'week' ? 'WK' : plan.interval === 'month' ? 'MO' : 'YR'}</span></div>
+                      </div>
+                      <div className={`text-xl font-bold font-mono ${theme === 'dark' ? 'text-yellow-500' : 'text-yellow-600'}`}>
+                        {plan.price}<span className="text-[10px] uppercase opacity-40">/{plan.interval}</span>
+                      </div>
+                    </div>
+                    
+                    {plan.tag && (
+                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-yellow-500 text-black text-[8px] font-mono font-bold uppercase tracking-widest rotate-6">
+                        {plan.tag}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60">
+                      {isBuying === plan.id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Initializing_Subscription
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-3 h-3" />
+                          Activate_Recurring_Protocol
                         </>
                       )}
                     </div>
