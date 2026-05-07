@@ -52,12 +52,24 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "name", "type", "data", "createdAt"]
+    },
+    "userKeys": {
+      "title": "UserKeys",
+      "description": "Private API keys and sensitive settings",
+      "type": "object",
+      "properties": {
+        "openRouterKey": { "type": "string" }
+      }
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "user",
       "description": "Individual user profiles"
+    },
+    "users/{userId}/private/keys": {
+      "schema": "userKeys",
+      "description": "Sensitive user keys"
     },
     "generations/{generationId}": {
       "schema": "generation",

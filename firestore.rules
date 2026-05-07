@@ -85,6 +85,11 @@ service cloud.firestore {
           incoming().credits >= existing().credits
         )
       );
+
+      // Private sensitive data
+      match /private/keys {
+        allow get, write: if isOwner(userId);
+      }
     }
 
     match /generations/{generationId} {

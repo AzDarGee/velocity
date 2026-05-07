@@ -183,6 +183,46 @@ async function startServer() {
     }
   });
 
+  // API Route: OpenRouter Proxy
+  app.post("/api/ai/openrouter", async (req, res) => {
+    try {
+      const { model, messages, apiKey } = req.body;
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "OpenRouter API Key is missing. Please set it in your profile." });
+      }
+
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "HTTP-Referer": req.headers.origin || req.headers.referer || "http://localhost:3000",
+          "X-Title": "Velocity Blog Synth",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          messages
+        })
+      });
+
+      const data = await response.json() as any;
+      if (!response.ok) {
+        throw new Error(data.error?.message || "OpenRouter Request failed");
+      }
+
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new Error("OpenRouter returned an empty response.");
+      }
+
+      res.json({ text: content });
+    } catch (error: any) {
+      console.error("OpenRouter Proxy Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite integration
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

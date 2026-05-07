@@ -302,12 +302,7 @@ export default function App() {
     setIsGeneratingFocus(true);
     try {
       const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
-      const fileParts = readyVideos.map(v => ({
-        fileData: {
-          fileUri: v.uri!,
-          mimeType: v.mimeType!
-        }
-      }));
+      const isOpenRouter = preferences.model.includes("/");
 
       const promptText = `You are a content strategy expert. Generate a short, compelling strategic focus (1-2 sentences) for a blog post based on these parameters and the provided media:
 Theme: General professional content
@@ -315,15 +310,48 @@ Target Audience: ${preferences.targetAudience.join(", ")}
 Tone: ${preferences.tone}
 Make it sound like a unique narrative angle or specific topic focus derived directly from the core message of the provided media files. Do not include quotes or preambles, just output the focus text.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-preview",
-        contents: [
-          ...fileParts,
-          { text: promptText }
-        ]
-      });
-      if (response.text) {
-        setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
+      if (isOpenRouter) {
+        const user = auth.currentUser;
+        if (!user) throw new Error("Authentication Required");
+        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
+        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+
+        if (!apiKey) {
+          throw new Error("OpenRouter Key Missing");
+        }
+
+        const response = await fetch("/api/ai/openrouter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: preferences.model,
+            apiKey,
+            messages: [{ role: "user", content: promptText }]
+          })
+        });
+
+        const data = await response.json();
+        if (data.text) {
+          setPreferences(prev => ({ ...prev, specificFocus: data.text.trim() }));
+        }
+      } else {
+        const fileParts = readyVideos.map(v => ({
+          fileData: {
+            fileUri: v.uri!,
+            mimeType: v.mimeType!
+          }
+        }));
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite-preview",
+          contents: [
+            ...fileParts,
+            { text: promptText }
+          ]
+        });
+        if (response.text) {
+          setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
+        }
       }
     } catch (err) {
       console.error("Focus generation error:", err);
@@ -373,14 +401,53 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         transaction.update(userRef, { credits: currentCredits - currentCost });
       });
 
-      const fileParts = readyVideos.map(v => ({
-        fileData: {
-          fileUri: v.uri!,
-          mimeType: v.mimeType!
-        }
-      }));
+      const isOpenRouter = preferences.model.includes("/");
+      let generatedContent = "";
 
-      const prompt = `You are a world-class blog post writer and content strategist. 
+      if (isOpenRouter) {
+        // Fetch the user's OpenRouter key from the private subcollection
+        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
+        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+
+        if (!apiKey) {
+          throw new Error("OpenRouter API Key is missing. Please set it in your profile settings.");
+        }
+
+        const prompt = `You are a world-class blog post writer and content strategist. 
+Convert the context from the provided media files into a high-quality blog post.
+TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
+TONE: ${preferences.tone}
+LENGTH: ${preferences.length}
+SPECIFIC FOCUS: ${preferences.specificFocus}
+
+Note: The user has provided media files (videos/audio/images) that have been analyzed. 
+Please refer to them in your writing where appropriate:
+${readyVideos.map(v => `- [File: ${v.file.name}] (Type: ${v.file.type})`).join('\n')}
+
+Format the output in clear Markdown. Start immediately with the title.`;
+
+        const response = await fetch("/api/ai/openrouter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: preferences.model,
+            apiKey,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "OpenRouter Generation Failed");
+        generatedContent = data.text;
+      } else {
+        const fileParts = readyVideos.map(v => ({
+          fileData: {
+            fileUri: v.uri!,
+            mimeType: v.mimeType!
+          }
+        }));
+
+        const prompt = `You are a world-class blog post writer and content strategist. 
 Your task is to transform the provided video(s), audio file(s), or image(s) into a high-quality, professional blog post.
 
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
@@ -409,26 +476,27 @@ INSTRUCTIONS:
 
 Please generate the blog post now:`;
 
-      const result = await ai.models.generateContent({
-        model: preferences.model,
-        contents: [
-          {
-            parts: [
-              ...fileParts,
-              { text: prompt }
-            ]
+        const result = await ai.models.generateContent({
+          model: preferences.model,
+          contents: [
+            {
+              parts: [
+                ...fileParts,
+                { text: prompt }
+              ]
+            }
+          ],
+          config: {
+            systemInstruction: "You are an expert technical blogger who specializes in converting visual content into authoritative written articles. You maintain structural integrity while enhancing readability."
           }
-        ],
-        config: {
-          systemInstruction: "You are an expert technical blogger who specializes in converting visual content into authoritative written articles. You maintain structural integrity while enhancing readability."
-        }
-      });
+        });
 
-      if (!result.text) {
-        throw new Error("Model failed to generate a coherent blog post.");
+        if (!result.text) {
+          throw new Error("Model failed to generate a coherent blog post.");
+        }
+        generatedContent = result.text;
       }
 
-      const generatedContent = result.text;
       setBlogPost(generatedContent);
       setOriginalContent(generatedContent);
 
@@ -998,9 +1066,14 @@ Please generate the blog post now:`;
                     <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Analytical & Deep)</option>
                     <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash (Fast & Balanced)</option>
                     <option value="gemini-3-flash-preview">Gemini 3.1 Flash-8B (High Speed)</option>
+                    <option disabled className="font-bold border-t">-- OpenRouter Models (Requires Private Key) --</option>
+                    <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
+                    <option value="anthropic/claude-3.5-sonnet">Anthropic: Claude 3.5 Sonnet</option>
+                    <option value="meta-llama/llama-3.1-405b-instruct">Meta: Llama 3.1 405B</option>
+                    <option value="google/gemini-2.0-flash-exp:free">Google: Gemini 2.0 Flash (via OR)</option>
                   </select>
                   <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
-                    {preferences.model.includes("pro") ? "→ Extraction priority: Maximum complexity & reasoning depth." : "→ Extraction priority: Speed & efficient token consumption."}
+                    {preferences.model.includes("/") ? "→ Routing priority: OpenRouter multi-provider relay." : (preferences.model.includes("pro") ? "→ Extraction priority: Maximum complexity & reasoning depth." : "→ Extraction priority: Speed & efficient token consumption.")}
                   </p>
                 </div>
 
@@ -1078,6 +1151,26 @@ Please generate the blog post now:`;
                       <option>Humorous</option>
                       <option>Conversational</option>
                       <option>Authoritative</option>
+                      <option>Casual & Relatable</option>
+                      <option>Inspirational & Uplifting</option>
+                      <option>Direct & No-Nonsense</option>
+                      <option>Playful & Quirky</option>
+                      <option>Thought-Provoking & Philosophical</option>
+                      <option>Urgent & Bold</option>
+                      <option>Empathetic & Supportive</option>
+                      <option>Skeptical & Analytical</option>
+                      <option>Visionary & Future-Focused</option>
+                      <option>Story-Driven & Narrative</option>
+                      <option>Educational & Instructive</option>
+                      <option>Minimalist & Concise</option>
+                      <option>Energetic & High-Vibe</option>
+                      <option>Humble & Authentic</option>
+                      <option>Sarcastic & Witty</option>
+                      <option>Scientific & Data-Driven</option>
+                      <option>Provocative & Contrarian</option>
+                      <option>Luxurious & Sophisticated</option>
+                      <option>Nostalgic & Reflective</option>
+                      <option>Cyberpunk & Technical</option>
                     </select>
                   </div>
                   <div className="space-y-2">
