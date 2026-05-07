@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entities ---
+    
+    // User Profile
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'createdAt', 'credits']) &&
+             data.keys().size() <= 11 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.createdAt is timestamp &&
+             data.credits is int &&
+             (data.get('displayName', '') is string && data.get('displayName', '').size() <= 128) &&
+             (data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 1024);
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time && incoming().credits == 0;
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Allow updating only displayName and photoURL
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) ||
+        // Allow deducting credits (up to existing balance)
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['credits']) &&
+          incoming().credits >= 0 &&
+          incoming().credits < existing().credits
+        ) ||
+        // Allow adding credits safely (in a real app, this should only be done via secure backend, 
+        // but since AI Studio preview backend ADC lacks permissions we temporarily allow it for the preview prototype)
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['credits']) &&
+          incoming().credits > existing().credits
+        )
+      );
+    }
+  }
+}

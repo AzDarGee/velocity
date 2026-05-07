@@ -1,0 +1,1156 @@
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { marked } from "marked";
+import { 
+  Upload, 
+  FileVideo, 
+  FileAudio,
+  FileImage,
+  FileText,
+  Eye,
+  Settings2, 
+  Sparkles, 
+  Type as LucideType, 
+  Loader2, 
+  ChevronRight, 
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Check,
+  Copy,
+  Layout,
+  Download,
+  BookOpen,
+  X,
+  Plus,
+  Sun,
+  Moon,
+  LogIn,
+  LogOut,
+  Wand2
+} from "lucide-react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { GoogleGenAI } from "@google/genai";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
+import { AuthGuard } from "./components/auth/AuthGuard";
+import { UserButton } from "./components/auth/AuthUI";
+import { auth, db } from "./lib/firebase";
+import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction } from "firebase/firestore";
+
+// Initialize Gemini directly on the frontend as per AI Studio guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+interface BlogPreferences {
+  targetAudience: string[];
+  tone: string;
+  length: string;
+  specificFocus: string;
+  model: string;
+}
+
+type UploadState = 'PENDING' | 'UPLOADING' | 'PROCESSING' | 'ACTIVE' | 'FAILED';
+
+interface MediaFile {
+  id: string;
+  file: File;
+  status: UploadState;
+  name?: string;
+  uri?: string;
+  mimeType?: string;
+  previewUrl?: string;
+}
+
+export default function App() {
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [blogPost, setBlogPost] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"preview" | "raw" | "html">("preview");
+  const [isCopied, setIsCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<MediaFile | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("theme");
+      if (saved === "light" || saved === "dark") return saved;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return "light";
+  });
+  const [preferences, setPreferences] = useState<BlogPreferences>({
+    targetAudience: ["Business Professionals & Content Marketers"],
+    tone: "Professional, Engaging, and Authoritative",
+    length: "Medium (approx. 600 words)",
+    specificFocus: "Unique narrative stories.",
+    model: "gemini-3.1-pro",
+  });
+  const [credits, setCredits] = useState<number | null>(null);
+  const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
+
+  useEffect(() => {
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      if (user) {
+        const unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (doc) => {
+          if (doc.exists()) {
+            setCredits(doc.data().credits || 0);
+          }
+        });
+        return () => unsubscribeDoc();
+      } else {
+        setCredits(null);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const uploadFile = async (id: string, file: File) => {
+    try {
+      setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'UPLOADING' } : v));
+
+      const uploadResult = await ai.files.upload({
+        file: file,
+        config: {
+          mimeType: file.type || "application/octet-stream",
+          displayName: file.name.substring(0, 100),
+        },
+      });
+
+      setMediaFiles(prev => prev.map(v => v.id === id ? { 
+        ...v, 
+        status: 'PROCESSING',
+        name: uploadResult.name 
+      } : v));
+
+      // Polling for processing status directly via SDK
+      let uploadedFile = uploadResult;
+      while (uploadedFile.state === "PROCESSING") {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        uploadedFile = await ai.files.get({ name: uploadResult.name });
+      }
+
+      if (uploadedFile.state === "FAILED") {
+        throw new Error(`Cloud processing failed for ${file.name}`);
+      }
+
+      setMediaFiles(prev => prev.map(v => v.id === id ? { 
+        ...v, 
+        status: 'ACTIVE', 
+        uri: uploadedFile.uri,
+        mimeType: uploadedFile.mimeType
+      } : v));
+
+    } catch (err: any) {
+      console.error("Gemini Upload Error:", err);
+      setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'FAILED' } : v));
+      setError(`Failed to ingest ${file.name}: ${err.message || "Gemini rejection"}`);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files).map(file => {
+        const id = Math.random().toString(36).substring(7);
+        const mediaFile: MediaFile = {
+          id,
+          file,
+          status: 'PENDING',
+          previewUrl: URL.createObjectURL(file)
+        };
+        uploadFile(id, file); // Trigger background upload
+        return mediaFile;
+      });
+      setMediaFiles((prev) => [...prev, ...newFiles]);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      mediaFiles.forEach(v => {
+        if (v.previewUrl) URL.revokeObjectURL(v.previewUrl);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  const removeMedia = (id: string) => {
+    const fileToRemove = mediaFiles.find(v => v.id === id);
+    if (fileToRemove?.previewUrl) URL.revokeObjectURL(fileToRemove.previewUrl);
+    setMediaFiles((prev) => prev.filter((v) => v.id !== id));
+    if (mediaFiles.length <= 1) setError(null);
+  };
+
+  const isFilesReady = mediaFiles.length > 0 && mediaFiles.every(v => v.status === 'ACTIVE');
+
+  const handleGenerateFocus = async () => {
+    if (!isFilesReady) return;
+    setIsGeneratingFocus(true);
+    try {
+      const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
+      const fileParts = readyVideos.map(v => ({
+        fileData: {
+          fileUri: v.uri!,
+          mimeType: v.mimeType!
+        }
+      }));
+
+      const promptText = `You are a content strategy expert. Generate a short, compelling strategic focus (1-2 sentences) for a blog post based on these parameters and the provided media:
+Theme: General professional content
+Target Audience: ${preferences.targetAudience.join(", ")}
+Tone: ${preferences.tone}
+Make it sound like a unique narrative angle or specific topic focus derived directly from the core message of the provided media files. Do not include quotes or preambles, just output the focus text.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          ...fileParts,
+          { text: promptText }
+        ]
+      });
+      if (response.text) {
+        setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
+      }
+    } catch (err) {
+      console.error("Focus generation error:", err);
+    } finally {
+      setIsGeneratingFocus(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
+    if (readyVideos.length === 0) return;
+    
+    setIsProcessing(true);
+    setError(null);
+    setBlogPost(null);
+
+    try {
+      // 0. Credit Check & Deduction
+      const user = auth.currentUser;
+      if (!user) throw new Error("Security Identity Null: Re-authentication required.");
+
+      const userRef = doc(db, "users", user.uid);
+      
+      // Ensure user document exists before transaction
+      const userCheck = await getDoc(userRef);
+      if (!userCheck.exists()) {
+        await setDoc(userRef, {
+          email: user.email || 'unknown@example.com',
+          displayName: user.displayName || 'User',
+          photoURL: user.photoURL || '',
+          createdAt: serverTimestamp(),
+          credits: 0
+        });
+      }
+
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) {
+          throw new Error("User record not found");
+        }
+        
+        const currentCredits = userDoc.data().credits || 0;
+        if (currentCredits < 5) {
+          throw new Error("Insufficient credits");
+        }
+        
+        transaction.update(userRef, { credits: currentCredits - 5 });
+      });
+
+      const fileParts = readyVideos.map(v => ({
+        fileData: {
+          fileUri: v.uri!,
+          mimeType: v.mimeType!
+        }
+      }));
+
+      const prompt = `You are a world-class blog post writer and content strategist. 
+Your task is to transform the provided video(s), audio file(s), or image(s) into a high-quality, professional blog post.
+
+TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
+TONE: ${preferences.tone}
+LENGTH: ${preferences.length}
+SPECIFIC FOCUS: ${preferences.specificFocus}
+
+AVAILABLE MEDIA ASSETS FOR CONTEXTUAL PLACEMENT:
+${readyVideos.map(v => `- [File: ${v.file.name}]: Reference ID: MEDIA_ID_${v.id} (Type: ${v.file.type})`).join('\n')}
+
+INSTRUCTIONS:
+1. Analyze the media thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details, context, and how they relate to the overall topic.
+2. Structure the blog post with a compelling headline, an engaging hook, well-organized sections with descriptive subheadings, and a strong conclusion.
+3. STRATEGIC ASSET PLACEMENT: You MUST contextually embed the available media assets where they add the most value to the reader. Use standard markdown image syntax for ALL placements: ![Short Description of context](MEDIA_ID_ID_HERE).
+   - Place images near their descriptions.
+   - Place video/audio embeds near the sections where their content is discussed or summarized.
+   - Do not group them all at the end; integrate them naturally into the flow.
+4. Incorporate actionable takeaways and relevant context from the media contents.
+5. If multiple files are provided, synthesize them into a cohesive narrative or a comprehensive guide.
+6. Format the output using clear Markdown. Start the post immediately with the title, do not include any preamble.
+7. Ensure the length matches the target: ${preferences.length}. 
+   - Short: ~400 words
+   - Medium: ~1000 words
+   - Long: ~1500 words
+   - SuperLong: 2000+ words. For SuperLong, provide exhaustive detail, multiple sections, and deep analysis.
+
+Please generate the blog post now:`;
+
+      const result = await ai.models.generateContent({
+        model: preferences.model,
+        contents: [
+          {
+            parts: [
+              ...fileParts,
+              { text: prompt }
+            ]
+          }
+        ],
+        config: {
+          systemInstruction: "You are an expert technical blogger who specializes in converting visual content into authoritative written articles. You maintain structural integrity while enhancing readability."
+        }
+      });
+
+      if (!result.text) {
+        throw new Error("Model failed to generate a coherent blog post.");
+      }
+
+      setBlogPost(result.text);
+    } catch (err: any) {
+      console.error("Synthesis Error:", err);
+      let errorMsg = "Synthesis failed. ";
+      if (err.message?.includes("quota")) errorMsg += "API Quota exceeded.";
+      else errorMsg += err.message || "Unknown error occurred.";
+      
+      setError(errorMsg);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (blogPost) {
+      navigator.clipboard.writeText(blogPost);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }
+  };
+
+  const exportToPDF = async () => {
+    const element = contentRef.current;
+    if (!element || !blogPost) return;
+    
+    setIsProcessing(true);
+    try {
+      // html2canvas doesn't support oklch() colors used in Tailwind 4
+      // We must temporarily replace them with hex/rgb or ensure the container doesn't use them
+      const originalStyle = element.getAttribute("style");
+      element.style.backgroundColor = "#ffffff";
+      element.style.color = "#141414";
+      
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+        onclone: (clonedDoc) => {
+          // Modern CSS color functions (oklch, oklab) cause crashes in html2canvas.
+          // We aggressively replace them with safe hex values in the cloned document.
+          const elements = clonedDoc.querySelectorAll('*');
+          elements.forEach(el => {
+            const htmlEl = el as HTMLElement;
+            if (!htmlEl.style) return;
+
+            // Check computed styles and provide hex fallbacks
+            const style = window.getComputedStyle(el);
+            if (style.color.includes('okl')) htmlEl.style.setProperty('color', '#141414', 'important');
+            if (style.backgroundColor.includes('okl')) {
+              const isProse = htmlEl.classList.contains('prose');
+              htmlEl.style.setProperty('background-color', isProse ? '#ffffff' : 'transparent', 'important');
+            }
+            if (style.borderColor.includes('okl')) htmlEl.style.setProperty('border-color', '#141414', 'important');
+            
+            // Check and clean CSS variables which are frequent in Tailwind 4
+            for (let i = htmlEl.style.length - 1; i >= 0; i--) {
+              const prop = htmlEl.style[i];
+              if (prop.startsWith('--') && htmlEl.style.getPropertyValue(prop).includes('okl')) {
+                htmlEl.style.removeProperty(prop);
+              }
+            }
+
+            // Handle SVGs
+            if (el instanceof SVGElement) {
+              const fill = el.getAttribute('fill');
+              if (fill && fill.includes('okl')) el.setAttribute('fill', '#141414');
+              const stroke = el.getAttribute('stroke');
+              if (stroke && stroke.includes('okl')) el.setAttribute('stroke', '#141414');
+            }
+          });
+        }
+      });
+      
+      // Restore style
+      if (element) {
+        if (originalStyle) element.setAttribute("style", originalStyle);
+        else element.removeAttribute("style");
+      }
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Handle multi-page if needed (simplified)
+      let heightLeft = pdfHeight;
+      let position = 0;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      pdf.save(`blog-post-${Date.now()}.pdf`);
+    } catch (err: any) {
+      console.error("PDF Export Error:", err);
+      setError(`Failed to export PDF: ${err.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const sanitizedPost = blogPost ? blogPost.replace(/^```markdown\n?/, "").replace(/\n?```$/, "") : "";
+
+  return (
+    <AuthGuard theme={theme}>
+      <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#0A0A0A] text-[#F8F8F7]' : 'bg-[#E4E3E0] text-[#141414]'} font-sans selection:bg-black selection:text-white transition-colors duration-300 pb-20`}>
+      {/* Visual Structure Layer: Header */}
+      <header className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'} sticky top-0 z-20 transition-colors duration-300`}>
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="group cursor-pointer">
+              <div className={`w-10 h-10 border-2 relative overflow-hidden ${theme === 'dark' ? 'border-[#F8F8F7] bg-white' : 'border-[#141414] bg-black'} flex items-center justify-center transition-all duration-300 group-hover:skew-x-[-12deg] group-hover:scale-110 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]`}>
+                <span className={`${theme === 'dark' ? 'text-black' : 'text-white'} font-mono text-xl font-black italic relative z-10 transition-transform group-hover:translate-x-0.5`}>V</span>
+                <div className={`absolute inset-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 opacity-20 ${theme === 'dark' ? 'bg-black' : 'bg-white'}`} />
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <h1 className="text-2xl font-black tracking-[-0.05em] uppercase italic leading-none hover:tracking-normal transition-all duration-300">
+                Velocity
+              </h1>
+              <p className="text-[9px] uppercase font-mono tracking-[0.2em] opacity-40 mt-0.5">
+                Synthesis_Protocol <span className="text-yellow-600 font-bold">v1.2</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 md:gap-8">
+            <button 
+              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+              className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
+              aria-label="Toggle Theme"
+            >
+              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+            </button>
+            <div className="hidden md:flex items-center gap-8">
+               <div className={`flex flex-col items-end border-r ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} pr-8`}>
+                  <span className="text-[10px] uppercase font-mono tracking-tighter opacity-40">Queue Status</span>
+                  <span className="text-xs font-mono">{mediaFiles.length} Clip(s) Loaded</span>
+               </div>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] uppercase font-mono tracking-tighter opacity-40">System Status</span>
+                <span className="text-xs font-mono flex items-center gap-2">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  Operational
+                </span>
+              </div>
+              <UserButton theme={theme} />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-6 md:p-12">
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-0 border-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] bg-white shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'} transition-all`}>
+          
+          {/* Controls Panel */}
+          <div className={`lg:col-span-5 border-b lg:border-b-0 lg:border-r ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} p-8 space-y-12`}>
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">01 / Source Intake</span>
+                <Layout className="w-3 h-3 opacity-30" />
+              </div>
+              
+              <div className="space-y-4">
+                <AnimatePresence>
+                  {mediaFiles.map((v) => (
+                    <motion.div 
+                      key={v.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      className={`flex flex-col p-4 border transition-all group ${
+                        v.status === 'ACTIVE' 
+                          ? (theme === 'dark' ? 'border-green-800 bg-green-900/20 shadow-[4px_4px_0px_0px_rgba(22,101,52,1)]' : 'border-green-500 bg-green-50/50 shadow-[4px_4px_0px_0px_rgba(34,197,94,1)]') 
+                          : (theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]')
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3 overflow-hidden flex-1">
+                          {v.file.type.includes('audio') ? (
+                            <FileAudio className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
+                          ) : v.file.type.includes('image') ? (
+                            <FileImage className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
+                          ) : (
+                            <FileVideo className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
+                          )}
+                          <span className="text-xs font-mono truncate">{v.file.name}</span>
+                          <span className="text-[10px] opacity-40">{(v.file.size / (1024 * 1024)).toFixed(1)}MB</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => setPreviewMedia(v)}
+                            className="p-1 hover:bg-black hover:text-white transition-colors"
+                            title="Preview File"
+                          >
+                            <Eye className="w-3 h-3" />
+                          </button>
+                          <button 
+                            onClick={() => removeMedia(v.id)}
+                            className="p-1 hover:bg-black hover:text-white transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Status Indicator */}
+                      <div className="flex items-center justify-between mt-1">
+                        <div className="flex items-center gap-2">
+                          {v.status === 'UPLOADING' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
+                          {v.status === 'PROCESSING' && <Clock className="w-3 h-3 animate-pulse text-orange-500" />}
+                          {v.status === 'ACTIVE' && <Check className="w-3 h-3 text-green-600" />}
+                          {v.status === 'FAILED' && <AlertCircle className="w-3 h-3 text-red-500" />}
+                          <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${
+                            v.status === 'ACTIVE' ? 'text-green-700' : 
+                            v.status === 'FAILED' ? 'text-red-600' : 
+                            'text-[#8E9299]'
+                          }`}>
+                            {v.status}
+                          </span>
+                        </div>
+                        {v.status === 'ACTIVE' && (
+                          <span className="text-[9px] font-mono text-green-600 font-bold">READY_FOR_SYNTHESIS</span>
+                        )}
+                      </div>
+
+                      {/* Mock progress bar for UPLOADING */}
+                      {(v.status === 'UPLOADING' || v.status === 'PROCESSING') && (
+                        <div className="w-full h-[2px] bg-black/5 mt-3 overflow-hidden">
+                          <motion.div 
+                            className={`h-full ${v.status === 'UPLOADING' ? 'bg-blue-500' : 'bg-orange-500'}`}
+                            initial={{ width: "0%" }}
+                            animate={{ width: v.status === 'UPLOADING' ? "60%" : "90%" }}
+                            transition={{ duration: 2, ease: "easeInOut" }}
+                          />
+                        </div>
+                      )}
+                    </motion.div>
+                  ))??[]}
+                </AnimatePresence>
+
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative border p-12 transition-all cursor-pointer group flex flex-col items-center gap-4
+                    ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'}
+                    ${mediaFiles.length === 0 ? (theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-[#F8F8F7]') : `border-dashed opacity-60 hover:opacity-100 ${theme === 'dark' ? 'hover:bg-[#1A1A1A]' : 'hover:bg-[#F8F8F7]'}`}`}
+                >
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    className="hidden" 
+                    accept="video/*,audio/*,image/*"
+                    multiple
+                    onChange={handleFileChange}
+                  />
+                  <div className={`p-4 border ${theme === 'dark' ? 'border-[#F8F8F7]' : 'border-[#141414]'} transition-all group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black ${mediaFiles.length > 0 ? 'scale-75' : ''}`}>
+                    <Plus className="w-8 h-8" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-mono text-xs uppercase tracking-widest">
+                      {mediaFiles.length === 0 ? "Mount Source Media" : "Add More Clips"}
+                    </p>
+                    {mediaFiles.length === 0 && (
+                      <p className="text-[10px] mt-2 font-mono opacity-50">Support: .mp4, .mp3, .wav, .mov, etc (Max 5GB/file)</p>
+                    )}
+                  </div>
+                </div>
+                
+                {mediaFiles.length > 0 && (
+                  <p className="text-[10px] text-orange-600 font-mono italic">
+                    Note: High-capacity ingestion active. Large files (up to 5GB) may take several minutes to transmit and process.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="space-y-6">
+              <div className="flex items-center justify-between">
+                <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">02 / Processing Prefs</span>
+                <Settings2 className="w-3 h-3 opacity-30" />
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2 group">
+                  <div className="flex justify-between items-center px-1">
+                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">LLM_Model</label>
+                    <Sparkles className="w-3 h-3 opacity-20" />
+                  </div>
+                  <select 
+                    value={preferences.model}
+                    onChange={(e) => setPreferences({ ...preferences, model: e.target.value })}
+                    className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                        : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                    }`}
+                  >
+                    <option value="gemini-3.1-pro">Gemini 3.1 Pro (Analytical & Deep)</option>
+                    <option value="gemini-3.1-flash">Gemini 3.1 Flash (Fast & Balanced)</option>
+                    <option value="gemini-3.1-flash-8b">Gemini 3.1 Flash-8B (High Speed)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Legacy Analytical)</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Legacy Balanced)</option>
+                  </select>
+                  <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
+                    {preferences.model.includes("pro") ? "→ Extraction priority: Maximum complexity & reasoning depth." : "→ Extraction priority: Speed & efficient token consumption."}
+                  </p>
+                </div>
+
+                <div className="space-y-4 group">
+                  <div className="flex justify-between items-center px-1">
+                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Target_Audience_Segments [{preferences.targetAudience.length}]</label>
+                    <BookOpen className="w-3 h-3 opacity-20" />
+                  </div>
+                  <div className={`w-full border max-h-48 overflow-y-auto p-4 space-y-2 scrollbar-thin ${
+                    theme === 'dark' 
+                      ? 'bg-[#1A1A1A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
+                      : 'bg-[#F8F8F7] border-[#141414] scrollbar-thumb-black scrollbar-track-transparent'
+                  }`}>
+                    {[
+                      "Business Professionals & Content Marketers", "General Audience / Beginners", "Technical Audience / Developers", 
+                      "Students & Educators", "Executives & Decision Makers", "Hobbyists & Enthusiasts", "Creative Professionals",
+                      "Digital Nomads", "E-commerce Founders", "SaaS Product Managers", "Environmental Activists", "Health & Wellness Coaches",
+                      "Financial Advisors", "Real Estate Agents", "Cybersecurity Specialists", "AI Researchers", "UX/UI Designers",
+                      "Data Scientists", "Blockchain Developers", "Cloud Architects", "Mobile App Developers", "Game Developers",
+                      "Virtual Reality Content Creators", "Social Media Influencers", "Small Business Owners", "Startup Founders",
+                      "Venture Capitalists", "Angel Investors", "HR Professionals", "Legal Tech Specialists", "Medical Professionals",
+                      "Fitness Trainers", "Travel Bloggers", "Food Critics & Chefs", "Parent Communities", "Retirement Planners",
+                      "Sustainability Consultants", "Non-Profit Directors", "Philanthropists", "Government Policy Makers", "Urban Planners",
+                      "Architecture Enthusiasts", "Interior Designers", "Fashion Designers", "Music Producers", "Podcast Hosts",
+                      "Video Editors", "Journalists & Reporters", "Bio-Tech Engineers", "Aerospace Enthusiasts", "Robotics Engineers",
+                      "Renewable Energy Techs", "Agri-Tech Innovators", "Supply Chain Logistics Pros", "Customer Success Managers",
+                      "Sales Representatives", "Public Relations Experts", "Event Planners"
+                    ].map((audience) => (
+                      <label key={audience} className="flex items-center gap-3 cursor-pointer group/item">
+                        <div className="relative flex items-center justify-center">
+                          <input 
+                            type="checkbox"
+                            checked={preferences.targetAudience.includes(audience)}
+                            onChange={(e) => {
+                              const newAudience = e.target.checked 
+                                ? [...preferences.targetAudience, audience]
+                                : preferences.targetAudience.filter(a => a !== audience);
+                              setPreferences({ ...preferences, targetAudience: newAudience });
+                            }}
+                            className={`peer appearance-none w-4 h-4 border transition-colors ${
+                              theme === 'dark' 
+                                ? 'border-[#333] bg-[#0A0A0A] checked:bg-[#F8F8F7]' 
+                                : 'border-[#141414] bg-white checked:bg-black'
+                            }`}
+                          />
+                          <Check className={`w-2 h-2 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
+                        </div>
+                        <span className={`text-[11px] font-mono transition-colors ${preferences.targetAudience.includes(audience) ? 'font-bold' : 'opacity-60 group-hover/item:opacity-100'}`}>
+                          {audience}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {preferences.targetAudience.length === 0 && (
+                    <p className="text-[9px] font-mono text-red-500 uppercase flex items-center gap-1">
+                      <AlertCircle className="w-2 h-2" />
+                      Select at least one segment
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Voice_Tone</label>
+                    <select 
+                      value={preferences.tone}
+                      onChange={(e) => setPreferences({ ...preferences, tone: e.target.value })}
+                      className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
+                        theme === 'dark' 
+                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                      }`}
+                    >
+                      <option>Professional</option>
+                      <option>Humorous</option>
+                      <option>Conversational</option>
+                      <option>Authoritative</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Target_Length</label>
+                    <select 
+                      value={preferences.length}
+                      onChange={(e) => setPreferences({ ...preferences, length: e.target.value })}
+                      className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
+                        theme === 'dark' 
+                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                      }`}
+                    >
+                      <option>Short (approx. 300 words)</option>
+                      <option>Medium (approx. 600 words)</option>
+                      <option>Long-form (approx. 1000+ words)</option>
+                      <option>SuperLong (approx. 2000+ words)</option>
+                    </select>
+                    <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
+                      {preferences.length.includes("Short") && "→ Extraction priority: Executive summaries & core soundbites."}
+                      {preferences.length.includes("Medium") && "→ Extraction priority: Balanced narrative & supporting evidence."}
+                      {preferences.length.includes("Long") && "→ Extraction priority: Deep-dive analysis & comprehensive context."}
+                      {preferences.length.includes("SuperLong") && "→ Extraction priority: Ultimate resource creation & whitepaper depth."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${!isFilesReady ? 'opacity-30' : 'opacity-60'}`}>Strategic_Focus</label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateFocus}
+                      disabled={isGeneratingFocus || !isFilesReady}
+                      className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
+                        theme === 'dark'
+                          ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
+                          : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
+                      } ${!isFilesReady || isGeneratingFocus ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {isGeneratingFocus ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3 h-3" />
+                          Auto-Generate
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <textarea 
+                    value={preferences.specificFocus}
+                    onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
+                    disabled={!isFilesReady}
+                    rows={4}
+                    className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                        : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                    } ${!isFilesReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  />
+                  {!isFilesReady && (
+                    <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
+                      Awaiting_Uplink: Media context required to initialize strategic focus.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {credits !== null && credits < 5 ? (
+              <button 
+                onClick={() => window.dispatchEvent(new CustomEvent('open-topup'))}
+                className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group ${
+                  theme === 'dark' 
+                    ? 'bg-yellow-500 text-black border-yellow-500 hover:bg-yellow-400 shadow-[6px_6px_0px_0px_rgba(234,179,8,0.2)] active:shadow-none' 
+                    : 'bg-yellow-500 text-black hover:bg-yellow-600 hover:text-white border-black shadow-[6px_6px_0px_0px_rgba(20,20,20,1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]'
+                }`}
+              >
+                <span className="relative z-10 flex items-center justify-center gap-3">
+                  <div className="flex flex-col items-center">
+                    <span>Buy Credits</span>
+                    <span className="text-[8px] font-mono opacity-80 tracking-widest mt-0.5">INSUFFICIENT FUNDS (5.0 REQ)</span>
+                  </div>
+                </span>
+              </button>
+            ) : (
+              <button 
+                onClick={handleGenerate}
+                disabled={mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0}
+                className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
+                  ${mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0
+                    ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
+                    : (theme === 'dark' 
+                        ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
+                        : 'bg-white text-black hover:bg-black hover:text-white border-[#141414] shadow-[6px_6px_0px_0px_rgba(20,20,20,1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]')}`}
+              >
+                {isProcessing && <div className="absolute inset-0 bg-black/5 animate-pulse" />}
+                <span className="relative z-10 flex items-center justify-center gap-3">
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Processing_{mediaFiles.length}_Streams</span>
+                    </>
+                  ) : !mediaFiles.every(v => v.status === 'ACTIVE') && mediaFiles.length > 0 ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Awaiting_Uplink...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <div className="flex flex-col items-center">
+                        <span>Initialize Synthesis</span>
+                        <span className="text-[8px] font-mono opacity-50 tracking-widest mt-0.5">EST_COST: 5.0_CRD</span>
+                      </div>
+                    </>
+                  )}
+                </span>
+              </button>
+            )}
+
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-600 space-y-1">
+                <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase">
+                  <AlertCircle className="w-3 h-3" />
+                  ERROR_LOG [CRITICAL]
+                </div>
+                <p className="text-xs font-mono leading-tight">{error}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Preview Panel */}
+          <div className={`lg:col-span-7 lg:border-l ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'} min-h-[700px] flex flex-col transition-colors duration-300`}>
+            <div className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-[#141414] bg-white'} px-8 py-4 flex items-center justify-between overflow-hidden transition-colors`}>
+               <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">03 / Output Preview</span>
+               <div className="flex items-center gap-4">
+                 {blogPost && (
+                   <div className={`flex items-center border p-1 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'}`}>
+                      <button 
+                        onClick={() => setViewMode("preview")}
+                        className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest transition-colors ${viewMode === 'preview' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'hover:bg-black/5'}`}
+                      >
+                        Preview
+                      </button>
+                      <button 
+                        onClick={() => setViewMode("raw")}
+                        className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest transition-colors ${viewMode === 'raw' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'hover:bg-black/5'}`}
+                      >
+                        Markdown
+                      </button>
+                      <button 
+                        onClick={() => setViewMode("html")}
+                        className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest transition-colors ${viewMode === 'html' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'hover:bg-black/5'}`}
+                      >
+                        HTML
+                      </button>
+                   </div>
+                 )}
+                  {blogPost && (
+                   <div className="flex items-center gap-2">
+                     <button 
+                      onClick={copyToClipboard}
+                      className={`flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest px-3 py-2 border transition-all ${
+                        theme === 'dark' 
+                          ? 'border-[#333] bg-[#1A1A1A] hover:bg-white hover:text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]' 
+                          : 'border-[#141414] bg-white hover:bg-black hover:text-white shadow-[2px_2px_0px_0px_rgba(20,20,20,1)]'
+                      } active:shadow-none active:translate-x-[1px] active:translate-y-[1px]`}
+                    >
+                      {isCopied ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                      {isCopied ? "Transferred" : "Copy Source"}
+                    </button>
+                    <button 
+                      onClick={exportToPDF}
+                      className={`flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest px-3 py-2 border transition-all ${
+                        theme === 'dark' 
+                          ? 'border-[#333] bg-[#1A1A1A] hover:bg-white hover:text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]' 
+                          : 'border-[#141414] bg-white hover:bg-black hover:text-white shadow-[2px_2px_0px_0px_rgba(20,20,20,1)]'
+                      } active:shadow-none active:translate-x-[1px] active:translate-y-[1px]`}
+                    >
+                      <Download className="w-3 h-3" />
+                      Export PDF
+                    </button>
+                   </div>
+                  )}
+               </div>
+            </div>
+            
+            <div className={`flex-1 overflow-y-auto p-12 md:p-16 m-4 border selection:bg-yellow-200 transition-colors ${
+              theme === 'dark' ? 'bg-[#141414] border-[#333]' : 'bg-white border-[#141414]'
+            }`}>
+              <AnimatePresence mode="wait">
+                {isProcessing ? (
+                  <motion.div 
+                    key="loading"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="h-full flex flex-col items-center justify-center text-center space-y-8 py-20"
+                  >
+                    <div className="grid grid-cols-2 gap-2">
+                       <span className={`w-4 h-4 animate-bounce [animation-delay:-0.3s] ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />
+                       <span className={`w-4 h-4 animate-bounce [animation-delay:-0.15s] ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />
+                       <span className={`w-4 h-4 animate-bounce [animation-delay:-0.2s] ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />
+                       <span className={`w-4 h-4 animate-bounce ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />
+                    </div>
+                    <div className="space-y-3">
+                      <h3 className="font-mono text-sm font-bold uppercase tracking-[0.3em]">Synthesizing_Narrative</h3>
+                      <p className="font-mono text-[10px] text-[#8E9299] max-w-[200px] mx-auto leading-relaxed">
+                        ENGAGING MULTIMODAL SENSORS AND 
+                        SEMANTIC EXTRACTION LAYERS...
+                      </p>
+                    </div>
+                  </motion.div>
+                ) : blogPost ? (
+                  <motion.div
+                    key={`${viewMode}-${blogPost.length}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="h-full"
+                  >
+                    {viewMode === 'preview' ? (
+                      <div 
+                        ref={contentRef}
+                        className={`prose prose-neutral max-w-none p-4 transition-colors ${theme === 'dark' ? 'prose-invert bg-[#141414]' : 'bg-white'}
+                        prose-h1:text-4xl prose-h1:font-extrabold prose-h1:tracking-tight prose-h1:mb-8 prose-h1:uppercase
+                        prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-12 prose-h2:mb-4 prose-h2:border-l-4 ${theme === 'dark' ? 'prose-h2:border-white' : 'prose-h2:border-black'} prose-h2:pl-4
+                        prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-3
+                        prose-p:text-base prose-p:leading-relaxed prose-p:mb-6 ${theme === 'dark' ? 'prose-p:text-gray-300' : 'prose-p:text-gray-800'}
+                        prose-ul:list-disc prose-li:mb-2
+                        prose-blockquote:bg-gray-50 prose-blockquote-dark:bg-white/5 prose-blockquote:px-6 prose-blockquote:py-4 prose-blockquote:not-italic
+                        ${theme === 'dark' ? 'prose-blockquote:border-l-white prose-blockquote:bg-white/5' : 'prose-blockquote:border-l-black prose-blockquote:bg-gray-50'}
+                      `}>
+                        <Markdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ node, children, ...props }) => {
+                              // Standalone images in markdown are often wrapped in a paragraph.
+                              // We use the AST node to check if any child is a MEDIA_ID_ image.
+                              const hasMedia = node?.children?.some((child: any) => 
+                                child.tagName === "img" && child.properties?.src?.startsWith("MEDIA_ID_")
+                              );
+
+                              if (hasMedia) {
+                                return <div className="mb-10 w-full" {...props}>{children}</div>;
+                              }
+                              return <p className={`text-base leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-800'}`} {...props}>{children}</p>;
+                            },
+                            img: ({ node, src, alt, ...props }) => {
+                              if (src?.startsWith('MEDIA_ID_')) {
+                                const id = src.replace('MEDIA_ID_', '');
+                                const media = mediaFiles.find(m => m.id === id);
+                                if (media && media.previewUrl) {
+                                  if (media.file.type.includes('image')) {
+                                    return (
+                                      <div className="my-10 space-y-2">
+                                        <img src={media.previewUrl} alt={alt || media.file.name} className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]`} />
+                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Visual Reference: {alt || media.file.name}</p>
+                                      </div>
+                                    );
+                                  }
+                                  if (media.file.type.includes('video')) {
+                                    return (
+                                      <div className="my-12 space-y-4">
+                                          <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
+                                          <video src={media.previewUrl} controls className="w-full aspect-video" />
+                                        </div>
+                                        <div className="flex items-center justify-center gap-2">
+                                           <div className="h-[1px] flex-1 bg-black/10" />
+                                           <p className="text-[10px] font-mono font-bold opacity-40 uppercase tracking-[0.2em]">Live_Stream_Playback</p>
+                                           <div className="h-[1px] flex-1 bg-black/10" />
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  if (media.file.type.includes('audio')) {
+                                    return (
+                                        <div className={`my-10 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)]`}>
+                                        <div className="flex items-center gap-4 mb-6">
+                                          <div className="w-10 h-10 bg-black text-white flex items-center justify-center">
+                                            <FileAudio className="w-5 h-5" />
+                                          </div>
+                                          <div>
+                                            <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1">Audio_Asset</span>
+                                            <span className="block text-xs font-bold uppercase tracking-tight">{media.file.name}</span>
+                                          </div>
+                                        </div>
+                                        <audio src={media.previewUrl} controls className="w-full h-10" />
+                                      </div>
+                                    );
+                                  }
+                                }
+                              }
+                              return <img src={src} alt={alt} className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
+                            }
+                          }}
+                        >
+                          {sanitizedPost}
+                        </Markdown>
+                      </div>
+                    ) : (
+                      <div className={`p-6 font-mono text-xs whitespace-pre-wrap rounded-sm border shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] ${
+                        theme === 'dark' ? 'bg-black text-green-400 border-[#333]' : 'bg-[#141414] text-[#00FF41] border-[#141414]'
+                      }`}>
+                        <code>{viewMode === 'html' ? marked.parse(sanitizedPost as string) : blogPost}</code>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-6 py-20 opacity-30">
+                    <div className={`w-20 h-20 border border-dashed flex items-center justify-center mb-4 ${theme === 'dark' ? 'border-white' : 'border-[#141414]'}`}>
+                       <ChevronRight className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-mono text-sm font-bold uppercase tracking-widest">Awaiting_Data</h3>
+                      <p className="font-mono text-[10px]">Ready for ingestion protocol</p>
+                    </div>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Media Preview Modal */}
+      <AnimatePresence>
+        {previewMedia && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+            onClick={() => setPreviewMedia(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`relative max-w-5xl w-full max-h-[90vh] border-2 border-black overflow-hidden flex flex-col ${theme === 'dark' ? 'bg-[#0A0A0A] border-white/20' : 'bg-white border-black'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-white/10 bg-[#141414]' : 'border-black bg-white'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                    {previewMedia.file.type.includes('audio') ? <FileAudio className="w-4 h-4" /> : 
+                     previewMedia.file.type.includes('image') ? <FileImage className="w-4 h-4" /> : 
+                     <FileVideo className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-tight">{previewMedia.file.name}</h3>
+                    <p className="text-[10px] font-mono opacity-40 uppercase tracking-widest">{previewMedia.file.type} • {(previewMedia.file.size / (1024 * 1024)).toFixed(2)}MB</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setPreviewMedia(null)}
+                  className={`p-2 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[400px]">
+                {previewMedia.file.type.includes('video') && (
+                  <video 
+                    src={previewMedia.previewUrl} 
+                    controls 
+                    className="max-w-full max-h-[70vh] shadow-2xl"
+                    autoPlay
+                  />
+                )}
+                {previewMedia.file.type.includes('audio') && (
+                  <div className="w-full max-w-md p-12 bg-[#141414] border border-white/10 rounded-sm">
+                    <div className="flex flex-col items-center gap-8">
+                       <div className="w-16 h-16 bg-white/5 border border-white/20 rounded-full flex items-center justify-center animate-pulse">
+                          <FileAudio className="w-8 h-8 text-white/40" />
+                       </div>
+                       <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay />
+                       <div className="text-center space-y-2">
+                         <p className="text-white/40 font-mono text-[10px] uppercase tracking-widest">Audio_Output_Stream</p>
+                       </div>
+                    </div>
+                  </div>
+                )}
+                {previewMedia.file.type.includes('image') && (
+                  <img 
+                    src={previewMedia.previewUrl} 
+                    alt={previewMedia.file.name} 
+                    className="max-w-full max-h-[70vh] object-contain shadow-2xl"
+                  />
+                )}
+              </div>
+              
+              <div className={`p-4 border-t flex justify-end ${theme === 'dark' ? 'border-white/10 bg-[#141414]' : 'border-black bg-white'}`}>
+                <button 
+                  onClick={() => setPreviewMedia(null)}
+                  className={`px-6 py-2 border-2 font-bold text-xs uppercase tracking-widest transition-all active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
+                    theme === 'dark' 
+                      ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]' 
+                      : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                  }`}
+                >
+                  Close_Preview
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Metric Overlay (Bottom Right) */}
+      <div className="fixed bottom-8 right-8 pointer-events-none hidden xl:block transition-all duration-300">
+        <div className={`border-2 p-4 transition-colors duration-300 ${
+          theme === 'dark' 
+            ? 'bg-[#141414] border-[#333] shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
+            : 'bg-white border-[#141414] shadow-[4px_4px_0px_0px_rgba(20,20,20,1)]'
+        }`}>
+          <div className="flex gap-8">
+            <div className="space-y-1">
+              <p className="text-[10px] font-mono uppercase opacity-40">Latent_Ref</p>
+              <p className="font-mono text-xs font-bold uppercase">{preferences.model.replace(/-/g, '_')}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-mono uppercase opacity-40">Mime_Filter</p>
+              <p className="font-mono text-xs font-bold">MULTI_STREAM</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </AuthGuard>
+  );
+}

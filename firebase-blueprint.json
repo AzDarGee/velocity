@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "User's full name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL to user's profile picture"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account creation timestamp"
+        },
+        "credits": {
+          "type": "integer",
+          "description": "Remaining generation credits",
+          "default": 0
+        }
+      },
+      "required": ["email", "createdAt", "credits"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "user",
+      "description": "Individual user profiles"
+    }
+  }
+}
