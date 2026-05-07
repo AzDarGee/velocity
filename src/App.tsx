@@ -23,6 +23,7 @@ import {
   BookOpen,
   X,
   Plus,
+  Trash2,
   Sun,
   Moon,
   LogIn,
@@ -36,8 +37,8 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { AuthGuard } from "./components/auth/AuthGuard";
 import { UserButton } from "./components/auth/AuthUI";
-import { auth, db } from "./lib/firebase";
-import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction } from "firebase/firestore";
+import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
+import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction, collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
 
 // Initialize Gemini directly on the frontend as per AI Studio guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -60,12 +61,22 @@ interface MediaFile {
   uri?: string;
   mimeType?: string;
   previewUrl?: string;
+  firestoreId?: string; // ID of the file in Firestore
+}
+
+interface AttachedFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data: string; // base64
 }
 
 export default function App() {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [blogPost, setBlogPost] = useState<string | null>(null);
+  const [originalContent, setOriginalContent] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"preview" | "raw" | "html">("preview");
   const [isCopied, setIsCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,26 +94,106 @@ export default function App() {
     tone: "Professional, Engaging, and Authoritative",
     length: "Medium (approx. 600 words)",
     specificFocus: "Unique narrative stories.",
-    model: "gemini-3.1-pro",
+    model: "gemini-3.1-pro-preview",
   });
   const [credits, setCredits] = useState<number | null>(null);
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
+  const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  const downloadLocalFile = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadFile = (file: AttachedFile) => {
+    if (!file.data) {
+      alert("This file is too large to download from history. Only files < 800KB are persisted as downloadable assets.");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = file.data;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   useEffect(() => {
+    let unsubscribeDoc: (() => void) | null = null;
+    let unsubscribeHistory: (() => void) | null = null;
+
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
-        const unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (doc) => {
+        // Fetch credits
+        unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (doc) => {
           if (doc.exists()) {
             setCredits(doc.data().credits || 0);
           }
+        }, (err) => {
+          handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
         });
-        return () => unsubscribeDoc();
+
+        // Fetch generation history
+        const q = query(
+          collection(db, "generations"),
+          where("userId", "==", user.uid),
+          orderBy("createdAt", "desc")
+        );
+        unsubscribeHistory = onSnapshot(q, (snapshot) => {
+          const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setHistory(docs);
+        }, (err) => {
+          handleFirestoreError(err, OperationType.LIST, "generations");
+        });
       } else {
+        if (unsubscribeDoc) unsubscribeDoc();
+        if (unsubscribeHistory) unsubscribeHistory();
+        unsubscribeDoc = null;
+        unsubscribeHistory = null;
+        
         setCredits(null);
+        setHistory([]);
+        setCurrentGenerationId(null);
+        setCurrentAttachedFiles([]);
+        setBlogPost(null);
+        setOriginalContent(null);
+        setMediaFiles([]);
+        setPreviewMedia(null);
+        setIsProcessing(false);
+        setIsGeneratingFocus(false);
+        setError(null);
+        setPreferences({
+          targetAudience: ["Business Professionals & Content Marketers"],
+          tone: "Professional, Engaging, and Authoritative",
+          length: "Medium (approx. 600 words)",
+          specificFocus: "Unique narrative stories.",
+          model: "gemini-3.1-pro-preview",
+        });
       }
     });
 
-    return () => unsubscribeAuth();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDoc) unsubscribeDoc();
+      if (unsubscribeHistory) unsubscribeHistory();
+    };
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -213,7 +304,7 @@ Tone: ${preferences.tone}
 Make it sound like a unique narrative angle or specific topic focus derived directly from the core message of the provided media files. Do not include quotes or preambles, just output the focus text.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-flash-lite-preview",
         contents: [
           ...fileParts,
           { text: promptText }
@@ -325,7 +416,59 @@ Please generate the blog post now:`;
         throw new Error("Model failed to generate a coherent blog post.");
       }
 
-      setBlogPost(result.text);
+      const generatedContent = result.text;
+      setBlogPost(generatedContent);
+      setOriginalContent(generatedContent);
+
+      // 1. Save Files to Firestore and Generation
+      try {
+        const fileIds: string[] = [];
+        const attachedFiles: AttachedFile[] = [];
+
+        for (const vf of readyVideos) {
+          // Only store as base64 if small enough for Firestore doc (1MB limit)
+          // We use ~800KB as a safe limit
+          let base64 = "";
+          if (vf.file.size < 800 * 1024) {
+            base64 = await fileToBase64(vf.file);
+          }
+
+          const fileDoc = {
+            userId: user.uid,
+            name: vf.file.name,
+            type: vf.file.type,
+            size: vf.file.size,
+            data: base64,
+            createdAt: serverTimestamp()
+          };
+
+          const fileRef = await addDoc(collection(db, "files"), fileDoc);
+          fileIds.push(fileRef.id);
+          attachedFiles.push({
+            id: fileRef.id,
+            name: vf.file.name,
+            type: vf.file.type,
+            size: vf.file.size,
+            data: base64
+          });
+        }
+
+        setCurrentAttachedFiles(attachedFiles);
+
+        const generationData = {
+          userId: user.uid,
+          content: generatedContent,
+          title: generatedContent.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Blog Post",
+          preferences: preferences,
+          fileIds: fileIds, // Use fileIds instead of mediaIds
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        const docRef = await addDoc(collection(db, "generations"), generationData);
+        setCurrentGenerationId(docRef.id);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, "generations/files");
+      }
     } catch (err: any) {
       console.error("Synthesis Error:", err);
       let errorMsg = "Synthesis failed. ";
@@ -439,14 +582,213 @@ Please generate the blog post now:`;
 
   const sanitizedPost = blogPost ? blogPost.replace(/^```markdown\n?/, "").replace(/\n?```$/, "") : "";
 
+  const handleNewPost = () => {
+    setBlogPost(null);
+    setOriginalContent(null);
+    setCurrentGenerationId(null);
+    setCurrentAttachedFiles([]);
+    setMediaFiles([]);
+    setPreferences({
+      targetAudience: ["Business Professionals & Content Marketers"],
+      tone: "Professional, Engaging, and Authoritative",
+      length: "Medium (approx. 600 words)",
+      specificFocus: "Unique narrative stories.",
+      model: "gemini-3.1-pro-preview",
+    });
+    setIsHistoryOpen(false);
+  };
+
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  const loadGeneration = async (gen: any) => {
+    setBlogPost(gen.content);
+    setOriginalContent(gen.content);
+    setCurrentGenerationId(gen.id);
+    setCurrentAttachedFiles([]);
+    setMediaFiles([]);
+    if (gen.preferences) {
+      setPreferences(gen.preferences);
+    }
+    
+    // Fetch attached files
+    if (gen.fileIds && gen.fileIds.length > 0) {
+      try {
+        const filePromises = gen.fileIds.map((fileId: string) => getDoc(doc(db, "files", fileId)));
+        const fileSnaps = await Promise.all(filePromises);
+        
+        const files: AttachedFile[] = fileSnaps
+          .filter(snap => snap.exists())
+          .map(snap => {
+            const data = snap.data();
+            return {
+              id: snap.id,
+              name: data.name,
+              type: data.type,
+              size: data.size,
+              data: data.data
+            };
+          });
+        
+        setCurrentAttachedFiles(files);
+      } catch (err) {
+        console.error("Error fetching attached files:", err);
+      }
+    }
+
+    setIsHistoryOpen(false);
+  };
+
+  const deleteGeneration = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this generation and its attached files?")) return;
+    try {
+      const genSnap = await getDoc(doc(db, "generations", id));
+      if (genSnap.exists()) {
+        const fileIds = genSnap.data().fileIds || [];
+        for (const fileId of fileIds) {
+          try {
+            await deleteDoc(doc(db, "files", fileId));
+          } catch (fileErr) {
+            console.error("Error deleting file:", fileId, fileErr);
+          }
+        }
+      }
+      await deleteDoc(doc(db, "generations", id));
+      if (currentGenerationId === id) {
+        handleNewPost();
+      }
+      alert("Generation deleted successfully");
+    } catch (err) {
+      console.error("Delete error:", err);
+      handleFirestoreError(err, OperationType.DELETE, `generations/${id}`);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!currentGenerationId || !blogPost) return;
+    try {
+      await updateDoc(doc(db, "generations", currentGenerationId), {
+        content: blogPost,
+        updatedAt: serverTimestamp(),
+        title: blogPost.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Blog Post"
+      });
+      setOriginalContent(blogPost);
+      alert("Post updated successfully!");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `generations/${currentGenerationId}`);
+      alert("Failed to update post.");
+    }
+  };
+
   return (
     <AuthGuard theme={theme}>
+      {/* History Sidebar */}
+      <AnimatePresence>
+        {isHistoryOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsHistoryOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
+            />
+            <motion.div 
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className={`fixed top-0 left-0 h-full w-[310px] md:w-[380px] z-[101] shadow-2xl border-r ${
+                theme === 'dark' ? 'bg-[#111111] border-[#333] text-[#F8F8F7]' : 'bg-white border-[#141414] text-[#141414]'
+              }`}
+            >
+              <div className="p-8 h-full flex flex-col">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className={`font-serif italic text-2xl uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Generation History</h2>
+                  <button 
+                    onClick={() => setIsHistoryOpen(false)}
+                    className={`p-2 border ${theme === 'dark' ? 'border-[#333] text-white hover:bg-white hover:text-black' : 'border-[#141414] text-black hover:bg-black hover:text-white'} transition-all`}
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin">
+                  {history.length === 0 ? (
+                    <div className={`h-full flex flex-col items-center justify-center text-center space-y-4 ${theme === 'dark' ? 'opacity-40 text-white' : 'opacity-30 text-black'}`}>
+                      <Clock className="w-12 h-12" />
+                      <p className="font-mono text-xs uppercase">No historical records found</p>
+                    </div>
+                  ) : (
+                    history.map((gen) => (
+                      <div 
+                        key={gen.id}
+                        onClick={() => loadGeneration(gen)}
+                        className={`p-4 border transition-all cursor-pointer group relative ${
+                          currentGenerationId === gen.id 
+                            ? (theme === 'dark' ? 'border-yellow-500 bg-yellow-500/10' : 'border-yellow-500 bg-yellow-50') 
+                            : (theme === 'dark' ? 'border-[#333] bg-[#141414] hover:border-white' : 'border-[#141414] hover:bg-[#F8F8F7]')
+                        }`}
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className={`text-xs font-bold truncate pr-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{gen.title || "Untitled Post"}</span>
+                          <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-gray-400' : 'opacity-40 text-black'}`}>
+                            {gen.createdAt?.toDate().toLocaleDateString()} {gen.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <div className="flex gap-2 mt-2">
+                             <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.model?.replace('gemini-', '')}</span>
+                             <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.tone}</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            deleteGeneration(gen.id, e);
+                          }}
+                          className={`absolute top-4 right-4 opacity-50 hover:opacity-100 p-2 transition-all rounded-full ${
+                            theme === 'dark' 
+                              ? 'text-gray-400 hover:text-red-500 hover:bg-red-500/10' 
+                              : 'text-black hover:text-red-500 hover:bg-red-50'
+                          }`}
+                          title="Delete Generation"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <button 
+                  onClick={handleNewPost}
+                  className={`mt-8 w-full py-4 border-2 font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                    theme === 'dark' 
+                      ? 'bg-white text-black border-white hover:bg-black hover:text-white' 
+                      : 'bg-black text-white border-black hover:bg-white hover:text-black'
+                  }`}
+                >
+                  <Plus className="w-4 h-4" />
+                  New Synthesis
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#0A0A0A] text-[#F8F8F7]' : 'bg-[#E4E3E0] text-[#141414]'} font-sans selection:bg-black selection:text-white transition-colors duration-300 pb-20`}>
       {/* Visual Structure Layer: Header */}
       <header className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'} sticky top-0 z-20 transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="group cursor-pointer">
+            <button 
+              onClick={() => setIsHistoryOpen(true)}
+              className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
+              title="View History"
+            >
+              <Clock className="w-5 h-5" />
+            </button>
+            <div className="group cursor-pointer" onClick={handleNewPost}>
               <div className={`w-10 h-10 border-2 relative overflow-hidden ${theme === 'dark' ? 'border-[#F8F8F7] bg-white' : 'border-[#141414] bg-black'} flex items-center justify-center transition-all duration-300 group-hover:skew-x-[-12deg] group-hover:scale-110 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]`}>
                 <span className={`${theme === 'dark' ? 'text-black' : 'text-white'} font-mono text-xl font-black italic relative z-10 transition-transform group-hover:translate-x-0.5`}>V</span>
                 <div className={`absolute inset-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 opacity-20 ${theme === 'dark' ? 'bg-black' : 'bg-white'}`} />
@@ -527,14 +869,22 @@ Please generate the blog post now:`;
                         <div className="flex items-center gap-1">
                           <button 
                             onClick={() => setPreviewMedia(v)}
-                            className="p-1 hover:bg-black hover:text-white transition-colors"
+                            className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
                             title="Preview File"
                           >
                             <Eye className="w-3 h-3" />
                           </button>
                           <button 
+                            onClick={() => downloadLocalFile(v.file)}
+                            className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
+                            title="Download File"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                          <button 
                             onClick={() => removeMedia(v.id)}
-                            className="p-1 hover:bg-black hover:text-white transition-colors"
+                            className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
+                            title="Remove File"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -632,11 +982,9 @@ Please generate the blog post now:`;
                         : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
                     }`}
                   >
-                    <option value="gemini-3.1-pro">Gemini 3.1 Pro (Analytical & Deep)</option>
-                    <option value="gemini-3.1-flash">Gemini 3.1 Flash (Fast & Balanced)</option>
-                    <option value="gemini-3.1-flash-8b">Gemini 3.1 Flash-8B (High Speed)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Legacy Analytical)</option>
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Legacy Balanced)</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Analytical & Deep)</option>
+                    <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash (Fast & Balanced)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3.1 Flash-8B (High Speed)</option>
                   </select>
                   <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
                     {preferences.model.includes("pro") ? "→ Extraction priority: Maximum complexity & reasoning depth." : "→ Extraction priority: Speed & efficient token consumption."}
@@ -882,6 +1230,19 @@ Please generate the blog post now:`;
                  )}
                   {blogPost && (
                    <div className="flex items-center gap-2">
+                     {currentGenerationId && blogPost !== originalContent && (
+                       <button 
+                        onClick={handleUpdate}
+                        className={`flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest px-3 py-2 border transition-all ${
+                          theme === 'dark' 
+                            ? 'border-yellow-500 bg-yellow-500/10 hover:bg-yellow-500 hover:text-black' 
+                            : 'border-yellow-600 text-yellow-600 bg-yellow-50 hover:bg-yellow-600 hover:text-white'
+                        }`}
+                       >
+                         <Check className="w-3 h-3" />
+                         Save Edits
+                       </button>
+                     )}
                      <button 
                       onClick={copyToClipboard}
                       className={`flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest px-3 py-2 border transition-all ${
@@ -1021,11 +1382,86 @@ Please generate the blog post now:`;
                           {sanitizedPost}
                         </Markdown>
                       </div>
+                    ) : viewMode === 'raw' ? (
+                      <div className="flex-1 min-h-[600px] flex flex-col relative">
+                        <textarea
+                          readOnly={isProcessing}
+                          value={blogPost || ""}
+                          onScroll={(e) => e.stopPropagation()}
+                          onChange={(e) => setBlogPost(e.target.value)}
+                          className={`flex-1 w-full p-8 font-mono text-sm outline-none resize-none transition-colors border-none focus:ring-0 leading-relaxed ${
+                            theme === 'dark' ? 'bg-[#141414] text-gray-300' : 'bg-white text-gray-800'
+                          }`}
+                          placeholder="Directly edit the markdown source here..."
+                        />
+                      </div>
                     ) : (
-                      <div className={`p-6 font-mono text-xs whitespace-pre-wrap rounded-sm border shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] ${
-                        theme === 'dark' ? 'bg-black text-green-400 border-[#333]' : 'bg-[#141414] text-[#00FF41] border-[#141414]'
-                      }`}>
-                        <code>{viewMode === 'html' ? marked.parse(sanitizedPost as string) : blogPost}</code>
+                      <div className="flex-1 min-h-[600px] flex flex-col relative">
+                         <div className={`absolute top-4 right-4 z-10 px-2 py-1 text-[8px] font-mono uppercase tracking-widest border ${theme === 'dark' ? 'bg-black text-white border-white/20' : 'bg-white text-black border-black/20'}`}>
+                           Raw_HTML_Source
+                         </div>
+                         <textarea
+                          readOnly={isProcessing}
+                          value={blogPost ? (viewMode === 'html' ? (marked.parse(sanitizedPost as string) as string) : blogPost) : ""}
+                          onScroll={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            if (viewMode === 'html') {
+                              // If they are in HTML mode and editing, it's risky but let's allow it if we treat it as the new content 
+                              // (though it will save HTML as the blogPost source).
+                              // Usually people want to edit the Markdown. 
+                              // But the user asked for HTML editable.
+                              setBlogPost(e.target.value);
+                            }
+                          }}
+                          className={`flex-1 w-full p-8 font-mono text-[11px] outline-none resize-none transition-colors border-none focus:ring-0 leading-tight ${
+                            theme === 'dark' ? 'bg-[#000] text-green-500/80' : 'bg-[#141414] text-[#00FF41]'
+                          }`}
+                        />
+                      </div>
+                    )}
+
+                    {currentAttachedFiles.length > 0 && (
+                      <div className={`mt-16 pt-12 border-t ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} space-y-6`}>
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-serif italic text-xl uppercase tracking-tighter">Saved Attachments</h4>
+                          <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">{currentAttachedFiles.length} Object(s) Persisted</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {currentAttachedFiles.map((file) => (
+                            <div 
+                              key={file.id} 
+                              className={`p-4 border group transition-all flex items-center justify-between ${
+                                theme === 'dark' ? 'border-[#333] hover:border-white bg-[#1A1A1A]' : 'border-[#141414] hover:bg-[#F8F8F7]'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div className={`p-2 transition-colors ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                                  {file.type.includes('audio') ? <FileAudio className="w-3 h-3" /> : 
+                                   file.type.includes('image') ? <FileImage className="w-3 h-3" /> : 
+                                   <FileVideo className="w-3 h-3" />}
+                                </div>
+                                <div className="overflow-hidden">
+                                  <p className="text-[10px] font-bold truncate uppercase">{file.name}</p>
+                                  <p className="text-[9px] font-mono opacity-40">{(file.size / (1024 * 1024)).toFixed(2)}MB • {file.data ? "PERSISTED" : "METADATA_ONLY"}</p>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => downloadFile(file)}
+                                className={`p-2 border transition-colors ${
+                                  theme === 'dark' ? 'border-[#333] group-hover:bg-white group-hover:text-black' : 'border-[#141414] group-hover:bg-black group-hover:text-white'
+                                }`}
+                                title="Download File"
+                              >
+                                <Download className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {!currentAttachedFiles.some(f => f.data) && (
+                          <div className={`p-4 border border-orange-500/20 bg-orange-500/5 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-700'} text-[10px] font-mono uppercase leading-relaxed italic`}>
+                            Note: Some files may not have been persisted due to baseline Firestore document limits (1MB). Only metadata remains for these larger assets.
+                          </div>
+                        )}
                       </div>
                     )}
                   </motion.div>

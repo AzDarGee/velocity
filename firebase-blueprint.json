@@ -5,36 +5,67 @@
       "description": "User profile information",
       "type": "object",
       "properties": {
-        "displayName": {
-          "type": "string",
-          "description": "User's full name"
-        },
-        "email": {
-          "type": "string",
-          "description": "User's email address"
-        },
-        "photoURL": {
-          "type": "string",
-          "description": "URL to user's profile picture"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Account creation timestamp"
-        },
-        "credits": {
-          "type": "integer",
-          "description": "Remaining generation credits",
-          "default": 0
-        }
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "credits": { "type": "integer", "default": 0 },
+        "fulfilled_sessions": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["email", "createdAt", "credits"]
+    },
+    "generation": {
+      "title": "Generation",
+      "description": "A saved blog post generation",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "content": { "type": "string" },
+        "title": { "type": "string" },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "targetAudience": { "type": "array", "items": { "type": "string" } },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "specificFocus": { "type": "string" },
+            "model": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "fileIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "content", "createdAt"]
+    },
+    "file": {
+      "title": "File",
+      "description": "Uploaded media file content and metadata",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "generationId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "size": { "type": "integer" },
+        "data": { "type": "string", "description": "Base64 encoded file data" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "type", "data", "createdAt"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "user",
       "description": "Individual user profiles"
+    },
+    "generations/{generationId}": {
+      "schema": "generation",
+      "description": "Saved generations for history"
+    },
+    "files/{fileId}": {
+      "schema": "file",
+      "description": "Uploaded file assets"
     }
   }
 }

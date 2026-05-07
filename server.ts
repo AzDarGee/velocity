@@ -3,32 +3,19 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import Stripe from "stripe";
-import { initializeApp, getApps } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Initialize Firebase Admin
-const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-let app;
-if (!getApps().length) {
-  app = initializeApp({
-    projectId: firebaseConfig.projectId
-  });
-} else {
-  app = getApps()[0];
-}
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-
-// Initialize Stripe
+let stripeClient: Stripe | null = null;
 const getStripe = () => {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
     throw new Error("STRIPE_SECRET_KEY is required but not configured.");
   }
-  return new Stripe(key);
+  if (!stripeClient) {
+    stripeClient = new Stripe(key);
+  }
+  return stripeClient;
 };
 
 const CREDIT_PACKS = {
@@ -60,31 +47,8 @@ async function startServer() {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.metadata?.userId;
-      const packId = session.metadata?.packId;
-
-      if (userId && packId && CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS]) {
-        const creditsToAdd = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS].credits;
-        
-        try {
-          const userRef = db.collection("users").doc(userId);
-          await db.runTransaction(async (transaction) => {
-            const userDoc = await transaction.get(userRef);
-            if (!userDoc.exists) {
-              transaction.set(userRef, { 
-                credits: creditsToAdd, 
-                createdAt: FieldValue.serverTimestamp() 
-              });
-            } else {
-              const currentCredits = userDoc.data()?.credits || 0;
-              transaction.update(userRef, { credits: currentCredits + creditsToAdd });
-            }
-          });
-          console.log(`Successfully added ${creditsToAdd} credits to user ${userId}`);
-        } catch (error) {
-          console.error("Error updating user credits after checkout:", error);
-        }
-      }
+      console.log(`Payment successful for user ${session.metadata?.userId}`);
+      // In AI Studio preview environment without service accounts, we handle credit syncing locally in the browser
     }
 
     res.json({ received: true });
@@ -125,7 +89,7 @@ async function startServer() {
         ],
         mode: "payment",
         customer_email: userEmail,
-        success_url: `${baseUrl}/?payment=success`,
+        success_url: `${baseUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/?payment=cancelled`,
         metadata: {
           userId,
@@ -140,29 +104,55 @@ async function startServer() {
     }
   });
 
-  // API Route: Deduct credits (server-side verification)
-  app.post("/api/credits/decrement", async (req, res) => {
+  // API Route: Verify Checkout Session
+  app.post("/api/stripe/verify-session", async (req, res) => {
     try {
-      const { userId, amount = 5 } = req.body; // Default 5 credits per generation
+      const { sessionId, userId } = req.body;
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status === "paid" && session.metadata?.userId === userId) {
+        const packId = session.metadata?.packId;
+        if (packId && CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS]) {
+          const creditsToAdd = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS].credits;
+          return res.json({ success: true, creditsToAdd, sessionId });
+        }
+      }
       
+      res.json({ success: false, status: session.payment_status });
+    } catch (error: any) {
+      console.error("Stripe Session Verification Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API Route: Sync missing credits
+  app.post("/api/stripe/sync-credits", async (req, res) => {
+    try {
+      const { userId } = req.body;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const userRef = db.collection("users").doc(userId);
-      const result = await db.runTransaction(async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists) throw new Error("User record not found");
-        
-        const currentCredits = userDoc.data()?.credits || 0;
-        if (currentCredits < amount) {
-          return { success: false, error: "Insufficient credits" };
-        }
+      const stripe = getStripe();
+      const sessions = await stripe.checkout.sessions.list({ limit: 100 });
+      
+      const validSessions = sessions.data
+        .filter(session => session.payment_status === "paid" && session.metadata?.userId === userId)
+        .map(session => {
+           const packId = session.metadata?.packId;
+           let creditsToAdd = 0;
+           if (packId && CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS]) {
+             creditsToAdd = CREDIT_PACKS[packId as keyof typeof CREDIT_PACKS].credits;
+           }
+           return {
+             sessionId: session.id,
+             creditsToAdd
+           };
+        })
+        .filter(s => s.creditsToAdd > 0);
 
-        transaction.update(userRef, { credits: currentCredits - amount });
-        return { success: true, remaining: currentCredits - amount };
-      });
-
-      res.json(result);
+      res.json({ success: true, validSessions });
     } catch (error: any) {
+      console.error("Sync Error:", error);
       res.status(500).json({ error: error.message });
     }
   });

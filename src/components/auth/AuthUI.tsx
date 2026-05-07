@@ -7,23 +7,27 @@ import {
   signOut,
   User as FirebaseUser
 } from 'firebase/auth';
-import { auth, googleProvider, db } from '../../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction } from 'firebase/firestore';
 import { LogIn, UserPlus, Github, Mail, Lock, User as UserIcon, Loader2, LogOut, AlertCircle, Coins, CreditCard, ChevronRight, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 async function ensureUserProfile(user: FirebaseUser) {
   const userRef = doc(db, 'users', user.uid);
-  const userDoc = await getDoc(userRef);
-  
-  if (!userDoc.exists()) {
-    await setDoc(userRef, {
-      email: user.email || 'unknown@example.com',
-      displayName: user.displayName || 'User',
-      photoURL: user.photoURL || '',
-      createdAt: serverTimestamp(),
-      credits: 0
-    });
+  try {
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      await setDoc(userRef, {
+        email: user.email || 'unknown@example.com',
+        displayName: user.displayName || 'User',
+        photoURL: user.photoURL || '',
+        createdAt: serverTimestamp(),
+        credits: 0
+      });
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
   }
 }
 
@@ -207,6 +211,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const [showProfile, setShowProfile] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [isBuying, setIsBuying] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   useEffect(() => {
     if (!user) return;
@@ -214,10 +219,52 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
     // Explicitly check for user profile and create if missing
     ensureUserProfile(user).catch(console.error);
     
+    // Check for payment success
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlSessionId = urlParams.get('session_id');
+    const payment = urlParams.get('payment');
+    
+    if (payment === 'success' && urlSessionId) {
+      console.log('Verifying payment session...');
+      fetch('/api/stripe/verify-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: urlSessionId, userId: user.uid })
+      }).then(res => res.json()).then(async data => {
+        if (data.success && data.creditsToAdd) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          let actuallyAdded = false;
+          await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const fulfilled = userData.fulfilled_sessions || [];
+              if (!fulfilled.includes(data.sessionId)) {
+                transaction.update(userRef, {
+                  credits: (userData.credits || 0) + data.creditsToAdd,
+                  fulfilled_sessions: [...fulfilled, data.sessionId]
+                });
+                actuallyAdded = true;
+              }
+            }
+          });
+          if (actuallyAdded) alert(`Payment verified! ${data.creditsToAdd} credits have been added.`);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        }
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }).catch(console.error);
+    }
+
     const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (doc) => {
       if (doc.exists()) {
         setCredits(doc.data().credits || 0);
       }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
     });
     return () => unsubscribe();
   }, [user]);
@@ -261,6 +308,61 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
       console.error(err);
     } finally {
       setIsBuying(null);
+    }
+  };
+
+  const handleSyncCredits = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/stripe/sync-credits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid })
+      });
+      const data = await res.json();
+      if (data.success && data.validSessions) {
+        let totalAdded = 0;
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const fulfilled = userData.fulfilled_sessions || [];
+              let currentCredits = userData.credits || 0;
+              let hasUpdates = false;
+
+              for (const session of data.validSessions) {
+                if (!fulfilled.includes(session.sessionId)) {
+                  currentCredits += session.creditsToAdd;
+                  fulfilled.push(session.sessionId);
+                  totalAdded += session.creditsToAdd;
+                  hasUpdates = true;
+                }
+              }
+
+              if (hasUpdates) {
+                transaction.update(userRef, {
+                  credits: currentCredits,
+                  fulfilled_sessions: fulfilled
+                });
+              }
+            }
+          });
+        } catch (err) {
+           handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        }
+
+        if (totalAdded > 0) alert(`Synced ${totalAdded} credits!`);
+        else alert('No new successful purchases found.');
+      } else {
+        alert('Failed to sync: ' + data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error syncing credits.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -347,16 +449,27 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                        <Coins className={`w-5 h-5 ${credits !== null && credits < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-500'}`} />
                        {credits !== null ? credits : '...'}
                     </div>
-                    <button
-                      onClick={() => {
-                        setShowProfile(false);
-                        setShowTopUp(true);
-                      }}
-                      className={`px-3 py-1 text-xs font-bold border uppercase tracking-wider
-                        ${theme === 'dark' ? 'hover:bg-white hover:text-black border-white' : 'hover:bg-black hover:text-white border-black'} transition-colors`}
-                    >
-                      Top Up
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        title="Sync Missing Purchases"
+                        onClick={handleSyncCredits}
+                        disabled={isSyncing}
+                        className={`px-3 py-1 text-xs font-bold border uppercase tracking-wider
+                          ${theme === 'dark' ? 'hover:bg-white hover:text-black border-white' : 'hover:bg-black hover:text-white border-black'} transition-colors disabled:opacity-50`}
+                      >
+                        {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sync'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowProfile(false);
+                          setShowTopUp(true);
+                        }}
+                        className={`px-3 py-1 text-xs font-bold border uppercase tracking-wider
+                          ${theme === 'dark' ? 'hover:bg-white hover:text-black border-white' : 'hover:bg-black hover:text-white border-black'} transition-colors`}
+                      >
+                        Top Up
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
