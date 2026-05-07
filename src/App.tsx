@@ -77,6 +77,8 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [blogPost, setBlogPost] = useState<string | null>(null);
   const [originalContent, setOriginalContent] = useState<string | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [genToDelete, setGenToDelete] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"preview" | "raw" | "html">("preview");
   const [isCopied, setIsCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export default function App() {
     return "light";
   });
   const [preferences, setPreferences] = useState<BlogPreferences>({
-    targetAudience: ["Business Professionals & Content Marketers"],
+    targetAudience: [],
     tone: "Professional, Engaging, and Authoritative",
     length: "Medium (approx. 600 words)",
     specificFocus: "Unique narrative stories.",
@@ -180,7 +182,7 @@ export default function App() {
         setIsGeneratingFocus(false);
         setError(null);
         setPreferences({
-          targetAudience: ["Business Professionals & Content Marketers"],
+          targetAudience: [],
           tone: "Professional, Engaging, and Authoritative",
           length: "Medium (approx. 600 words)",
           specificFocus: "Unique narrative stories.",
@@ -589,7 +591,7 @@ Please generate the blog post now:`;
     setCurrentAttachedFiles([]);
     setMediaFiles([]);
     setPreferences({
-      targetAudience: ["Business Professionals & Content Marketers"],
+      targetAudience: [],
       tone: "Professional, Engaging, and Authoritative",
       length: "Medium (approx. 600 words)",
       specificFocus: "Unique narrative stories.",
@@ -638,9 +640,7 @@ Please generate the blog post now:`;
     setIsHistoryOpen(false);
   };
 
-  const deleteGeneration = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this generation and its attached files?")) return;
+  const deleteGeneration = async (id: string) => {
     try {
       const genSnap = await getDoc(doc(db, "generations", id));
       if (genSnap.exists()) {
@@ -657,11 +657,18 @@ Please generate the blog post now:`;
       if (currentGenerationId === id) {
         handleNewPost();
       }
-      alert("Generation deleted successfully");
+      setIsDeleteModalOpen(false);
+      setGenToDelete(null);
     } catch (err) {
       console.error("Delete error:", err);
       handleFirestoreError(err, OperationType.DELETE, `generations/${id}`);
     }
+  };
+
+  const confirmDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setGenToDelete(id);
+    setIsDeleteModalOpen(true);
   };
 
   const handleUpdate = async () => {
@@ -741,11 +748,7 @@ Please generate the blog post now:`;
                           </div>
                         </div>
                         <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            deleteGeneration(gen.id, e);
-                          }}
+                          onClick={(e) => confirmDelete(gen.id, e)}
                           className={`absolute top-4 right-4 opacity-50 hover:opacity-100 p-2 transition-all rounded-full ${
                             theme === 'dark' 
                               ? 'text-gray-400 hover:text-red-500 hover:bg-red-500/10' 
@@ -1094,16 +1097,16 @@ Please generate the blog post now:`;
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${!isFilesReady ? 'opacity-30' : 'opacity-60'}`}>Strategic_Focus</label>
+                    <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${(!isFilesReady || preferences.targetAudience.length === 0) ? 'opacity-30' : 'opacity-60'}`}>Strategic_Focus</label>
                     <button
                       type="button"
                       onClick={handleGenerateFocus}
-                      disabled={isGeneratingFocus || !isFilesReady}
+                      disabled={isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0}
                       className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
                         theme === 'dark'
                           ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
                           : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                      } ${!isFilesReady || isGeneratingFocus ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      } ${!isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {isGeneratingFocus ? (
                         <>
@@ -1121,17 +1124,17 @@ Please generate the blog post now:`;
                   <textarea 
                     value={preferences.specificFocus}
                     onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
-                    disabled={!isFilesReady}
+                    disabled={!isFilesReady || preferences.targetAudience.length === 0}
                     rows={4}
                     className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
                       theme === 'dark' 
                         ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                         : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                    } ${!isFilesReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    } ${!isFilesReady || preferences.targetAudience.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                   />
-                  {!isFilesReady && (
+                  {(!isFilesReady || preferences.targetAudience.length === 0) && (
                     <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
-                      Awaiting_Uplink: Media context required to initialize strategic focus.
+                      {preferences.targetAudience.length === 0 ? "Awaiting_Audience: Select target segments to define strategic focus." : "Awaiting_Uplink: Media context required to initialize strategic focus."}
                     </p>
                   )}
                 </div>
@@ -1560,6 +1563,59 @@ Please generate the blog post now:`;
                   }`}
                 >
                   Close_Preview
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isDeleteModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setIsDeleteModalOpen(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className={`relative max-w-sm w-full p-8 border-2 flex flex-col gap-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.1)]' : 'bg-white border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-col gap-4 text-center">
+                <div className={`w-12 h-12 mx-auto flex items-center justify-center border-2 ${theme === 'dark' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-red-50 text-red-600 border-red-600/20'}`}>
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold uppercase tracking-tight">Confirm Deletion</h3>
+                  <p className="text-xs font-mono opacity-60 leading-relaxed uppercase tracking-widest">
+                    This action is permanent and will remove all associated files and generation data.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => genToDelete && deleteGeneration(genToDelete)}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all px-6 py-2 shadow-[4px_4px_0px_0px_rgba(220,38,38,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
+                    theme === 'dark' 
+                      ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                      : 'bg-red-600 text-white border-red-600 hover:bg-black'
+                  }`}
+                >
+                  Confirm_Delete
+                </button>
+                <button 
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all px-6 py-2 active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
+                    theme === 'dark' 
+                      ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]' 
+                      : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                  }`}
+                >
+                  Cancel_Operation
                 </button>
               </div>
             </motion.div>
