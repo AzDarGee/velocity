@@ -502,10 +502,10 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { id: 'pack-50', name: 'Starter', credits: 50, price: '$1' },
-                  { id: 'pack-200', name: 'Content', credits: 200, price: '$1', tag: 'Best Value' },
-                  { id: 'pack-500', name: 'Pro', credits: 500, price: '$1' },
-                  { id: 'pack-1000', name: 'Enterprise', credits: 1000, price: '$1' }
+                  { id: 'pack-50', name: 'Starter', credits: 50, price: '$10' },
+                  { id: 'pack-200', name: 'Content', credits: 200, price: '$25', tag: 'Best Value' },
+                  { id: 'pack-500', name: 'Pro', credits: 500, price: '$45' },
+                  { id: 'pack-1000', name: 'Enterprise', credits: 1000, price: '$99' }
                 ].map((pack) => (
                   <button
                     key={pack.id}
@@ -552,7 +552,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
 
               <div className={`p-4 border-l-2 font-mono text-[10px] leading-relaxed opacity-60
                 ${theme === 'dark' ? 'border-white/20' : 'border-black/20'}`}>
-                Note: Each generation cycle consumes 5.0 credits. Transactions handled via Stripe secure relay. 
+                Note: Generation cycles consume 5-20 credits depending on target length. Transactions handled via Stripe secure relay. 
                 Credits are applied immediately upon confirmation of successful relay.
               </div>
             </motion.div>

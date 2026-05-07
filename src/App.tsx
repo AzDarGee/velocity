@@ -287,6 +287,16 @@ export default function App() {
 
   const isFilesReady = mediaFiles.length > 0 && mediaFiles.every(v => v.status === 'ACTIVE');
 
+  const getCreditsForLength = (length: string) => {
+    if (length.includes("Short")) return 5;
+    if (length.includes("Medium")) return 10;
+    if (length.includes("Long-form")) return 15;
+    if (length.includes("SuperLong")) return 20;
+    return 10; // Default
+  };
+
+  const currentCost = getCreditsForLength(preferences.length);
+
   const handleGenerateFocus = async () => {
     if (!isFilesReady) return;
     setIsGeneratingFocus(true);
@@ -356,11 +366,11 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         }
         
         const currentCredits = userDoc.data().credits || 0;
-        if (currentCredits < 5) {
-          throw new Error("Insufficient credits");
+        if (currentCredits < currentCost) {
+          throw new Error(`Insufficient credits. Required: ${currentCost}, Found: ${currentCredits}`);
         }
         
-        transaction.update(userRef, { credits: currentCredits - 5 });
+        transaction.update(userRef, { credits: currentCredits - currentCost });
       });
 
       const fileParts = readyVideos.map(v => ({
@@ -1141,7 +1151,7 @@ Please generate the blog post now:`;
               </div>
             </section>
 
-            {credits !== null && credits < 5 ? (
+            {credits !== null && credits < currentCost ? (
               <button 
                 onClick={() => window.dispatchEvent(new CustomEvent('open-topup'))}
                 className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group ${
@@ -1153,7 +1163,7 @@ Please generate the blog post now:`;
                 <span className="relative z-10 flex items-center justify-center gap-3">
                   <div className="flex flex-col items-center">
                     <span>Buy Credits</span>
-                    <span className="text-[8px] font-mono opacity-80 tracking-widest mt-0.5">INSUFFICIENT FUNDS (5.0 REQ)</span>
+                    <span className="text-[8px] font-mono opacity-80 tracking-widest mt-0.5 uppercase">INSUFFICIENT FUNDS ({currentCost.toFixed(1)} REQ)</span>
                   </div>
                 </span>
               </button>
@@ -1185,7 +1195,7 @@ Please generate the blog post now:`;
                       <Sparkles className="w-4 h-4" />
                       <div className="flex flex-col items-center">
                         <span>Initialize Synthesis</span>
-                        <span className="text-[8px] font-mono opacity-50 tracking-widest mt-0.5">EST_COST: 5.0_CRD</span>
+                        <span className="text-[8px] font-mono opacity-50 tracking-widest mt-0.5 uppercase">EST_COST: {currentCost.toFixed(1)}_CRD</span>
                       </div>
                     </>
                   )}
