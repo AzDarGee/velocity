@@ -183,6 +183,18 @@ async function startServer() {
     }
   });
 
+  // API Route: OpenRouter Models
+  app.get("/api/ai/openrouter/models", async (req, res) => {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/models");
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("OpenRouter Models Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // API Route: OpenRouter Proxy
   app.post("/api/ai/openrouter", async (req, res) => {
     try {

@@ -45,7 +45,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 interface BlogPreferences {
   targetAudience: string[];
-  tone: string;
+  tone: string[];
   length: string;
   specificFocus: string;
   model: string;
@@ -93,16 +93,29 @@ export default function App() {
   });
   const [preferences, setPreferences] = useState<BlogPreferences>({
     targetAudience: [],
-    tone: "Professional, Engaging, and Authoritative",
+    tone: [],
     length: "Medium (approx. 600 words)",
     specificFocus: "Unique narrative stories.",
     model: "gemini-3.1-pro-preview",
   });
+  const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
+
+  useEffect(() => {
+    fetch("/api/ai/openrouter/models")
+      .then(res => res.json())
+      .then(data => {
+        if (data.data) {
+          const sorted = data.data.sort((a: any, b: any) => a.name.localeCompare(b.name));
+          setOpenRouterModels(sorted);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -183,7 +196,7 @@ export default function App() {
         setError(null);
         setPreferences({
           targetAudience: [],
-          tone: "Professional, Engaging, and Authoritative",
+          tone: [],
           length: "Medium (approx. 600 words)",
           specificFocus: "Unique narrative stories.",
           model: "gemini-3.1-pro-preview",
@@ -307,7 +320,7 @@ export default function App() {
       const promptText = `You are a content strategy expert. Generate a short, compelling strategic focus (1-2 sentences) for a blog post based on these parameters and the provided media:
 Theme: General professional content
 Target Audience: ${preferences.targetAudience.join(", ")}
-Tone: ${preferences.tone}
+Tone: ${preferences.tone.join(", ")}
 Make it sound like a unique narrative angle or specific topic focus derived directly from the core message of the provided media files. Do not include quotes or preambles, just output the focus text.`;
 
       if (isOpenRouter) {
@@ -416,7 +429,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         const prompt = `You are a world-class blog post writer and content strategist. 
 Convert the context from the provided media files into a high-quality blog post.
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
-TONE: ${preferences.tone}
+TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
 
@@ -451,7 +464,7 @@ Format the output in clear Markdown. Start immediately with the title.`;
 Your task is to transform the provided video(s), audio file(s), or image(s) into a high-quality, professional blog post.
 
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
-TONE: ${preferences.tone}
+TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
 
@@ -670,7 +683,7 @@ Please generate the blog post now:`;
     setMediaFiles([]);
     setPreferences({
       targetAudience: [],
-      tone: "Professional, Engaging, and Authoritative",
+      tone: [],
       length: "Medium (approx. 600 words)",
       specificFocus: "Unique narrative stories.",
       model: "gemini-3.1-pro-preview",
@@ -822,7 +835,9 @@ Please generate the blog post now:`;
                           </span>
                           <div className="flex gap-2 mt-2">
                              <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.model?.replace('gemini-', '')}</span>
-                             <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.tone}</span>
+                             <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>
+                               {Array.isArray(gen.preferences?.tone) ? gen.preferences.tone.join(", ") : gen.preferences?.tone}
+                             </span>
                           </div>
                         </div>
                         <button 
@@ -1066,7 +1081,15 @@ Please generate the blog post now:`;
                     <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Analytical & Deep)</option>
                     <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash (Fast & Balanced)</option>
                     <option value="gemini-3-flash-preview">Gemini 3.1 Flash-8B (High Speed)</option>
-                    <option disabled className="font-bold border-t">-- OpenRouter Models (Requires Private Key) --</option>
+                    {openRouterModels.length > 0 && (
+                      <>
+                        <option disabled className="font-bold border-t">-- Dynamic OpenRouter Models --</option>
+                        {openRouterModels.map((m: any) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </>
+                    )}
+                    <option disabled className="font-bold border-t">-- OpenRouter Presets --</option>
                     <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
                     <option value="anthropic/claude-3.5-sonnet">Anthropic: Claude 3.5 Sonnet</option>
                     <option value="meta-llama/llama-3.1-405b-instruct">Meta: Llama 3.1 405B</option>
@@ -1135,45 +1158,58 @@ Please generate the blog post now:`;
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Voice_Tone</label>
-                    <select 
-                      value={preferences.tone}
-                      onChange={(e) => setPreferences({ ...preferences, tone: e.target.value })}
-                      className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
-                        theme === 'dark' 
-                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
-                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                      }`}
-                    >
-                      <option>Professional</option>
-                      <option>Humorous</option>
-                      <option>Conversational</option>
-                      <option>Authoritative</option>
-                      <option>Casual & Relatable</option>
-                      <option>Inspirational & Uplifting</option>
-                      <option>Direct & No-Nonsense</option>
-                      <option>Playful & Quirky</option>
-                      <option>Thought-Provoking & Philosophical</option>
-                      <option>Urgent & Bold</option>
-                      <option>Empathetic & Supportive</option>
-                      <option>Skeptical & Analytical</option>
-                      <option>Visionary & Future-Focused</option>
-                      <option>Story-Driven & Narrative</option>
-                      <option>Educational & Instructive</option>
-                      <option>Minimalist & Concise</option>
-                      <option>Energetic & High-Vibe</option>
-                      <option>Humble & Authentic</option>
-                      <option>Sarcastic & Witty</option>
-                      <option>Scientific & Data-Driven</option>
-                      <option>Provocative & Contrarian</option>
-                      <option>Luxurious & Sophisticated</option>
-                      <option>Nostalgic & Reflective</option>
-                      <option>Cyberpunk & Technical</option>
-                    </select>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center px-1">
+                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Voice_Tones</label>
+                    <div className="text-[8px] font-mono opacity-40 uppercase">Multi_Selection_Active</div>
                   </div>
-                  <div className="space-y-2">
+                  <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 border p-4 max-h-48 overflow-y-auto custom-scrollbar ${
+                    theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414]/10 bg-white/40'
+                  }`}>
+                    {[
+                      "Professional", "Humorous", "Conversational", "Authoritative",
+                      "Casual & Relatable", "Inspirational & Uplifting", "Direct & No-Nonsense",
+                      "Playful & Quirky", "Thought-Provoking & Philosophical", "Urgent & Bold",
+                      "Empathetic & Supportive", "Skeptical & Analytical", "Visionary & Future-Focused",
+                      "Story-Driven & Narrative", "Educational & Instructive", "Minimalist & Concise",
+                      "Energetic & High-Vibe", "Humble & Authentic", "Sarcastic & Witty",
+                      "Scientific & Data-Driven", "Provocative & Contrarian", "Luxurious & Sophisticated",
+                      "Nostalgic & Reflective", "Cyberpunk & Technical"
+                    ].map((tone) => (
+                      <label key={tone} className="flex items-center gap-2 cursor-pointer group/item">
+                        <div className="relative flex items-center justify-center">
+                          <input 
+                            type="checkbox"
+                            checked={preferences.tone.includes(tone)}
+                            onChange={(e) => {
+                              const newTone = e.target.checked 
+                                ? [...preferences.tone, tone]
+                                : preferences.tone.filter(t => t !== tone);
+                              setPreferences({ ...preferences, tone: newTone });
+                            }}
+                            className={`peer appearance-none w-3 h-3 border transition-colors ${
+                              theme === 'dark' 
+                                ? 'border-[#333] bg-[#0A0A0A] checked:bg-[#F8F8F7]' 
+                                : 'border-[#141414] bg-white checked:bg-black'
+                            }`}
+                          />
+                          <Check className={`w-2 h-2 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
+                        </div>
+                        <span className={`text-[10px] font-mono transition-colors ${preferences.tone.includes(tone) ? 'font-bold' : 'opacity-60 group-hover/item:opacity-100'}`}>
+                          {tone}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {preferences.tone.length === 0 && (
+                    <p className="text-[9px] font-mono text-red-500 uppercase flex items-center gap-1">
+                      <AlertCircle className="w-2 h-2" />
+                      Select at least one tone
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                     <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Target_Length</label>
                     <select 
                       value={preferences.length}
@@ -1196,7 +1232,6 @@ Please generate the blog post now:`;
                       {preferences.length.includes("SuperLong") && "→ Extraction priority: Ultimate resource creation & whitepaper depth."}
                     </p>
                   </div>
-                </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1204,12 +1239,12 @@ Please generate the blog post now:`;
                     <button
                       type="button"
                       onClick={handleGenerateFocus}
-                      disabled={isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0}
+                      disabled={isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                       className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
                         theme === 'dark'
                           ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
                           : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                      } ${!isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      } ${!isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {isGeneratingFocus ? (
                         <>
@@ -1227,17 +1262,22 @@ Please generate the blog post now:`;
                   <textarea 
                     value={preferences.specificFocus}
                     onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
-                    disabled={!isFilesReady || preferences.targetAudience.length === 0}
+                    disabled={!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                     rows={4}
                     className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
                       theme === 'dark' 
                         ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                         : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                    } ${!isFilesReady || preferences.targetAudience.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    } ${!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                   />
-                  {(!isFilesReady || preferences.targetAudience.length === 0) && (
+                  {(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) && (
                     <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
-                      {preferences.targetAudience.length === 0 ? "Awaiting_Audience: Select target segments to define strategic focus." : "Awaiting_Uplink: Media context required to initialize strategic focus."}
+                      {preferences.targetAudience.length === 0 
+                        ? "Awaiting_Audience: Select target segments to define strategic focus." 
+                        : (preferences.tone.length === 0 
+                            ? "Awaiting_Tone: Select voice tones to enable narrative generation." 
+                            : "Awaiting_Uplink: Media context required to initialize strategic focus.")
+                      }
                     </p>
                   )}
                 </div>
@@ -1263,9 +1303,9 @@ Please generate the blog post now:`;
             ) : (
               <button 
                 onClick={handleGenerate}
-                disabled={mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0}
+                disabled={mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                 className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                  ${mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0
+                  ${mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0
                     ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
                     : (theme === 'dark' 
                         ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 

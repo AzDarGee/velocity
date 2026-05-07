@@ -26,7 +26,7 @@
           "type": "object",
           "properties": {
             "targetAudience": { "type": "array", "items": { "type": "string" } },
-            "tone": { "type": "string" },
+            "tone": { "type": "array", "items": { "type": "string" } },
             "length": { "type": "string" },
             "specificFocus": { "type": "string" },
             "model": { "type": "string" }
