@@ -84,6 +84,7 @@ export default function App() {
   const [originalContent, setOriginalContent] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [genToDelete, setGenToDelete] = useState<string | null>(null);
+  const [mediaFileToDelete, setMediaFileToDelete] = useState<MediaFile | null>(null);
   const [viewMode, setViewMode] = useState<"preview" | "raw" | "html">("preview");
   const [isCopied, setIsCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,8 +234,7 @@ export default function App() {
 
       setMediaFiles(prev => prev.map(v => v.id === id ? { 
         ...v, 
-        status: 'PROCESSING',
-        name: uploadResult.name 
+        status: 'PROCESSING'
       } : v));
 
       // Polling for processing status directly via SDK
@@ -295,8 +295,11 @@ export default function App() {
         const mediaFile: MediaFile = {
           id,
           file,
+          name: file.name,
           status: 'PENDING',
-          previewUrl: URL.createObjectURL(file)
+          previewUrl: URL.createObjectURL(file),
+          size: file.size,
+          mimeType: file.type
         };
         uploadFile(id, file); // Trigger background upload
         return mediaFile;
@@ -768,7 +771,7 @@ Please generate the blog post now:`;
           type: (f.type.includes('video') ? 'video' : f.type.includes('audio') ? 'audio' : 'image') as any,
           status: 'ACTIVE',
           progress: 100,
-          previewUrl: f.data ? `data:${f.type};base64,${f.data}` : undefined,
+          previewUrl: f.data || undefined, // f.data already contains the data URL prefix from fileToBase64
           size: f.size,
           mimeType: f.type,
           uri: (f as any).uri
@@ -1010,8 +1013,8 @@ Please generate the blog post now:`;
                           ) : (
                             <FileVideo className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
                           )}
-                          <span className="text-xs font-mono truncate">{v.name || v.file?.name}</span>
-                          <span className="text-[10px] opacity-40">{( (v.size || v.file?.size || 0) / (1024 * 1024)).toFixed(1)}MB</span>
+                          <span className="text-xs font-mono truncate">{v.name}</span>
+                          <span className="text-[10px] opacity-40">{( (v.size || 0) / (1024 * 1024)).toFixed(1)}MB</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <button 
@@ -1037,7 +1040,7 @@ Please generate the blog post now:`;
                             <Download className="w-3 h-3" />
                           </button>
                           <button 
-                            onClick={() => removeMedia(v.id)}
+                            onClick={() => setMediaFileToDelete(v)}
                             className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
                             title="Remove File"
                           >
@@ -1538,46 +1541,63 @@ Please generate the blog post now:`;
                             img: ({ node, src, alt, ...props }) => {
                               if (src?.startsWith('MEDIA_ID_')) {
                                 const id = src.replace('MEDIA_ID_', '');
-                                const media = mediaFiles.find(m => m.id === id);
+                                // Check both id and firestoreId to handle current session and restored history
+                                const media = mediaFiles.find(m => m.id === id || m.firestoreId === id);
                                 if (media && media.previewUrl) {
                                   const type = media.mimeType || media.file?.type || '';
                                   const name = media.name || media.file?.name || 'Asset';
 
                                   if (type.includes('image')) {
                                     return (
-                                      <div className="my-10 space-y-2">
-                                        <img src={media.previewUrl} alt={alt || name} className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]`} />
-                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Visual Reference: {alt || name}</p>
+                                      <div className="group my-12 space-y-4">
+                                        <div className="relative overflow-hidden">
+                                          <img 
+                                            src={media.previewUrl} 
+                                            alt={alt || name} 
+                                            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
+                                          />
+                                          {/* Aesthetic Scanline Overlay */}
+                                          <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
+                                          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                                            Visual_Asset_Ingested
+                                          </div>
+                                        </div>
+                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— {alt || name} (ID: {media.firestoreId || media.id})</p>
                                       </div>
                                     );
                                   }
                                   if (type.includes('video')) {
                                     return (
-                                      <div className="my-12 space-y-4">
+                                      <div className="my-14 space-y-4">
                                           <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
                                           <video src={media.previewUrl} controls className="w-full aspect-video" />
+                                          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 bg-red-600">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                            <span className="text-[8px] font-mono font-bold text-white uppercase tracking-tighter">Live_Context</span>
+                                          </div>
                                         </div>
-                                        <div className="flex items-center justify-center gap-2">
-                                           <div className="h-[1px] flex-1 bg-black/10" />
-                                           <p className="text-[10px] font-mono font-bold opacity-40 uppercase tracking-[0.2em]">Live_Stream_Playback</p>
-                                           <div className="h-[1px] flex-1 bg-black/10" />
+                                        <div className="flex items-center justify-center gap-4">
+                                           <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
+                                           <p className="text-[10px] font-mono font-bold opacity-30 uppercase tracking-[0.3em]">Temporal_Data_Source: {name}</p>
+                                           <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
                                         </div>
                                       </div>
                                     );
                                   }
                                   if (type.includes('audio')) {
                                     return (
-                                        <div className={`my-10 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)]`}>
-                                        <div className="flex items-center gap-4 mb-6">
-                                          <div className="w-10 h-10 bg-black text-white flex items-center justify-center">
-                                            <FileAudio className="w-5 h-5" />
+                                        <div className={`my-12 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+                                        <div className="flex items-center gap-6 mb-8">
+                                          <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                                            <FileAudio className="w-6 h-6" />
                                           </div>
                                           <div>
-                                            <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1">Audio_Asset</span>
-                                            <span className="block text-xs font-bold uppercase tracking-tight">{name}</span>
+                                            <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
+                                            <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
                                           </div>
                                         </div>
-                                        <audio src={media.previewUrl} controls className="w-full h-10" />
+                                        <audio src={media.previewUrl} controls className="w-full h-12" />
                                       </div>
                                     );
                                   }
@@ -1821,6 +1841,63 @@ Please generate the blog post now:`;
                   }`}
                 >
                   Cancel_Operation
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Media Deletion Confirmation Modal */}
+        {mediaFileToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setMediaFileToDelete(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className={`relative max-w-sm w-full p-8 border-2 flex flex-col gap-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.1)]' : 'bg-white border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-col gap-4 text-center">
+                <div className={`w-12 h-12 mx-auto flex items-center justify-center border-2 ${theme === 'dark' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-red-50 text-red-600 border-red-600/20'}`}>
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold uppercase tracking-tight text-red-600">Remove Source?</h3>
+                  <p className="text-xs font-mono opacity-60 leading-relaxed uppercase tracking-widest">
+                    You are about to remove <span className="font-bold underline">"{mediaFileToDelete.name || 'this asset'}"</span> from the source intake queue.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => {
+                    removeMedia(mediaFileToDelete.id);
+                    setMediaFileToDelete(null);
+                  }}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all px-6 py-2 shadow-[4px_4px_0px_0px_rgba(220,38,38,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
+                    theme === 'dark' 
+                      ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                      : 'bg-red-600 text-white border-red-600 hover:bg-black'
+                  }`}
+                >
+                  Confirm_Removal
+                </button>
+                <button 
+                  onClick={() => setMediaFileToDelete(null)}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all px-6 py-2 active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
+                    theme === 'dark' 
+                      ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]' 
+                      : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                  }`}
+                >
+                  Cancel_Release
                 </button>
               </div>
             </motion.div>

@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "node server.ts",
-    "build": "vite build",
+    "start": "node dist/server.js",
+    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --packages=external",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
@@ -23,6 +23,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "dotenv": "^17.2.3",
+    "esbuild": "^0.28.0",
     "express": "^5.2.1",
     "firebase": "^12.12.1",
     "firebase-admin": "^12.7.0",
