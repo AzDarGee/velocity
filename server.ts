@@ -244,7 +244,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), "dist");
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*all", (req, res) => {

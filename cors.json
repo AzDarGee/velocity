@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://ais-dev-fq726ftpe322tpqfoxmxvn-31998920833.us-east1.run.app"],
+    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "Content-Range", "x-goog-resumable"],
+    "method": ["GET", "PUT", "POST", "DELETE", "OPTIONS"],
+    "maxAgeSeconds": 3600
+  }
+]

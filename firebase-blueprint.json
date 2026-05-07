@@ -48,10 +48,14 @@
         "name": { "type": "string" },
         "type": { "type": "string" },
         "size": { "type": "integer" },
-        "data": { "type": "string", "description": "Base64 encoded file data" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "data": { "type": "string", "description": "Base64 encoded file data (legacy)" },
+        "storageUrl": { "type": "string", "description": "Firebase Storage download URL" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "uri": { "type": "string", "description": "Gemini File API URI" },
+        "mimeType": { "type": "string" },
+        "extractedText": { "type": "string" }
       },
-      "required": ["userId", "name", "type", "data", "createdAt"]
+      "required": ["userId", "name", "type", "createdAt"]
     },
     "userKeys": {
       "title": "UserKeys",

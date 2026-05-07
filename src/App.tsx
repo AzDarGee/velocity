@@ -38,7 +38,8 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { AuthGuard } from "./components/auth/AuthGuard";
 import { UserButton } from "./components/auth/AuthUI";
-import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction, collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
 
 // Initialize Gemini directly on the frontend as per AI Studio guidelines
@@ -67,6 +68,7 @@ interface MediaFile {
   size?: number;
   type?: 'video' | 'audio' | 'image';
   extractedText?: string;
+  storageUrl?: string;
 }
 
 interface AttachedFile {
@@ -74,7 +76,8 @@ interface AttachedFile {
   name: string;
   type: string;
   size: number;
-  data: string; // base64
+  data?: string; // base64 (deprecated for new files)
+  storageUrl?: string;
   uri?: string;
   mimeType?: string;
 }
@@ -146,13 +149,19 @@ export default function App() {
   };
 
   const downloadFile = (file: AttachedFile) => {
-    if (!file.data) {
-      alert("This file is too large to download from history. Only files < 800KB are persisted as downloadable assets.");
+    const url = file.storageUrl || file.data;
+    if (!url) {
+      alert("Source data missing for this asset.");
       return;
     }
     const link = document.createElement("a");
-    link.href = file.data;
+    link.href = url;
     link.download = file.name;
+    // Set target blank and noreferrer for external URLs to avoid some browser restrictions
+    if (file.storageUrl) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -224,7 +233,7 @@ export default function App() {
 
   const uploadFile = async (id: string, file: File) => {
     try {
-      setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'UPLOADING' } : v));
+      setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'UPLOADING', progress: 0 } : v));
 
       const isDocx = file.name.toLowerCase().endsWith('.docx');
       let extractedText = "";
@@ -243,57 +252,125 @@ export default function App() {
       let uri = "";
       let mimeType = file.type || "application/octet-stream";
 
+      // Parallel: Gemini Upload (for AI context) and Firebase Storage Upload (for persistence)
+      const user = auth.currentUser;
+      if (!user) throw new Error("User must be authenticated to upload files.");
+
+      // 1. Firebase Storage Upload
+      console.log(`Starting storage upload for: ${file.name}`);
+      const storageRef = ref(storage, `uploads/${user.uid}/${id}_${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      const storagePromise = new Promise<string>((resolve, reject) => {
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`Storage Progress for ${file.name}: ${progress.toFixed(2)}%`);
+            setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, progress } : v));
+          }, 
+          (error) => {
+            console.error(`Storage Upload Error (${file.name}):`, error);
+            reject(new Error(`Storage: ${error.message}`));
+          }, 
+          async () => {
+            try {
+              const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              console.log(`Storage Success for ${file.name}: ${downloadUrl}`);
+              resolve(downloadUrl);
+            } catch (urlErr: any) {
+              reject(new Error(`Storage URL: ${urlErr.message}`));
+            }
+          }
+        );
+      });
+
+      // 2. Gemini File API Upload
+      let geminiPromise = Promise.resolve({ uri: "", mimeType: "" });
       if (!isDocx) {
-        const uploadResult = await ai.files.upload({
-          file: file,
-          config: {
-            mimeType: file.type || "application/octet-stream",
-            displayName: file.name.substring(0, 100),
-          },
-        });
+        console.log(`Starting Gemini upload for: ${file.name}`);
+        geminiPromise = (async () => {
+          try {
+            if (!process.env.GEMINI_API_KEY) {
+              console.warn("GEMINI_API_KEY is missing. AI processing might fail.");
+              // Don't throw here, allow storage-only if it's a simple image
+            }
+            
+            const uploadResult = await ai.files.upload({
+              file: file,
+              config: {
+                mimeType: file.type || "application/octet-stream",
+                displayName: file.name.substring(0, 100),
+              },
+            });
 
-        setMediaFiles(prev => prev.map(v => v.id === id ? { 
-          ...v, 
-          status: 'PROCESSING'
-        } : v));
-
-        // Polling for processing status directly via SDK
-        let uploadedFile = uploadResult;
-        while (uploadedFile.state === "PROCESSING") {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          uploadedFile = await ai.files.get({ name: uploadResult.name });
-        }
-
-        const uploadedFileWithId = await ai.files.get({ name: uploadResult.name });
-        uri = uploadedFileWithId.uri;
-        mimeType = uploadedFileWithId.mimeType;
+            let uploadedFile = uploadResult;
+            console.log(`Gemini Upload Result (${file.name}):`, uploadedFile.name, uploadedFile.state);
+            
+            while (uploadedFile.state === "PROCESSING") {
+              console.log(`Gemini Processing ${file.name}...`);
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              uploadedFile = await ai.files.get({ name: uploadResult.name });
+            }
+            const finalFile = await ai.files.get({ name: uploadResult.name });
+            console.log(`Gemini Success for ${file.name}: ${finalFile.uri}`);
+            return { uri: finalFile.uri, mimeType: finalFile.mimeType };
+          } catch (gErr: any) {
+            console.error(`Gemini Upload Error (${file.name}):`, gErr);
+            // If it's a small image/audio, we might be able to use inlineData later, 
+            // but for now let's just log and continue if we have storageUrl, 
+            // or throw if it's critical (video/large doc)
+            if (file.size > 10 * 1024 * 1024) throw new Error(`Gemini: ${gErr.message}`);
+            return { uri: "", mimeType: "" };
+          }
+        })();
       }
+
+      // Wait for uploads with better error handling
+      const results = await Promise.allSettled([storagePromise, geminiPromise]);
       
-      let base64 = "";
-      if (file.size < 800 * 1024) {
-        base64 = await fileToBase64(file);
+      const storageResult = results[0];
+      const geminiResult = results[1];
+
+      if (storageResult.status === 'rejected') {
+        const errorReason = storageResult.reason.message || storageResult.reason;
+        console.error("Storage failed:", errorReason);
+        if (String(errorReason).includes('unauthorized') || String(errorReason).includes('Firebase Storage: User does not have permission')) {
+          throw new Error('Firebase Storage is not enabled or its security rules deny access. Please go to your Firebase Console (Storage tab), click "Get Started", and update the rules to allow reads and writes for authenticated users.');
+        }
+        throw new Error(`Storage error: ${errorReason}`);
+      }
+
+      const storageUrl = storageResult.value;
+      const gRes = geminiResult.status === 'fulfilled' ? geminiResult.value : { uri: "", mimeType: "" };
+      
+      if (geminiResult.status === 'rejected') {
+        console.warn("Gemini upload failed, will attempt to use storage URL if possible:", geminiResult.reason);
+      }
+
+      uri = gRes.uri;
+      mimeType = gRes.mimeType || file.type || "application/octet-stream";
+
+      if (!uri && !isDocx) {
+        console.warn(`No URI obtained for ${file.name}. AI generation might fail for this file.`);
       }
 
       let firestoreId = "";
-      const user = auth.currentUser;
-      if (user) {
-        try {
-          const fileDoc: any = {
-            userId: user.uid,
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: base64,
-            createdAt: serverTimestamp(),
-            uri: uri,
-            mimeType: mimeType
-          };
-          if (extractedText) fileDoc.extractedText = extractedText;
-          const fileRef = await addDoc(collection(db, "files"), fileDoc);
-          firestoreId = fileRef.id;
-        } catch (fErr) {
-          console.error("Optional firestore file save failed:", fErr);
-        }
+      try {
+        const fileDoc: any = {
+          userId: user.uid,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          storageUrl: storageUrl,
+          createdAt: serverTimestamp(),
+          uri: uri,
+          mimeType: mimeType
+        };
+        if (extractedText) fileDoc.extractedText = extractedText;
+        const fileRef = await addDoc(collection(db, "files"), fileDoc);
+        firestoreId = fileRef.id;
+      } catch (fErr) {
+        console.error("Firestore file record save failed:", fErr);
       }
 
       setMediaFiles(prev => prev.map(v => v.id === id ? { 
@@ -302,14 +379,25 @@ export default function App() {
         uri: uri,
         mimeType: mimeType,
         firestoreId,
-        base64,
-        extractedText
+        storageUrl,
+        extractedText,
+        progress: 100
       } : v));
 
     } catch (err: any) {
-      console.error("Gemini Upload Error:", err);
+      console.error("Upload Error Detailed:", err);
+      let errorMsg = `Failed to process ${file.name}: ${err.message || "Upload failed"}`;
+      
+      if (err.message?.includes("API key not valid")) {
+        errorMsg = "AI Configuration Error: Invalid Gemini API key. Please check your environment variables.";
+      } else if (err.message?.includes("quota")) {
+        errorMsg = "AI Quota Exceeded: The system has reached its current processing limit. Please try again later.";
+      } else if (err.message?.includes("Storage")) {
+        errorMsg = `Storage Error: Failed to upload ${file.name} to cloud storage. Ensure your connection is stable.`;
+      }
+
       setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'FAILED' } : v));
-      setError(`Failed to ingest ${file.name}: ${err.message || "Gemini rejection"}`);
+      setError(errorMsg);
     }
   };
 
@@ -411,20 +499,23 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           if (v.extractedText) {
             return { text: `[Content of Doc ${v.name}]:\n${v.extractedText}` };
           }
+          if (!v.uri) return null;
           return {
             fileData: {
-              fileUri: v.uri!,
-              mimeType: v.mimeType!
+              fileUri: v.uri,
+              mimeType: v.mimeType || "application/octet-stream"
             }
           };
-        });
+        }).filter(p => p !== null);
 
         const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite-preview",
-          contents: [
-            ...fileParts,
-            { text: promptText }
-          ]
+          contents: {
+            parts: [
+              ...fileParts,
+              { text: promptText }
+            ]
+          }
         });
         if (response.text) {
           setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
@@ -499,7 +590,7 @@ SPECIFIC FOCUS: ${preferences.specificFocus}
 
 Note: The user has provided media files (videos/audio/images) that have been analyzed. 
 Please refer to them in your writing where appropriate:
-${readyVideos.map(v => `- [File: ${v.file.name}] (Type: ${v.file.type})`).join('\n')}
+${readyVideos.map(v => `- [File: ${v.name}] (Type: ${v.mimeType || v.file?.type})`).join('\n')}
 
 Format the output in clear Markdown. Start immediately with the title.`;
 
@@ -521,13 +612,14 @@ Format the output in clear Markdown. Start immediately with the title.`;
           if (v.extractedText) {
             return { text: `[Content of Doc ${v.name}]:\n${v.extractedText}` };
           }
+          if (!v.uri) return null;
           return {
             fileData: {
-              fileUri: v.uri!,
-              mimeType: v.mimeType!
+              fileUri: v.uri,
+              mimeType: v.mimeType || "application/octet-stream"
             }
           };
-        });
+        }).filter(p => p !== null);
 
         const prompt = `You are a world-class blog post writer and content strategist. 
 Your task is to transform the provided video(s), audio file(s), image(s), or document(s) into a high-quality, professional blog post.
@@ -538,17 +630,17 @@ LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
 
 AVAILABLE MEDIA ASSETS FOR CONTEXTUAL PLACEMENT:
-${readyVideos.map(v => `- [File: ${v.file.name}]: Reference ID: MEDIA_ID_${(v as any).firestoreId || v.id} (Type: ${v.file.type})${v.extractedText ? ' (Document Content Provided as Text)' : ''}`).join('\n')}
+${readyVideos.map(v => `- [File: ${v.name}]: Reference ID: MEDIA_ID_${(v as any).firestoreId || v.id} (Type: ${v.mimeType || v.file?.type})${v.extractedText ? ' (Document Content Provided as Text)' : ''}`).join('\n')}
 
 INSTRUCTIONS:
-1. Analyze the media and documents thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details. For word documents, use the provided text content.
+1. Analyze the media and documents thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details. For word documents/PDFs, use the provided text content or context.
 2. Structure the blog post with a compelling headline, an engaging hook, well-organized sections with descriptive subheadings, and a strong conclusion.
-3. STRATEGIC ASSET PLACEMENT: You MUST contextually embed the available media assets where they add the most value to the reader. Use standard markdown image syntax for ALL placements: ![Short Description of context](MEDIA_ID_ID_HERE).
+3. STRATEGIC ASSET PLACEMENT: You MUST contextually embed the available assets where they add the most value to the reader. Use standard markdown image syntax for ALL placements: ![Short Description of context](MEDIA_ID_ID_HERE).
    - Place images near their descriptions.
-   - Place video/audio embeds near the sections where their content is discussed or summarized.
-   - Do not group them all at the end; integrate them naturally into the flow.
-   - Note: Mention documents in the text naturally, but they don't need a MEDIA_ID embed unless specifically relevant to show a placeholder.
-4. Incorporate actionable takeaways and relevant context from the media contents.
+   - Place video/audio embeds near sections discussing their content.
+   - Place document "cards" (using the same MEDIA_ID_ syntax) when referencing a source document, case study, or whitepaper that the user provides.
+   - Do not group assets at the end; integrate them naturally into the narrative flow.
+4. Incorporate actionable takeaways and relevant context from all provided contents.
 5. If multiple files are provided, synthesize them into a cohesive narrative or a comprehensive guide.
 6. Format the output using clear Markdown. Start the post immediately with the title, do not include any preamble.
 7. Ensure the length matches the target: ${preferences.length}. 
@@ -561,14 +653,12 @@ Please generate the blog post now:`;
 
         const result = await ai.models.generateContent({
           model: preferences.model,
-          contents: [
-            {
-              parts: [
-                ...fileParts,
-                { text: prompt }
-              ]
-            }
-          ],
+          contents: {
+            parts: [
+              ...fileParts,
+              { text: prompt }
+            ]
+          },
           config: {
             systemInstruction: "You are an expert technical blogger who specializes in converting visual and textual content into authoritative written articles. You maintain structural integrity while enhancing readability."
           }
@@ -1036,7 +1126,7 @@ Please generate the blog post now:`;
                       exit={{ opacity: 0, x: 10 }}
                       className={`flex flex-col p-4 border transition-all group ${
                         v.status === 'ACTIVE' 
-                          ? (theme === 'dark' ? 'border-green-800 bg-green-900/20 shadow-[4px_4px_0px_0px_rgba(22,101,52,1)]' : 'border-green-500 bg-green-50/50 shadow-[4px_4px_0px_0px_rgba(34,197,94,1)]') 
+                          ? (theme === 'dark' ? 'border-green-500 bg-green-500/20 shadow-[4px_4px_0px_0px_rgba(34,197,94,1)] text-green-400' : 'border-green-500 bg-green-100 shadow-[4px_4px_0px_0px_rgba(34,197,94,1)] text-green-800') 
                           : (theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]')
                       }`}
                     >
@@ -1155,7 +1245,7 @@ Please generate the blog post now:`;
                     type="file" 
                     ref={fileInputRef}
                     className="hidden" 
-                    accept="video/*,audio/*,image/*"
+                    accept="video/*,audio/*,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                     multiple
                     onChange={handleFileChange}
                   />
@@ -1662,6 +1752,65 @@ Please generate the blog post now:`;
                                       </div>
                                     );
                                   }
+                                  // Generic Document / PDF Card
+                                  const isPdf = type.includes('pdf');
+                                  return (
+                                    <div className={`my-12 relative group max-w-2xl mx-auto ${theme === 'dark' ? 'bg-[#0A0A0A]' : 'bg-white'}`} id={`doc-card-${media.id}`}>
+                                      <div className={`absolute -inset-1 ${isPdf ? 'bg-red-500/10' : 'bg-indigo-500/10'} rounded-sm blur-xl opacity-0 group-hover:opacity-100 transition-all duration-700`} />
+                                      <div className={`relative border-2 p-8 flex flex-col md:flex-row items-center gap-8 transition-all duration-500 shadow-[0_0_0_0_rgba(0,0,0,0)] hover:shadow-[0_20px_40px_-20px_rgba(0,0,0,0.2)] ${theme === 'dark' ? 'border-[#333] hover:border-white/40' : 'border-black hover:-translate-y-1'}`}>
+                                        <div className={`w-20 h-20 shrink-0 flex items-center justify-center border-2 rounded-sm transition-transform duration-500 group-hover:scale-110 ${isPdf ? 'border-red-500/40 bg-red-500/5' : 'border-indigo-500/40 bg-indigo-500/5'}`}>
+                                          {isPdf ? (
+                                            <div className="text-center">
+                                              <FileText className="w-10 h-10 text-red-600 mb-0.5" />
+                                              <span className="text-[8px] font-mono font-black text-red-600 block uppercase tracking-tighter">PDF_DOC</span>
+                                            </div>
+                                          ) : (
+                                            <div className="text-center">
+                                              <FileText className="w-10 h-10 text-indigo-600 mb-0.5" />
+                                              <span className="text-[8px] font-mono font-black text-indigo-600 block uppercase tracking-tighter">WORD_DOC</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex-1 min-w-0 space-y-2 text-center md:text-left">
+                                          <div className="flex items-center justify-center md:justify-start gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${isPdf ? 'bg-red-500' : 'bg-indigo-500'} animate-pulse`} />
+                                            <p className="text-[9px] font-mono font-bold opacity-40 uppercase tracking-[0.4em]">{isPdf ? 'Source_Document_Ref' : 'Knowledge_Fragment_Node'}</p>
+                                          </div>
+                                          <h4 className="text-xl font-bold uppercase tracking-tighter truncate leading-none">{name}</h4>
+                                          <p className="text-[10px] font-mono opacity-50 uppercase tracking-widest leading-none">{( (media.size || 0) / (1024 * 1024)).toFixed(2)} MB • {media.status} • VERIFIED SOURCE</p>
+                                        </div>
+                                        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+                                          <button 
+                                            id={`btn-view-${media.id}`}
+                                            onClick={() => setPreviewMedia(media)}
+                                            className={`flex-1 md:flex-none px-6 py-3 border-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95 ${
+                                              theme === 'dark' ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'
+                                            }`}
+                                          >
+                                            View_Source
+                                          </button>
+                                          <button 
+                                            id={`btn-dl-${media.id}`}
+                                            onClick={() => {
+                                              if (media.storageUrl) downloadFile({ ...media, id: media.id, name: media.name || 'document', type: media.mimeType || 'application/octet-stream', size: media.size || 0 });
+                                              else if (media.file) downloadLocalFile(media.file);
+                                            }}
+                                            className={`p-3 border-2 transition-all hover:rotate-12 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'}`}
+                                          >
+                                            <Download className="w-5 h-5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {/* Snippet preview for docs if available */}
+                                      {media.extractedText && (
+                                        <div className={`mt-2 p-6 border-l-4 border-dashed text-[11px] font-mono opacity-60 italic leading-relaxed transition-all group-hover:opacity-100 ${theme === 'dark' ? 'bg-[#141414] border-white/20' : 'bg-gray-50/50 border-black/20'}`}>
+                                           <span className="text-lg leading-none opacity-20 mr-2">"</span>
+                                           {media.extractedText.substring(0, 240).trim()}...
+                                           <span className="text-lg leading-none opacity-20 ml-2">"</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
                                 }
                               }
                               return <img src={src} alt={alt} className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
@@ -1727,7 +1876,8 @@ Please generate the blog post now:`;
                                 <div className={`p-2 transition-colors ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
                                   {file.type.includes('audio') ? <FileAudio className="w-3 h-3" /> : 
                                    file.type.includes('image') ? <FileImage className="w-3 h-3" /> : 
-                                   <FileVideo className="w-3 h-3" />}
+                                   file.type.includes('video') ? <FileVideo className="w-3 h-3" /> :
+                                   <FileText className="w-3 h-3" />}
                                 </div>
                                 <div className="overflow-hidden">
                                   <p className="text-[10px] font-bold truncate uppercase">{file.name}</p>
@@ -1842,63 +1992,50 @@ Please generate the blog post now:`;
                 {/* Robust PDF Support */}
                 {(previewMedia.mimeType?.includes('pdf') || (previewMedia.file?.type === 'application/pdf')) && (
                   <iframe 
-                    src={previewMedia.previewUrl} 
+                    src={previewMedia.storageUrl || previewMedia.previewUrl} 
                     className="w-full h-full border-none bg-white"
                     title="PDF Preview"
                   />
                 )}
                 {/* Robust Word/Doc Support */}
                 {(previewMedia.mimeType?.includes('word') || previewMedia.name?.toLowerCase().endsWith('.docx') || previewMedia.name?.toLowerCase().endsWith('.doc')) && (
-                  <div className="w-full max-w-2xl p-16 bg-white text-black font-serif shadow-2xl h-[80vh] overflow-y-auto m-8">
-                     <div className="max-w-md mx-auto space-y-10">
-                        <div className="flex items-center gap-6 border-b-4 border-black pb-6">
-                           <div className="p-4 bg-black text-white">
-                              <FileText className="w-10 h-10" />
-                           </div>
-                           <div>
-                              <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-black/40">Structured_Data_Ingested</p>
-                              <p className="text-2xl font-bold uppercase tracking-tighter leading-none">{previewMedia.name}</p>
-                           </div>
-                        </div>
-                        
-                        <div className="space-y-6">
-                           {previewMedia.extractedText ? (
-                             <div className="text-sm leading-relaxed text-black/80 font-serif whitespace-pre-wrap">
-                               {previewMedia.extractedText.length > 2000 
-                                 ? previewMedia.extractedText.substring(0, 2000) + '... [Content Truncated for Preview]' 
-                                 : previewMedia.extractedText}
+                  <div className="w-full h-full overflow-y-auto bg-gray-200/50 p-4 md:p-8 flex justify-center">
+                    <div className="w-full max-w-3xl bg-white text-black font-serif shadow-[0_20px_50px_rgba(0,0,0,0.2)] min-h-[1100px] p-12 md:p-20 relative">
+                       {/* Document Header Branding */}
+                       <div className="flex items-center gap-6 border-b-2 border-black/10 pb-8 mb-12">
+                          <div className="p-4 bg-black text-white shrink-0">
+                             <FileText className="w-8 h-8" />
+                          </div>
+                          <div className="min-w-0">
+                             <p className="text-[9px] font-mono font-bold uppercase tracking-[0.3em] text-black/30 mb-1">Source_Entity_Fragment</p>
+                             <p className="text-xl md:text-2xl font-bold uppercase tracking-tighter leading-tight truncate">{previewMedia.name}</p>
+                             <div className="flex items-center gap-4 mt-1">
+                               <span className="text-[8px] font-mono opacity-40 uppercase tracking-widest">{((previewMedia.size || 0) / 1024).toFixed(0)} KB</span>
+                               <span className="text-[8px] font-mono opacity-40 uppercase tracking-widest">• Verified Source</span>
                              </div>
-                           ) : (
-                             <>
-                               <div className="space-y-2">
-                                  <div className="h-4 bg-black/10 w-full rounded-full" />
-                                  <div className="h-4 bg-black/5 w-[90%] rounded-full" />
-                                  <div className="h-4 bg-black/5 w-[95%] rounded-full" />
-                               </div>
-                               <div className="space-y-2">
-                                  <div className="h-4 bg-black/10 w-[80%] rounded-full" />
-                                  <div className="h-4 bg-black/5 w-[85%] rounded-full" />
-                               </div>
-                             </>
-                           )}
-                        </div>
+                          </div>
+                       </div>
+                       
+                       <div className="space-y-8">
+                          {previewMedia.extractedText ? (
+                            <div className="text-base leading-[1.8] text-black/90 font-serif whitespace-pre-wrap selection:bg-yellow-200">
+                              {previewMedia.extractedText.length > 5000 
+                                ? previewMedia.extractedText.substring(0, 5000) + '\n\n[... Remaining content truncated for terminal preview ...]' 
+                                : previewMedia.extractedText}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-40 space-y-6 opacity-20">
+                               <Loader2 className="w-10 h-10 animate-spin" />
+                               <p className="text-xs font-mono uppercase tracking-[0.4em]">Extracting_Semantics</p>
+                            </div>
+                          )}
+                       </div>
 
-                        <div className="p-10 border-2 border-dashed border-black/10 bg-gray-50 text-center space-y-6">
-                           <div className="flex justify-center">
-                              <div className="px-3 py-1 bg-black text-white text-[9px] font-mono uppercase tracking-[0.2em]">Contextual_Extraction</div>
-                           </div>
-                           <p className="text-xs leading-relaxed italic opacity-70">"This system employs semantic synthesis to extract core narrative beats, strategic insights, and structural metadata from complex document sources. Full visual rendering is restricted to ensure peak processing efficiency."</p>
-                           <div className="pt-4 flex flex-col gap-3">
-                             <button 
-                                onClick={() => previewMedia.file && downloadLocalFile(previewMedia.file)}
-                                className="w-full py-3 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-gray-800 transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]"
-                             >
-                                Download_Original_Source
-                             </button>
-                             <p className="text-[9px] font-mono opacity-40 uppercase tracking-tighter">Verified Content Node: {previewMedia.id}</p>
-                           </div>
-                        </div>
-                     </div>
+                       {/* Decorative Watermark */}
+                       <div className="absolute bottom-12 right-12 opacity-[0.03] select-none pointer-events-none">
+                          <p className="text-6xl font-black rotate-[-15deg] tracking-tighter">VELOCITY_AI</p>
+                       </div>
+                    </div>
                   </div>
                 )}
               </div>

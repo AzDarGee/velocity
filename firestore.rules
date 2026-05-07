@@ -58,11 +58,15 @@ service cloud.firestore {
 
     // File
     function isValidFile(data) {
-      return data.keys().hasAll(['userId', 'name', 'type', 'data', 'createdAt']) &&
+      return data.keys().hasAll(['userId', 'name', 'type', 'createdAt']) &&
              data.userId == request.auth.uid &&
              data.name is string && data.name.size() <= 256 &&
              data.type is string &&
-             data.data is string && data.data.size() <= 1048576 &&
+             (data.get('data', '') is string && data.get('data', '').size() <= 1048576) &&
+             (data.get('storageUrl', '') is string && data.get('storageUrl', '').size() <= 2048) &&
+             (data.get('uri', '') is string && data.get('uri', '').size() <= 1024) &&
+             (data.get('mimeType', '') is string && data.get('mimeType', '').size() <= 256) &&
+             (data.get('extractedText', '') is string && data.get('extractedText', '').size() <= 2097152) &&
              data.createdAt is timestamp;
     }
 
