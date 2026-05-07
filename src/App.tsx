@@ -33,6 +33,7 @@ import {
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { GoogleGenAI } from "@google/genai";
+import * as mammoth from "mammoth";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { AuthGuard } from "./components/auth/AuthGuard";
@@ -65,6 +66,7 @@ interface MediaFile {
   progress?: number;
   size?: number;
   type?: 'video' | 'audio' | 'image';
+  extractedText?: string;
 }
 
 interface AttachedFile {
@@ -224,27 +226,48 @@ export default function App() {
     try {
       setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'UPLOADING' } : v));
 
-      const uploadResult = await ai.files.upload({
-        file: file,
-        config: {
-          mimeType: file.type || "application/octet-stream",
-          displayName: file.name.substring(0, 100),
-        },
-      });
+      const isDocx = file.name.toLowerCase().endsWith('.docx');
+      let extractedText = "";
 
-      setMediaFiles(prev => prev.map(v => v.id === id ? { 
-        ...v, 
-        status: 'PROCESSING'
-      } : v));
-
-      // Polling for processing status directly via SDK
-      let uploadedFile = uploadResult;
-      while (uploadedFile.state === "PROCESSING") {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        uploadedFile = await ai.files.get({ name: uploadResult.name });
+      if (isDocx) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          extractedText = result.value;
+        } catch (mErr) {
+          console.error("Mammoth Error:", mErr);
+          extractedText = "Error: Failed to extract text from Word document.";
+        }
       }
 
-      const uploadedFileWithId = await ai.files.get({ name: uploadResult.name });
+      let uri = "";
+      let mimeType = file.type || "application/octet-stream";
+
+      if (!isDocx) {
+        const uploadResult = await ai.files.upload({
+          file: file,
+          config: {
+            mimeType: file.type || "application/octet-stream",
+            displayName: file.name.substring(0, 100),
+          },
+        });
+
+        setMediaFiles(prev => prev.map(v => v.id === id ? { 
+          ...v, 
+          status: 'PROCESSING'
+        } : v));
+
+        // Polling for processing status directly via SDK
+        let uploadedFile = uploadResult;
+        while (uploadedFile.state === "PROCESSING") {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          uploadedFile = await ai.files.get({ name: uploadResult.name });
+        }
+
+        const uploadedFileWithId = await ai.files.get({ name: uploadResult.name });
+        uri = uploadedFileWithId.uri;
+        mimeType = uploadedFileWithId.mimeType;
+      }
       
       let base64 = "";
       if (file.size < 800 * 1024) {
@@ -255,16 +278,17 @@ export default function App() {
       const user = auth.currentUser;
       if (user) {
         try {
-          const fileDoc = {
+          const fileDoc: any = {
             userId: user.uid,
             name: file.name,
             type: file.type,
             size: file.size,
             data: base64,
             createdAt: serverTimestamp(),
-            uri: uploadedFileWithId.uri,
-            mimeType: uploadedFileWithId.mimeType
+            uri: uri,
+            mimeType: mimeType
           };
+          if (extractedText) fileDoc.extractedText = extractedText;
           const fileRef = await addDoc(collection(db, "files"), fileDoc);
           firestoreId = fileRef.id;
         } catch (fErr) {
@@ -275,10 +299,11 @@ export default function App() {
       setMediaFiles(prev => prev.map(v => v.id === id ? { 
         ...v, 
         status: 'ACTIVE', 
-        uri: uploadedFileWithId.uri,
-        mimeType: uploadedFileWithId.mimeType,
+        uri: uri,
+        mimeType: mimeType,
         firestoreId,
-        base64
+        base64,
+        extractedText
       } : v));
 
     } catch (err: any) {
@@ -382,12 +407,17 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           setPreferences(prev => ({ ...prev, specificFocus: data.text.trim() }));
         }
       } else {
-        const fileParts = readyVideos.map(v => ({
-          fileData: {
-            fileUri: v.uri!,
-            mimeType: v.mimeType!
+        const fileParts = readyVideos.map(v => {
+          if (v.extractedText) {
+            return { text: `[Content of Doc ${v.name}]:\n${v.extractedText}` };
           }
-        }));
+          return {
+            fileData: {
+              fileUri: v.uri!,
+              mimeType: v.mimeType!
+            }
+          };
+        });
 
         const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite-preview",
@@ -487,15 +517,20 @@ Format the output in clear Markdown. Start immediately with the title.`;
         if (!response.ok) throw new Error(data.error || "OpenRouter Generation Failed");
         generatedContent = data.text;
       } else {
-        const fileParts = readyVideos.map(v => ({
-          fileData: {
-            fileUri: v.uri!,
-            mimeType: v.mimeType!
+        const fileParts = readyVideos.map(v => {
+          if (v.extractedText) {
+            return { text: `[Content of Doc ${v.name}]:\n${v.extractedText}` };
           }
-        }));
+          return {
+            fileData: {
+              fileUri: v.uri!,
+              mimeType: v.mimeType!
+            }
+          };
+        });
 
         const prompt = `You are a world-class blog post writer and content strategist. 
-Your task is to transform the provided video(s), audio file(s), or image(s) into a high-quality, professional blog post.
+Your task is to transform the provided video(s), audio file(s), image(s), or document(s) into a high-quality, professional blog post.
 
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
@@ -503,15 +538,16 @@ LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
 
 AVAILABLE MEDIA ASSETS FOR CONTEXTUAL PLACEMENT:
-${readyVideos.map(v => `- [File: ${v.file.name}]: Reference ID: MEDIA_ID_${(v as any).firestoreId || v.id} (Type: ${v.file.type})`).join('\n')}
+${readyVideos.map(v => `- [File: ${v.file.name}]: Reference ID: MEDIA_ID_${(v as any).firestoreId || v.id} (Type: ${v.file.type})${v.extractedText ? ' (Document Content Provided as Text)' : ''}`).join('\n')}
 
 INSTRUCTIONS:
-1. Analyze the media thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details, context, and how they relate to the overall topic.
+1. Analyze the media and documents thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details. For word documents, use the provided text content.
 2. Structure the blog post with a compelling headline, an engaging hook, well-organized sections with descriptive subheadings, and a strong conclusion.
 3. STRATEGIC ASSET PLACEMENT: You MUST contextually embed the available media assets where they add the most value to the reader. Use standard markdown image syntax for ALL placements: ![Short Description of context](MEDIA_ID_ID_HERE).
    - Place images near their descriptions.
    - Place video/audio embeds near the sections where their content is discussed or summarized.
    - Do not group them all at the end; integrate them naturally into the flow.
+   - Note: Mention documents in the text naturally, but they don't need a MEDIA_ID embed unless specifically relevant to show a placeholder.
 4. Incorporate actionable takeaways and relevant context from the media contents.
 5. If multiple files are provided, synthesize them into a cohesive narrative or a comprehensive guide.
 6. Format the output using clear Markdown. Start the post immediately with the title, do not include any preamble.
@@ -534,7 +570,7 @@ Please generate the blog post now:`;
             }
           ],
           config: {
-            systemInstruction: "You are an expert technical blogger who specializes in converting visual content into authoritative written articles. You maintain structural integrity while enhancing readability."
+            systemInstruction: "You are an expert technical blogger who specializes in converting visual and textual content into authoritative written articles. You maintain structural integrity while enhancing readability."
           }
         });
 
@@ -1006,15 +1042,40 @@ Please generate the blog post now:`;
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3 overflow-hidden flex-1">
-                          {v.mimeType?.includes('audio') || (v.file && v.file.type.includes('audio')) ? (
-                            <FileAudio className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
-                          ) : v.mimeType?.includes('image') || (v.file && v.file.type.includes('image')) ? (
-                            <FileImage className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
-                          ) : (
-                            <FileVideo className={`w-4 h-4 shrink-0 ${v.status === 'ACTIVE' ? 'text-green-600' : ''}`} />
-                          )}
-                          <span className="text-xs font-mono truncate">{v.name}</span>
-                          <span className="text-[10px] opacity-40">{( (v.size || 0) / (1024 * 1024)).toFixed(1)}MB</span>
+                          <div className={`w-10 h-10 shrink-0 flex items-center justify-center border-2 ${theme === 'dark' ? 'bg-black/60 border-white/10 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]' : 'bg-gray-100 border-black/10 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.05)]'} overflow-hidden rounded-sm group-hover:scale-110 transition-transform duration-300`}>
+                            {(v.mimeType?.includes('image') || (v.file && v.file.type.includes('image'))) && v.previewUrl ? (
+                              <img src={v.previewUrl} className="w-full h-full object-cover" alt="" />
+                            ) : v.mimeType?.includes('video') || (v.file && v.file.type.includes('video')) ? (
+                              <div className="relative w-full h-full flex items-center justify-center">
+                                <FileVideo className="w-4 h-4 opacity-60" />
+                                <div className="absolute inset-x-0 bottom-0 h-1 bg-blue-500/30" />
+                              </div>
+                            ) : v.mimeType?.includes('audio') || (v.file && v.file.type.includes('audio')) ? (
+                              <div className="relative w-full h-full flex items-center justify-center">
+                                <FileAudio className="w-4 h-4 opacity-60" />
+                                <div className="absolute inset-x-0 bottom-0 h-1 bg-indigo-500/30" />
+                              </div>
+                            ) : v.mimeType?.includes('pdf') || v.name?.toLowerCase().endsWith('.pdf') ? (
+                              <div className="relative w-full h-full flex items-center justify-center bg-red-500/5">
+                                <FileText className="w-4 h-4 text-red-600" />
+                                <div className="absolute inset-x-0 bottom-0 h-1 bg-red-600" />
+                              </div>
+                            ) : (
+                              <div className="relative w-full h-full flex items-center justify-center bg-indigo-500/5">
+                                <FileText className="w-4 h-4 text-indigo-600" />
+                                <div className="absolute inset-x-0 bottom-0 h-1 bg-indigo-600" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[11px] font-mono font-bold truncate leading-tight uppercase tracking-tighter">{v.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] opacity-40 font-mono">{( (v.size || 0) / (1024 * 1024)).toFixed(2)}MB</span>
+                              {v.status === 'ACTIVE' && (
+                                <span className="text-[8px] text-green-600 font-mono tracking-tighter bg-green-500/10 px-1">SYNCED</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <button 
@@ -1730,13 +1791,14 @@ Please generate the blog post now:`;
               <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-white/10 bg-[#141414]' : 'border-black bg-white'}`}>
                 <div className="flex items-center gap-3">
                   <div className={`p-2 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                    {previewMedia.file.type.includes('audio') ? <FileAudio className="w-4 h-4" /> : 
-                     previewMedia.file.type.includes('image') ? <FileImage className="w-4 h-4" /> : 
-                     <FileVideo className="w-4 h-4" />}
+                    {(previewMedia.mimeType?.includes('audio') || previewMedia.file?.type.includes('audio')) ? <FileAudio className="w-4 h-4" /> : 
+                     (previewMedia.mimeType?.includes('image') || previewMedia.file?.type.includes('image')) ? <FileImage className="w-4 h-4" /> : 
+                     (previewMedia.mimeType?.includes('video') || previewMedia.file?.type.includes('video')) ? <FileVideo className="w-4 h-4" /> :
+                     <FileText className="w-4 h-4" />}
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-tight">{previewMedia.file.name}</h3>
-                    <p className="text-[10px] font-mono opacity-40 uppercase tracking-widest">{previewMedia.file.type} • {(previewMedia.file.size / (1024 * 1024)).toFixed(2)}MB</p>
+                    <h3 className="text-sm font-bold uppercase tracking-tight">{previewMedia.name}</h3>
+                    <p className="text-[10px] font-mono opacity-40 uppercase tracking-widest">{previewMedia.mimeType || previewMedia.file?.type} • {((previewMedia.size || previewMedia.file?.size || 0) / (1024 * 1024)).toFixed(2)}MB</p>
                   </div>
                 </div>
                 <button 
@@ -1747,34 +1809,97 @@ Please generate the blog post now:`;
                 </button>
               </div>
               
-              <div className="flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[400px]">
-                {previewMedia.file.type.includes('video') && (
+              <div className="flex-1 bg-black/95 flex items-center justify-center overflow-hidden min-h-[500px]">
+                {(previewMedia.mimeType?.includes('video') || previewMedia.file?.type.includes('video')) && (
                   <video 
                     src={previewMedia.previewUrl} 
                     controls 
-                    className="max-w-full max-h-[70vh] shadow-2xl"
+                    className="max-w-full max-h-[75vh] shadow-[0_0_100px_rgba(0,0,0,0.5)]"
                     autoPlay
                   />
                 )}
-                {previewMedia.file.type.includes('audio') && (
-                  <div className="w-full max-w-md p-12 bg-[#141414] border border-white/10 rounded-sm">
-                    <div className="flex flex-col items-center gap-8">
-                       <div className="w-16 h-16 bg-white/5 border border-white/20 rounded-full flex items-center justify-center animate-pulse">
-                          <FileAudio className="w-8 h-8 text-white/40" />
+                {(previewMedia.mimeType?.includes('audio') || previewMedia.file?.type.includes('audio')) && (
+                  <div className="w-full max-w-md p-12 bg-[#0A0A0A] border border-white/10 shadow-2xl rounded-sm">
+                    <div className="flex flex-col items-center gap-10">
+                       <div className="w-20 h-20 bg-white/5 border border-white/20 rounded-full flex items-center justify-center relative">
+                          <FileAudio className="w-10 h-10 text-white/40" />
+                          <div className="absolute inset-0 rounded-full border-b-2 border-white/20 animate-spin" />
                        </div>
                        <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay />
                        <div className="text-center space-y-2">
-                         <p className="text-white/40 font-mono text-[10px] uppercase tracking-widest">Audio_Output_Stream</p>
+                         <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.3em]">Temporal_Data_Source</p>
                        </div>
                     </div>
                   </div>
                 )}
-                {previewMedia.file.type.includes('image') && (
+                {(previewMedia.mimeType?.includes('image') || previewMedia.file?.type.includes('image')) && (
                   <img 
                     src={previewMedia.previewUrl} 
-                    alt={previewMedia.file.name} 
-                    className="max-w-full max-h-[70vh] object-contain shadow-2xl"
+                    alt={previewMedia.name} 
+                    className="max-w-full max-h-[80vh] object-contain shadow-2xl"
                   />
+                )}
+                {/* Robust PDF Support */}
+                {(previewMedia.mimeType?.includes('pdf') || (previewMedia.file?.type === 'application/pdf')) && (
+                  <iframe 
+                    src={previewMedia.previewUrl} 
+                    className="w-full h-full border-none bg-white"
+                    title="PDF Preview"
+                  />
+                )}
+                {/* Robust Word/Doc Support */}
+                {(previewMedia.mimeType?.includes('word') || previewMedia.name?.toLowerCase().endsWith('.docx') || previewMedia.name?.toLowerCase().endsWith('.doc')) && (
+                  <div className="w-full max-w-2xl p-16 bg-white text-black font-serif shadow-2xl h-[80vh] overflow-y-auto m-8">
+                     <div className="max-w-md mx-auto space-y-10">
+                        <div className="flex items-center gap-6 border-b-4 border-black pb-6">
+                           <div className="p-4 bg-black text-white">
+                              <FileText className="w-10 h-10" />
+                           </div>
+                           <div>
+                              <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-black/40">Structured_Data_Ingested</p>
+                              <p className="text-2xl font-bold uppercase tracking-tighter leading-none">{previewMedia.name}</p>
+                           </div>
+                        </div>
+                        
+                        <div className="space-y-6">
+                           {previewMedia.extractedText ? (
+                             <div className="text-sm leading-relaxed text-black/80 font-serif whitespace-pre-wrap">
+                               {previewMedia.extractedText.length > 2000 
+                                 ? previewMedia.extractedText.substring(0, 2000) + '... [Content Truncated for Preview]' 
+                                 : previewMedia.extractedText}
+                             </div>
+                           ) : (
+                             <>
+                               <div className="space-y-2">
+                                  <div className="h-4 bg-black/10 w-full rounded-full" />
+                                  <div className="h-4 bg-black/5 w-[90%] rounded-full" />
+                                  <div className="h-4 bg-black/5 w-[95%] rounded-full" />
+                               </div>
+                               <div className="space-y-2">
+                                  <div className="h-4 bg-black/10 w-[80%] rounded-full" />
+                                  <div className="h-4 bg-black/5 w-[85%] rounded-full" />
+                               </div>
+                             </>
+                           )}
+                        </div>
+
+                        <div className="p-10 border-2 border-dashed border-black/10 bg-gray-50 text-center space-y-6">
+                           <div className="flex justify-center">
+                              <div className="px-3 py-1 bg-black text-white text-[9px] font-mono uppercase tracking-[0.2em]">Contextual_Extraction</div>
+                           </div>
+                           <p className="text-xs leading-relaxed italic opacity-70">"This system employs semantic synthesis to extract core narrative beats, strategic insights, and structural metadata from complex document sources. Full visual rendering is restricted to ensure peak processing efficiency."</p>
+                           <div className="pt-4 flex flex-col gap-3">
+                             <button 
+                                onClick={() => previewMedia.file && downloadLocalFile(previewMedia.file)}
+                                className="w-full py-3 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-gray-800 transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]"
+                             >
+                                Download_Original_Source
+                             </button>
+                             <p className="text-[9px] font-mono opacity-40 uppercase tracking-tighter">Verified Content Node: {previewMedia.id}</p>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
                 )}
               </div>
               
