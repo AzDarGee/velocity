@@ -1104,7 +1104,7 @@ Please generate the blog post now:`;
                   </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto space-y-4 pr-2 history-scrollbar">
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                   {sortedHistory.length === 0 ? (
                     <div className={`h-full flex flex-col items-center justify-center text-center space-y-4 ${theme === 'dark' ? 'opacity-40 text-white' : 'opacity-30 text-black'}`}>
                       <Clock className="w-12 h-12" />
