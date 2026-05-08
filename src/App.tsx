@@ -1409,7 +1409,7 @@ Please generate the blog post now:`;
                   <div className={`w-full border max-h-48 overflow-y-auto p-4 space-y-2 scrollbar-thin ${
                     theme === 'dark' 
                       ? 'bg-[#1A1A1A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
-                      : 'bg-[#F8F8F7] border-[#141414] scrollbar-thumb-black scrollbar-track-transparent'
+                      : 'bg-white/40 border-[#141414]/10 scrollbar-thumb-black/20 scrollbar-track-transparent'
                   }`}>
                     {[
                       "Business Professionals & Content Marketers", "General Audience / Beginners", "Technical Audience / Developers", 
