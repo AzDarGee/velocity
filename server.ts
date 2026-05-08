@@ -35,6 +35,11 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Basic health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Stripe Webhook needs raw body
   app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {
     const stripe = getStripe();
