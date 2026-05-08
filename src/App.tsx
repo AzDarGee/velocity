@@ -94,8 +94,8 @@ const getOpenRouterCategory = (m: any) => {
   if (id.includes("whisper") || id.includes("transcri")) return "8. Transcription";
   if (mod.includes("speech") || id.includes("tts") || id.includes("elevenlabs") || id.includes("speak") || id.includes("parler")) return "7. Speech";
   if (mod.includes("audio") || id.includes("music") || id.includes("suno") || id.includes("udio")) return "4. Audio";
-  if (mod === "text->video" || mod === "image->video" || id.includes("video") || id.includes("luma") || id.includes("runway") || id.includes("kling") || id.includes("minimax/video") || id.includes("sora") || id.includes("haiper")) return "5. Video";
-  if (mod === "text->image" || mod === "image->image" || id.includes("dall-e") || id.includes("flux") || id.includes("stable-diffusion") || id.includes("midjourney") || id.includes("recraft") || id.includes("ideogram") || id.includes("black-forest-labs") || id.includes("stabilityai")) return "2. Image";
+  if (mod.includes("video") || id.includes("video") || id.includes("luma") || id.includes("runway") || id.includes("kling") || id.includes("minimax/video") || id.includes("sora") || id.includes("haiper")) return "5. Video";
+  if (mod.includes("image") || id.includes("dall-e") || id.includes("flux") || id.includes("stable-diffusion") || id.includes("midjourney") || id.includes("recraft") || id.includes("ideogram") || id.includes("black-forest-labs") || id.includes("stabilityai")) return "2. Image";
   return "1. Text";
 };
 
