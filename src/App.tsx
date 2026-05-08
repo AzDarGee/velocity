@@ -448,7 +448,8 @@ export default function App() {
           id,
           file,
           name: file.name,
-          status: 'PENDING',
+          status: 'UPLOADING',
+          progress: 0,
           previewUrl: URL.createObjectURL(file),
           size: file.size,
           mimeType: file.type
@@ -1291,6 +1292,9 @@ Please generate the blog post now:`;
                         </div>
                         {v.status === 'ACTIVE' && (
                           <span className="text-[9px] font-mono text-green-600 font-bold">READY_FOR_SYNTHESIS</span>
+                        )}
+                        {v.status === 'UPLOADING' && v.progress !== undefined && (
+                          <span className="text-[9px] font-mono text-blue-500 font-bold">{Math.round(v.progress)}%</span>
                         )}
                       </div>
 
