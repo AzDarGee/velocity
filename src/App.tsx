@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { marked } from "marked";
 import { 
@@ -135,6 +135,7 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
+  const [historySortBy, setHistorySortBy] = useState<'updatedAt' | 'createdAt'>('updatedAt');
 
   useEffect(() => {
     fetch("/api/ai/openrouter/models")
@@ -240,11 +241,6 @@ export default function App() {
         );
         unsubscribeHistory = onSnapshot(q, (snapshot) => {
           const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          docs.sort((a: any, b: any) => {
-            const timeA = a.updatedAt?.toMillis() || a.createdAt?.toMillis() || 0;
-            const timeB = b.updatedAt?.toMillis() || b.createdAt?.toMillis() || 0;
-            return timeB - timeA;
-          });
           setHistory(docs);
         }, (err) => {
           handleFirestoreError(err, OperationType.LIST, "generations");
@@ -1047,6 +1043,20 @@ Please generate the blog post now:`;
     }
   };
 
+  const sortedHistory = useMemo(() => {
+    return [...history].sort((a: any, b: any) => {
+      if (historySortBy === 'createdAt') {
+        const timeA = a.createdAt?.toMillis() || 0;
+        const timeB = b.createdAt?.toMillis() || 0;
+        return timeB - timeA;
+      } else {
+        const timeA = Math.max(a.updatedAt?.toMillis() || 0, a.createdAt?.toMillis() || 0);
+        const timeB = Math.max(b.updatedAt?.toMillis() || 0, b.createdAt?.toMillis() || 0);
+        return timeB - timeA;
+      }
+    });
+  }, [history, historySortBy]);
+
   return (
     <AuthGuard theme={theme}>
       {/* History Sidebar */}
@@ -1074,20 +1084,34 @@ Please generate the blog post now:`;
                   <h2 className={`font-serif italic text-2xl uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Generation History</h2>
                   <button 
                     onClick={() => setIsHistoryOpen(false)}
-                    className={`p-2 border ${theme === 'dark' ? 'border-[#333] text-white hover:bg-white hover:text-black' : 'border-[#141414] text-black hover:bg-black hover:text-white'} transition-all`}
+                    className={`p-2 transition-all ${theme === 'dark' ? 'text-white hover:bg-white hover:text-black' : 'text-black hover:bg-black hover:text-white'}`}
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin">
-                  {history.length === 0 ? (
+                {history.length > 0 && (
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-widest opacity-60 flex-shrink-0 mr-2">Sort by:</span>
+                    <select
+                      value={historySortBy}
+                      onChange={(e) => setHistorySortBy(e.target.value as any)}
+                      className={`text-[10px] font-mono uppercase border px-2 py-1 outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-white' : 'bg-[#F8F8F7] border-[#141414] text-black'}`}
+                    >
+                      <option value="updatedAt">Last Updated</option>
+                      <option value="createdAt">Last Created</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 history-scrollbar">
+                  {sortedHistory.length === 0 ? (
                     <div className={`h-full flex flex-col items-center justify-center text-center space-y-4 ${theme === 'dark' ? 'opacity-40 text-white' : 'opacity-30 text-black'}`}>
                       <Clock className="w-12 h-12" />
                       <p className="font-mono text-xs uppercase">No historical records found</p>
                     </div>
                   ) : (
-                    history.map((gen) => (
+                    sortedHistory.map((gen) => (
                       <div 
                         key={gen.id}
                         onClick={() => loadGeneration(gen)}
@@ -1100,7 +1124,11 @@ Please generate the blog post now:`;
                         <div className="flex flex-col gap-1">
                           <span className={`text-xs font-bold truncate pr-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{gen.title || "Untitled Post"}</span>
                           <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-gray-400' : 'opacity-40 text-black'}`}>
-                            {(gen.updatedAt || gen.createdAt)?.toDate().toLocaleDateString()} {(gen.updatedAt || gen.createdAt)?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {historySortBy === 'createdAt' && gen.createdAt ? (
+                              `Created: ${gen.createdAt.toDate().toLocaleDateString()} ${gen.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            ) : (
+                              `Updated: ${(gen.updatedAt || gen.createdAt)?.toDate().toLocaleDateString()} ${(gen.updatedAt || gen.createdAt)?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            )}
                           </span>
                           <div className="flex gap-2 mt-2">
                              <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.model?.replace('gemini-', '')}</span>

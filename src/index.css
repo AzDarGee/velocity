@@ -1,2 +1,17 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+@layer utilities {
+  .history-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .history-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .history-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #444;
+  }
+  .history-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: #888;
+  }
+}
