@@ -509,6 +509,16 @@ Target Audience: ${preferences.targetAudience.join(", ")}
 Tone: ${preferences.tone.join(", ")}
 Make it sound like a unique narrative angle or specific topic focus derived directly from the core message of the provided media files. Do not include quotes or preambles, just output the focus text.`;
 
+      // Gather additional text content from media files for the prompt
+      let additionalText = "";
+      readyVideos.forEach(v => {
+        if (v.extractedText) {
+          additionalText += `\n[Content of Doc ${v.name}]:\n${v.extractedText}\n`;
+        }
+      });
+
+      const fullPromptText = promptText + (additionalText ? "\n\nSource Content:\n" + additionalText : "");
+
       if (isOpenRouter) {
         const user = auth.currentUser;
         if (!user) throw new Error("Authentication Required");
@@ -525,7 +535,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           body: JSON.stringify({
             model: preferences.model,
             apiKey,
-            messages: [{ role: "user", content: promptText }]
+            messages: [{ role: "user", content: fullPromptText }]
           })
         });
 
@@ -535,9 +545,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         }
       } else {
         const fileParts = readyVideos.map(v => {
-          if (v.extractedText) {
-            return { text: `[Content of Doc ${v.name}]:\n${v.extractedText}` };
-          }
+          if (v.extractedText) return null; // already included in fullPromptText
           if (!v.uri) return null;
           return {
             fileData: {
@@ -549,12 +557,10 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
 
         const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite-preview",
-          contents: {
-            parts: [
-              ...fileParts,
-              { text: promptText }
-            ]
-          }
+          contents: [
+            ...fileParts,
+            fullPromptText
+          ]
         });
         if (response.text) {
           setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
@@ -635,13 +641,21 @@ ${readyVideos.map(v => `- [File: ${v.name}] (Type: ${v.mimeType || v.file?.type}
 
 Format the output in clear Markdown. Start immediately with the title.`;
 
+        let additionalText = "";
+        readyVideos.forEach(v => {
+          if (v.extractedText) {
+            additionalText += `\n\n[Content of Doc ${v.name}]:\n${v.extractedText}`;
+          }
+        });
+        const fullPrompt = prompt + additionalText;
+
         const response = await fetch("/api/ai/openrouter", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: preferences.model,
             apiKey,
-            messages: [{ role: "user", content: prompt }]
+            messages: [{ role: "user", content: fullPrompt }]
           })
         });
 
@@ -650,9 +664,7 @@ Format the output in clear Markdown. Start immediately with the title.`;
         generatedContent = data.text;
       } else {
         const fileParts = readyVideos.map(v => {
-          if (v.extractedText) {
-            return { text: `[Content of Doc ${v.name}]:\n${v.extractedText}` };
-          }
+          if (v.extractedText) return null; // Included in prompt if we want, or as text part
           if (!v.uri) return null;
           return {
             fileData: {
@@ -692,14 +704,20 @@ INSTRUCTIONS:
 
 Please generate the blog post now:`;
 
+        let additionalText = "";
+        readyVideos.forEach(v => {
+          if (v.extractedText) {
+            additionalText += `\n\n[Content of Doc ${v.name}]:\n${v.extractedText}`;
+          }
+        });
+        const fullPrompt = prompt + additionalText;
+
         const result = await ai.models.generateContent({
           model: preferences.model,
-          contents: {
-            parts: [
-              ...fileParts,
-              { text: prompt }
-            ]
-          },
+          contents: [
+            ...fileParts,
+            fullPrompt
+          ],
           config: {
             systemInstruction: "You are an expert technical blogger who specializes in converting visual and textual content into authoritative written articles. You maintain structural integrity while enhancing readability."
           }
@@ -1255,6 +1273,7 @@ Please generate the blog post now:`;
                       {/* Status Indicator */}
                       <div className="flex items-center justify-between mt-1">
                         <div className="flex items-center gap-2">
+                          {v.status === 'PENDING' && <Loader2 className="w-3 h-3 animate-spin text-gray-500" />}
                           {v.status === 'UPLOADING' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
                           {v.status === 'PROCESSING' && <Clock className="w-3 h-3 animate-pulse text-orange-500" />}
                           {v.status === 'ACTIVE' && <Check className="w-3 h-3 text-green-600" />}
@@ -1262,9 +1281,10 @@ Please generate the blog post now:`;
                           <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${
                             v.status === 'ACTIVE' ? 'text-green-700' : 
                             v.status === 'FAILED' ? 'text-red-600' : 
+                            v.status === 'PENDING' ? 'text-gray-500 animate-pulse' :
                             'text-[#8E9299]'
                           }`}>
-                            {v.status}
+                            {v.status === 'PENDING' ? 'QUEUED...' : v.status}
                           </span>
                         </div>
                         {v.status === 'ACTIVE' && (
@@ -1273,13 +1293,19 @@ Please generate the blog post now:`;
                       </div>
 
                       {/* Mock progress bar for UPLOADING */}
-                      {(v.status === 'UPLOADING' || v.status === 'PROCESSING') && (
-                        <div className="w-full h-[2px] bg-black/5 mt-3 overflow-hidden">
+                      {(v.status === 'PENDING' || v.status === 'UPLOADING' || v.status === 'PROCESSING') && (
+                        <div className="w-full h-[2px] bg-black/5 mt-3 overflow-hidden rounded">
                           <motion.div 
-                            className={`h-full ${v.status === 'UPLOADING' ? 'bg-blue-500' : 'bg-orange-500'}`}
+                            className={`h-full ${v.status === 'PENDING' ? 'bg-gray-400' : v.status === 'UPLOADING' ? 'bg-blue-500' : 'bg-orange-500'}`}
                             initial={{ width: "0%" }}
-                            animate={{ width: v.status === 'UPLOADING' ? "60%" : "90%" }}
-                            transition={{ duration: 2, ease: "easeInOut" }}
+                            animate={{ 
+                              width: v.status === 'PENDING' ? ["0%", "100%", "0%"] : v.status === 'UPLOADING' ? `${v.progress || 60}%` : "90%" 
+                            }}
+                            transition={{ 
+                              duration: v.status === 'PENDING' ? 1.5 : 0.5, 
+                              ease: "easeInOut", 
+                              repeat: v.status === 'PENDING' ? Infinity : 0 
+                            }}
                           />
                         </div>
                       )}
