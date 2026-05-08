@@ -90,9 +90,8 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow delete: if isAdmin();
       allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time && incoming().credits == 50;
-      allow update: if isValidUser(incoming()) && (
-        isAdmin() ||
-        (isOwner(userId) && (
+      allow update: if isAdmin() || (
+        isValidUser(incoming()) && isOwner(userId) && (
           // Allow updating only displayName and photoURL
           incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) ||
           // Allow deducting credits (up to existing balance)
@@ -107,7 +106,7 @@ service cloud.firestore {
             incoming().diff(existing()).affectedKeys().hasOnly(['credits', 'fulfilled_sessions']) &&
             incoming().credits >= existing().credits
           )
-        ))
+        )
       );
 
       // Private sensitive data
@@ -117,23 +116,23 @@ service cloud.firestore {
     }
 
     match /generations/{generationId} {
-      allow list: if isVerified() && resource.data.userId == request.auth.uid;
-      allow get: if isVerified() && resource.data.userId == request.auth.uid;
-      allow create: if isVerified() && isValidGeneration(incoming()) && incoming().createdAt == request.time;
-      allow update: if isVerified() && resource.data.userId == request.auth.uid && isValidGeneration(incoming()) && (
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidGeneration(incoming()) && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidGeneration(incoming()) && (
         incoming().diff(existing()).affectedKeys().hasAny(['content', 'title', 'updatedAt', 'preferences', 'fileIds']) &&
         incoming().userId == existing().userId &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time
       );
-      allow delete: if isVerified() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     match /files/{fileId} {
-      allow get: if isVerified() && resource.data.userId == request.auth.uid;
-      allow list: if isVerified() && resource.data.userId == request.auth.uid;
-      allow create: if isVerified() && isValidFile(incoming()) && incoming().createdAt == request.time;
-      allow delete: if isVerified() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidFile(incoming()) && incoming().createdAt == request.time;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
   }
 }
