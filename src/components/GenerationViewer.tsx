@@ -4,16 +4,26 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useState } from "react";
 
+interface MediaFile {
+  id: string;
+  name?: string;
+  mimeType?: string;
+  previewUrl?: string;
+  firestoreId?: string;
+  type?: 'video' | 'audio' | 'image';
+}
+
 interface GenerationViewerProps {
   content: string;
   title: string;
   theme: 'light' | 'dark';
+  mediaFiles: MediaFile[];
   onClose: () => void;
   onDownload: () => void;
   onCopy: () => void;
 }
 
-export function GenerationViewer({ content, title, theme, onClose, onDownload, onCopy }: GenerationViewerProps) {
+export function GenerationViewer({ content, title, theme, mediaFiles, onClose, onDownload, onCopy }: GenerationViewerProps) {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = () => {
@@ -73,7 +83,76 @@ export function GenerationViewer({ content, title, theme, onClose, onDownload, o
       <main className="flex-1 overflow-y-auto history-scrollbar p-8 md:p-20 flex justify-center">
         <article className="max-w-3xl w-full">
           <div className={`prose ${theme === 'dark' ? 'prose-invert' : 'prose-neutral'} prose-headings:font-serif prose-headings:italic prose-p:font-sans prose-p:leading-relaxed selection:bg-yellow-200 selection:text-black`}>
-            <Markdown remarkPlugins={[remarkGfm]}>
+            <Markdown 
+              remarkPlugins={[remarkGfm]}
+              components={{
+                p: ({ node, children, ...props }) => {
+                  const hasMedia = (node?.children as any)?.some((child: any) => 
+                    child.tagName === "img" && child.properties?.src?.startsWith("MEDIA_ID_")
+                  );
+                  if (hasMedia) return <div className="mb-10 w-full" {...props}>{children}</div>;
+                  return <p className="text-base leading-relaxed mb-6" {...props}>{children}</p>;
+                },
+                img: ({ node, src, alt, ...props }) => {
+                  if (src?.startsWith('MEDIA_ID_')) {
+                    const id = src.replace('MEDIA_ID_', '');
+                    const media = mediaFiles.find(m => m.id === id || m.firestoreId === id);
+                    if (media && media.previewUrl) {
+                      const type = media.mimeType || '';
+                      const name = media.name || 'Asset';
+
+                      if (type.includes('image')) {
+                        return (
+                          <div className="group my-12 space-y-4">
+                            <div className="relative overflow-hidden">
+                              <img 
+                                src={media.previewUrl} 
+                                alt={alt || name} 
+                                className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
+                              />
+                              <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
+                              <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                                Visual_Asset_Ingested
+                              </div>
+                            </div>
+                            <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— {alt || name}</p>
+                          </div>
+                        );
+                      }
+                      if (type.includes('video')) {
+                        return (
+                          <div className="my-14 space-y-4">
+                            <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
+                              <video src={media.previewUrl} controls className="w-full aspect-video" />
+                              <div className={`absolute top-0 right-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                                Motion_Data_Stream
+                              </div>
+                            </div>
+                            <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Video Extraction: {alt || name}</p>
+                          </div>
+                        );
+                      }
+                      if (type.includes('audio')) {
+                        return (
+                          <div className="my-10 p-6 border-2 border-dashed border-opacity-30 rounded-lg flex flex-col items-center gap-4 bg-opacity-5">
+                            <div className="w-full flex items-center justify-between">
+                              <span className="text-[10px] font-mono uppercase tracking-[0.2em] opacity-50">Sonic_Intelligence_Source</span>
+                              <span className="text-[8px] font-mono opacity-30">{name}</span>
+                            </div>
+                            <audio src={media.previewUrl} controls className="w-full h-8" />
+                          </div>
+                        );
+                      }
+                    }
+                    return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Lost: {id}</div>;
+                  }
+                  return <img src={src} alt={alt} className="max-w-full rounded" {...props} />;
+                },
+                h1: ({ children }) => <h1 className="text-4xl font-serif italic mb-8 uppercase tracking-tight">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-xl font-bold mt-8 mb-3">{children}</h3>,
+              }}
+            >
               {content}
             </Markdown>
           </div>

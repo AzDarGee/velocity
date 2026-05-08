@@ -56,6 +56,36 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      setError("Please enter your email address to reset your password.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/auth/send-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, returnUrl: window.location.origin })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setResetSent(true);
+      } else {
+        throw new Error(data.error || "Failed to send password reset email.");
+      }
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -87,6 +117,17 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, { displayName });
         await ensureUserProfile(userCredential.user);
+        
+        // Send custom verification email via Resend
+        try {
+          await fetch('/api/auth/send-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, returnUrl: window.location.origin })
+          });
+        } catch (vErr) {
+          console.error("Verification email failed to send, but user was created:", vErr);
+        }
       }
     } catch (err: any) {
       try {
@@ -137,17 +178,17 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
           </div>
         </div>
 
-        <form onSubmit={handleEmailAuth} className="space-y-4">
-          {!isLogin && (
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Identity_Label</label>
+        {isForgotPassword ? (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Network_Address</label>
               <div className="relative">
-                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
                 <input
-                  type="text"
-                  placeholder="DISPLAY_NAME"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
+                  type="email"
+                  placeholder="EMAIL_ADDRESS"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                   className={`w-full pl-12 pr-4 py-3 border font-mono text-xs outline-none transition-all
                     ${theme === 'dark' 
@@ -156,56 +197,120 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
                 />
               </div>
             </div>
-          )}
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Network_Address</label>
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
-              <input
-                type="email"
-                placeholder="EMAIL_ADDRESS"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className={`w-full pl-12 pr-4 py-3 border font-mono text-xs outline-none transition-all
+            {resetSent ? (
+               <div className={`p-4 border font-mono text-[10px] tracking-widest uppercase ${theme === 'dark' ? 'bg-green-900/20 border-green-500 text-green-200' : 'bg-green-50 border-green-500 text-green-700'}`}>
+                 <Check className="w-4 h-4 inline-block mr-2" />
+                 Transmission_Sent. If the account exists, you will receive a reset link shortly.
+               </div>
+            ) : (
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-4 border-2 font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all
                   ${theme === 'dark' 
-                    ? 'bg-[#1A1A1A] border-[#333] text-white focus:border-white' 
-                    : 'bg-white border-black text-black focus:bg-gray-50'}`}
-              />
-            </div>
-          </div>
+                    ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
+                    : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none'}`}
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                Init_Reset_Sequence
+              </button>
+            )}
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Security_Cipher</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
-              <input
-                type="password"
-                placeholder="PASSWORD"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className={`w-full pl-12 pr-4 py-3 border font-mono text-xs outline-none transition-all
-                  ${theme === 'dark' 
-                    ? 'bg-[#1A1A1A] border-[#333] text-white focus:border-white' 
-                    : 'bg-white border-black text-black focus:bg-gray-50'}`}
-              />
-            </div>
-          </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsForgotPassword(false);
+                setResetSent(false);
+              }}
+              className="w-full text-[10px] uppercase font-mono tracking-widest opacity-60 hover:opacity-100 transition-opacity"
+            >
+              Back_to_Checkpoint
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleEmailAuth} className="space-y-4">
+            {!isLogin && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Identity_Label</label>
+                <div className="relative">
+                  <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+                  <input
+                    type="text"
+                    placeholder="DISPLAY_NAME"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    required
+                    className={`w-full pl-12 pr-4 py-3 border font-mono text-xs outline-none transition-all
+                      ${theme === 'dark' 
+                        ? 'bg-[#1A1A1A] border-[#333] text-white focus:border-white' 
+                        : 'bg-white border-black text-black focus:bg-gray-50'}`}
+                  />
+                </div>
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`w-full py-4 border-2 font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all
-              ${theme === 'dark' 
-                ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
-                : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none'}`}
-          >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isLogin ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />)}
-            {isLogin ? 'Grant_Access' : 'Register_Identity'}
-          </button>
-        </form>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Network_Address</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+                <input
+                  type="email"
+                  placeholder="EMAIL_ADDRESS"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className={`w-full pl-12 pr-4 py-3 border font-mono text-xs outline-none transition-all
+                    ${theme === 'dark' 
+                      ? 'bg-[#1A1A1A] border-[#333] text-white focus:border-white' 
+                      : 'bg-white border-black text-black focus:bg-gray-50'}`}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60 px-1">Security_Cipher</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+                <input
+                  type="password"
+                  placeholder="PASSWORD"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className={`w-full pl-12 pr-4 py-3 border font-mono text-xs outline-none transition-all
+                    ${theme === 'dark' 
+                      ? 'bg-[#1A1A1A] border-[#333] text-white focus:border-white' 
+                      : 'bg-white border-black text-black focus:bg-gray-50'}`}
+                />
+              </div>
+            </div>
+
+            {isLogin && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsForgotPassword(true)}
+                  className="text-[9px] uppercase font-mono tracking-widest opacity-40 hover:opacity-100 transition-opacity underline decoration-dotted underline-offset-4"
+                >
+                  Forgot_Security_Cipher?
+                </button>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full py-4 border-2 font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all
+                ${theme === 'dark' 
+                  ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
+                  : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none'}`}
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isLogin ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />)}
+              {isLogin ? 'Grant_Access' : 'Register_Identity'}
+            </button>
+          </form>
+        )}
 
         <div className="text-center">
           <button
@@ -535,9 +640,51 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                          <span className="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 py-0.5 uppercase font-black tracking-tighter">Operator</span>
                        )}
                     </div>
-                    <div className="text-xs opacity-60 truncate max-w-[200px]">{user.email}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <div className="text-xs opacity-60 truncate max-w-[150px]">{user.email}</div>
+                      {user.emailVerified ? (
+                        <div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500 bg-green-500/10 px-1 border border-green-500/20">
+                          <Check className="w-2 h-2" /> Verified
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-[8px] font-black uppercase text-yellow-500 bg-yellow-500/10 px-1 border border-yellow-500/20">
+                          Pending
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
+
+                {!user.emailVerified && user.email && (
+                  <div className={`p-4 border border-dashed ${theme === 'dark' ? 'bg-yellow-900/10 border-yellow-500/30 text-yellow-200' : 'bg-yellow-50 border-yellow-500/30 text-yellow-800'}`}>
+                    <div className="flex items-center gap-2 mb-2 font-black text-[10px] uppercase tracking-widest">
+                       <AlertCircle className="w-3 h-3" />
+                       Action_Required.sh
+                    </div>
+                    <p className="text-[10px] leading-relaxed mb-4 opacity-80">
+                      Your Identity_Signature has not been verified. Some features may be restricted until connection is secured.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/auth/send-verification', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: user.email, returnUrl: window.location.origin })
+                          });
+                          alert("Verification link sent to " + user.email);
+                        } catch (err) {
+                           console.error(err);
+                           alert("Failed to send verification link.");
+                        }
+                      }}
+                      className={`w-full py-2 border font-mono text-[9px] uppercase tracking-widest transition-all
+                        ${theme === 'dark' ? 'border-yellow-500/50 hover:bg-yellow-500 hover:text-black' : 'border-yellow-500/50 hover:bg-yellow-500 hover:text-white'}`}
+                    >
+                      Resend_Verification_Protocol
+                    </button>
+                  </div>
+                )}
 
                 <div className={`p-4 border ${theme === 'dark' ? 'bg-white/5 border-white/20' : 'bg-black/5 border-black/20'}`}>
                   <div className="text-[10px] uppercase font-bold tracking-widest opacity-60 mb-2">Available_Credits</div>

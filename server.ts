@@ -3,8 +3,37 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import Stripe from "stripe";
+import nodemailer from "nodemailer";
+import admin from "firebase-admin";
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Resend Transporter
+const getTransporter = () => {
+  const host = process.env.RESEND_SMTP_HOST || "smtp.resend.com";
+  const port = parseInt(process.env.RESEND_SMTP_PORT || "465");
+  const user = process.env.RESEND_SMTP_USER || "resend";
+  const pass = process.env.RESEND_SMTP_PASSWORD;
+
+  if (!pass) {
+    console.warn("RESEND_SMTP_PASSWORD not set. Email sending will fail.");
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user,
+      pass,
+    },
+  });
+};
 
 let stripeClient: Stripe | null = null;
 const getStripe = () => {
@@ -38,6 +67,78 @@ async function startServer() {
   // Basic health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // API Route: Send Verification Email via Resend
+  app.post("/api/auth/send-verification", async (req, res) => {
+    try {
+      const { email, returnUrl } = req.body;
+      if (!email) return res.status(400).json({ error: "Email is required" });
+
+      const link = await admin.auth().generateEmailVerificationLink(email, {
+        url: returnUrl || process.env.APP_URL || "http://localhost:3000",
+      });
+
+      const transporter = getTransporter();
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+      await transporter.sendMail({
+        from: `Velocity Blog Synth <${fromEmail}>`,
+        to: email,
+        subject: "Verify your email - Velocity Blog Synth",
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+            <h1 style="color: #333; font-style: italic;">Velocity_Synthesis_Protocol</h1>
+            <p>Welcome to Velocity. Please verify your email to access all features.</p>
+            <a href="${link}" style="display: inline-block; padding: 12px 24px; background-color: #000; color: #fff; text-decoration: none; font-weight: bold; margin: 20px 0;">Verify Email Address</a>
+            <p style="font-size: 12px; color: #666;">If you didn't request this, you can safely ignore this email.</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 2px;">Velocity Synthesis // End of Transcript</p>
+          </div>
+        `,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Verification Email Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API Route: Send Password Reset Email via Resend
+  app.post("/api/auth/send-password-reset", async (req, res) => {
+    try {
+      const { email, returnUrl } = req.body;
+      if (!email) return res.status(400).json({ error: "Email is required" });
+
+      const link = await admin.auth().generatePasswordResetLink(email, {
+        url: returnUrl || process.env.APP_URL || "http://localhost:3000",
+      });
+
+      const transporter = getTransporter();
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+      await transporter.sendMail({
+        from: `Velocity Blog Synth <${fromEmail}>`,
+        to: email,
+        subject: "Reset your password - Velocity Blog Synth",
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+            <h1 style="color: #333; font-style: italic;">Velocity_Synthesis_Protocol</h1>
+            <p>You requested a password reset for your Velocity account.</p>
+            <a href="${link}" style="display: inline-block; padding: 12px 24px; background-color: #000; color: #fff; text-decoration: none; font-weight: bold; margin: 20px 0;">Reset Password</a>
+            <p style="font-size: 12px; color: #666;">If you didn't request this, your account is still secure.</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 2px;">Velocity Synthesis // End of Transcript</p>
+          </div>
+        `,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Password Reset Email Error:", error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Stripe Webhook needs raw body

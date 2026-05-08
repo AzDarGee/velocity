@@ -1009,6 +1009,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
             content={viewerContent.content}
             title={viewerContent.title}
             theme={theme}
+            mediaFiles={mediaFiles}
             onClose={() => setViewerContent(null)}
             onDownload={exportToPDF}
             onCopy={copyToClipboard}
