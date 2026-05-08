@@ -112,6 +112,7 @@ export default function App() {
   });
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
+  const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
@@ -183,6 +184,7 @@ export default function App() {
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
     let unsubscribeHistory: (() => void) | null = null;
+    let unsubscribeKeys: (() => void) | null = null;
 
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -193,6 +195,13 @@ export default function App() {
           }
         }, (err) => {
           handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+        });
+
+        // Fetch keys 
+        unsubscribeKeys = onSnapshot(doc(db, 'users', user.uid, 'private', 'keys'), (doc) => {
+           setHasOpenRouterKey(doc.exists() && !!doc.data().openRouterKey);
+        }, (err) => {
+           console.error("Error fetching keys:", err);
         });
 
         // Fetch generation history
@@ -210,8 +219,11 @@ export default function App() {
       } else {
         if (unsubscribeDoc) unsubscribeDoc();
         if (unsubscribeHistory) unsubscribeHistory();
+        if (unsubscribeKeys) unsubscribeKeys();
         unsubscribeDoc = null;
         unsubscribeHistory = null;
+        unsubscribeKeys = null;
+        setHasOpenRouterKey(false);
         
         setCredits(null);
         setHistory([]);
@@ -238,6 +250,7 @@ export default function App() {
       unsubscribeAuth();
       if (unsubscribeDoc) unsubscribeDoc();
       if (unsubscribeHistory) unsubscribeHistory();
+      if (unsubscribeKeys) unsubscribeKeys();
     };
   }, []);
 
@@ -1318,7 +1331,7 @@ Please generate the blog post now:`;
                     <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Analytical & Deep)</option>
                     <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash (Fast & Balanced)</option>
                     <option value="gemini-3-flash-preview">Gemini 3.1 Flash-8B (High Speed)</option>
-                    {openRouterModels.length > 0 && (
+                    {hasOpenRouterKey && openRouterModels.length > 0 && (
                       <>
                         <option disabled className="font-bold border-t">-- Dynamic OpenRouter Models --</option>
                         {openRouterModels.map((m: any) => (
@@ -1326,11 +1339,15 @@ Please generate the blog post now:`;
                         ))}
                       </>
                     )}
-                    <option disabled className="font-bold border-t">-- OpenRouter Presets --</option>
-                    <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
-                    <option value="anthropic/claude-3.5-sonnet">Anthropic: Claude 3.5 Sonnet</option>
-                    <option value="meta-llama/llama-3.1-405b-instruct">Meta: Llama 3.1 405B</option>
-                    <option value="google/gemini-2.0-flash-exp:free">Google: Gemini 2.0 Flash (via OR)</option>
+                    {hasOpenRouterKey && (
+                      <>
+                        <option disabled className="font-bold border-t">-- OpenRouter Presets --</option>
+                        <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
+                        <option value="anthropic/claude-3.5-sonnet">Anthropic: Claude 3.5 Sonnet</option>
+                        <option value="meta-llama/llama-3.1-405b-instruct">Meta: Llama 3.1 405B</option>
+                        <option value="google/gemini-2.0-flash-exp:free">Google: Gemini 2.0 Flash (via OR)</option>
+                      </>
+                    )}
                   </select>
                   <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
                     {preferences.model.includes("/") ? "→ Routing priority: OpenRouter multi-provider relay." : (preferences.model.includes("pro") ? "→ Extraction priority: Maximum complexity & reasoning depth." : "→ Extraction priority: Speed & efficient token consumption.")}

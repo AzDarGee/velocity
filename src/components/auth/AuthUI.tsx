@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   signOut,
+  deleteUser,
   User as FirebaseUser
 } from 'firebase/auth';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -12,22 +13,39 @@ import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction } from
 import { LogIn, UserPlus, Github, Mail, Lock, User as UserIcon, Loader2, LogOut, AlertCircle, Coins, CreditCard, ChevronRight, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+// Cache strictly handles ongoing operations to prevent race conditions (e.g. AuthUI and UserButton calling concurrently)
+const ensureUserProfilePromises = new Map<string, Promise<void>>();
+
 async function ensureUserProfile(user: FirebaseUser) {
-  const userRef = doc(db, 'users', user.uid);
-  try {
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) {
-      await setDoc(userRef, {
-        email: user.email || 'unknown@example.com',
-        displayName: user.displayName || 'User',
-        photoURL: user.photoURL || '',
-        createdAt: serverTimestamp(),
-        credits: 0
-      });
+  if (ensureUserProfilePromises.has(user.uid)) {
+    return ensureUserProfilePromises.get(user.uid);
+  }
+
+  const promise = (async () => {
+    const userRef = doc(db, 'users', user.uid);
+    try {
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        await setDoc(userRef, {
+          email: user.email || 'unknown@example.com',
+          displayName: user.displayName || 'User',
+          photoURL: user.photoURL || '',
+          createdAt: serverTimestamp(),
+          credits: 50
+        });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
     }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+  })();
+
+  ensureUserProfilePromises.set(user.uid, promise);
+
+  try {
+    await promise;
+  } finally {
+    ensureUserProfilePromises.delete(user.uid);
   }
 }
 
@@ -46,7 +64,13 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
       const result = await signInWithPopup(auth, googleProvider);
       await ensureUserProfile(result.user);
     } catch (err: any) {
-      setError(err.message);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError('Domain not authorized. Please add this app URL to your Firebase Console > Authentication > Settings > Authorized domains.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in popup was closed before completing. Please try again.');
+      } else {
+        setError(err.message || 'Google sign-in failed. You may need to verify your Firebase OAuth configuration.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -65,14 +89,19 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
         await ensureUserProfile(userCredential.user);
       }
     } catch (err: any) {
-      setError(err.message);
+      try {
+        const parsed = JSON.parse(err.message);
+        setError(`Database Error: ${parsed.error || 'Access Denied'}`);
+      } catch {
+        setError(err.message || 'Authentication failed. Please check your credentials.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] w-full max-w-md mx-auto p-8 space-y-8">
+    <div className={`flex flex-col items-center justify-center min-h-[400px] w-full max-w-md mx-auto p-8 space-y-8 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
       <div className="text-center space-y-2">
         <div className={`w-16 h-16 mx-auto border-2 relative overflow-hidden ${theme === 'dark' ? 'border-white bg-white text-black' : 'border-black bg-black text-white'} flex items-center justify-center transition-all duration-300 hover:skew-x-[-12deg] mb-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]`}>
           <span className="font-mono text-3xl font-black italic relative z-10">V</span>
@@ -97,6 +126,7 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
           <Mail className="w-4 h-4" />
           Continue with Google
         </button>
+        <p className={`text-[9px] font-mono opacity-50 text-center uppercase tracking-widest ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Note: If sign in fails, ensure popups are allowed or open the app in a new tab.</p>
 
         <div className="relative py-4">
           <div className={`absolute inset-0 flex items-center ${theme === 'dark' ? 'opacity-20' : 'opacity-10'}`}>
@@ -434,7 +464,30 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
       </div>
 
       <button 
-        onClick={() => signOut(auth)}
+        onClick={async () => {
+          try {
+            await signOut(auth);
+            
+            // Clear application caches
+            try {
+              const cacheKeys = await caches.keys();
+              await Promise.all(cacheKeys.map(key => caches.delete(key)));
+            } catch (e) {
+              console.warn("Cache clearing failed:", e);
+            }
+            
+            // Clear local and session storage, preserving theme
+            const theme = localStorage.getItem("theme");
+            localStorage.clear();
+            sessionStorage.clear();
+            if (theme) localStorage.setItem("theme", theme);
+            
+            // Reload the page to reset all states and Firebase instances
+            window.location.reload();
+          } catch (error) {
+            console.error("Sign out error:", error);
+          }
+        }}
         className={`p-2 border ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'} transition-all`}
         title="Terminate_Session"
       >
@@ -544,11 +597,38 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                      >
                        <Check className="w-3 h-3" />
                        Keys_Sync_Successful
-                     </motion.div>
-                   )}
-                </div>
-              </div>
-            </motion.div>
+                      </motion.div>
+                    )}
+                 </div>
+                 
+                 <div className="pt-4 border-t border-dashed border-red-500/50 mt-4">
+                    <button
+                      onClick={async () => {
+                         if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
+                            try {
+                               const currentUser = auth.currentUser;
+                               if (currentUser) {
+                                  await deleteUser(currentUser);
+                                  localStorage.clear();
+                                  sessionStorage.clear();
+                                  window.location.reload();
+                               }
+                            } catch (e) {
+                               alert(e.message || "Failed to delete account. You may need to sign in again to perform this action.");
+                            }
+                         }
+                      }}
+                      className={`w-full py-2 border-2 text-[10px] font-mono uppercase tracking-widest transition-all ${
+                         theme === 'dark'
+                            ? 'border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white'
+                            : 'border-red-500 text-red-500 hover:bg-red-500 hover:text-white'
+                      }`}
+                    >
+                      Delete_Account
+                    </button>
+                 </div>
+               </div>
+             </motion.div>
           </div>
         )}
 
