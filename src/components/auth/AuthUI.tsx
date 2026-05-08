@@ -239,6 +239,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const user = auth.currentUser;
   const [showTopUp, setShowTopUp] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [isBuying, setIsBuying] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -286,6 +287,15 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
     
     // Explicitly check for user profile and create if missing
     ensureUserProfile(user).catch(console.error);
+
+    // Check admin status
+    if (user.email === 'ashdarji1@gmail.com' || user.email === 'ashishdarji88@gmail.com' || user.email === 'saanskarastudios@gmail.com') {
+      setIsAdmin(true);
+    } else {
+      getDoc(doc(db, 'admins', user.uid))
+        .then(adminDoc => setIsAdmin(adminDoc.exists()))
+        .catch(() => setIsAdmin(false));
+    }
     
     // Check for payment success
     const urlParams = new URLSearchParams(window.location.search);
@@ -458,10 +468,13 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
 
         <button 
           onClick={() => setShowProfile(true)}
-          className="flex flex-col items-end text-left hover:opacity-70 transition-opacity"
+          className="flex flex-col items-end text-left hover:opacity-70 transition-opacity group"
         >
-          <span className="text-[10px] uppercase font-mono tracking-tighter opacity-40">Active_User</span>
-          <span className="text-xs font-mono font-bold truncate max-w-[120px]">{user.displayName || user.email}</span>
+          <div className="flex items-center gap-1 opacity-40">
+            {isAdmin && <span className="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 font-black uppercase tracking-tighter">Admin</span>}
+            <span className="text-[10px] uppercase font-mono tracking-tighter">Active_User</span>
+          </div>
+          <span className="text-xs font-mono font-bold truncate max-w-[120px] group-hover:text-yellow-500 transition-colors">{user.displayName || user.email}</span>
         </button>
       </div>
 
@@ -506,12 +519,22 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
 
               <div className="space-y-6">
                 <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded flex items-center justify-center text-xl font-bold border-2
+                  <div className={`w-12 h-12 rounded flex items-center justify-center text-xl font-bold border-2 relative
                     ${theme === 'dark' ? 'bg-[#333] border-white text-white' : 'bg-gray-100 border-black text-black'}`}>
                     {user.email?.[0].toUpperCase()}
+                    {isAdmin && (
+                      <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[8px] font-black px-1 py-0.5 border border-black rotate-12 uppercase tracking-tighter">
+                        Admin
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <div className="text-sm font-bold truncate max-w-[200px]">{user.displayName || 'Anonymous User'}</div>
+                    <div className="flex items-center gap-2">
+                       <div className="text-sm font-bold truncate max-w-[200px]">{user.displayName || 'Anonymous User'}</div>
+                       {isAdmin && (
+                         <span className="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 py-0.5 uppercase font-black tracking-tighter">Operator</span>
+                       )}
+                    </div>
                     <div className="text-xs opacity-60 truncate max-w-[200px]">{user.email}</div>
                   </div>
                 </div>

@@ -193,7 +193,7 @@ export default function App() {
 
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
-        if (user.email === 'ashdarji1@gmail.com') {
+        if (user.email === 'ashdarji1@gmail.com' || user.email === 'ashishdarji88@gmail.com' || user.email === 'saanskarastudios@gmail.com') {
           setIsAdmin(true);
         } else {
           getDoc(doc(db, 'admins', user.uid))
@@ -590,7 +590,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           displayName: user.displayName || 'User',
           photoURL: user.photoURL || '',
           createdAt: serverTimestamp(),
-          credits: 0
+          credits: 50
         });
       }
 
@@ -1569,6 +1569,32 @@ Please generate the blog post now:`;
                   </div>
                 </span>
               </button>
+            ) : auth.currentUser && !auth.currentUser.emailVerified && !isAdmin ? (
+              <div className={`p-6 border-2 flex flex-col items-center gap-4 text-center ${theme === 'dark' ? 'border-orange-500/50 bg-orange-500/10' : 'border-[#141414] bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}>
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500">
+                  <AlertCircle className="w-5 h-5" />
+                  Verification Required
+                </div>
+                <p className={`text-[10px] font-mono leading-relaxed opacity-80 max-w-[300px] ${theme === 'dark' ? 'text-[#F8F8F7]' : 'text-black'}`}>
+                  Your network identity [ <span className="font-bold">{auth.currentUser.email}</span> ] is currently unverified. 
+                  Protocol synthesis requires a validated email signature for secure resource allocation.
+                </p>
+                <div className="flex gap-4 w-full">
+                  <button 
+                    onClick={async () => {
+                      if (auth.currentUser) {
+                        await auth.currentUser.reload();
+                        window.location.reload();
+                      }
+                    }}
+                    className={`flex-1 py-3 text-[10px] uppercase font-black tracking-widest border-2 transition-all ${
+                      theme === 'dark' ? 'border-[#F8F8F7] text-[#F8F8F7] hover:bg-[#F8F8F7] hover:text-black' : 'border-[#141414] text-[#141414] hover:bg-black hover:text-white'
+                    }`}
+                  >
+                    Refresh_Status
+                  </button>
+                </div>
+              </div>
             ) : (
               <button 
                 onClick={handleGenerate}
