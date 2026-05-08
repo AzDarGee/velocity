@@ -20,6 +20,10 @@ ENV NODE_ENV=production
 # The start command assumes port 3000, explicitly set it for clarity
 ENV PORT=3000
 
+# Expose Gemini API key at build time for Vite static injection
+ARG GEMINI_API_KEY
+ENV GEMINI_API_KEY=$GEMINI_API_KEY
+
 # Build the Vite frontend and compile the Express server backend
 # Note: This will produce dist/index.html and dist/server.js based on your package.json
 RUN npm run build
