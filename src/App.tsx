@@ -236,11 +236,15 @@ export default function App() {
         // Fetch generation history
         const q = query(
           collection(db, "generations"),
-          where("userId", "==", user.uid),
-          orderBy("createdAt", "desc")
+          where("userId", "==", user.uid)
         );
         unsubscribeHistory = onSnapshot(q, (snapshot) => {
           const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          docs.sort((a: any, b: any) => {
+            const timeA = a.updatedAt?.toMillis() || a.createdAt?.toMillis() || 0;
+            const timeB = b.updatedAt?.toMillis() || b.createdAt?.toMillis() || 0;
+            return timeB - timeA;
+          });
           setHistory(docs);
         }, (err) => {
           handleFirestoreError(err, OperationType.LIST, "generations");
@@ -584,8 +588,9 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Focus generation error:", err);
+      setError(`The selected LLM provider could not handle this request. Please choose another LLM provider. Details: ${err.message || "Unknown error."}`);
     } finally {
       setIsGeneratingFocus(false);
     }
@@ -809,7 +814,8 @@ Please generate the blog post now:`;
       console.error("Synthesis Error:", err);
       let errorMsg = "Synthesis failed. ";
       if (err.message?.includes("quota")) errorMsg += "API Quota exceeded.";
-      else errorMsg += err.message || "Unknown error occurred.";
+      else if (err.message?.includes("Insufficient credits") || err.message?.includes("Security Identity")) errorMsg += err.message;
+      else errorMsg += `The selected LLM provider could not handle this request. Please choose another LLM provider. Details: ${err.message || "Unknown error occurred."}`;
       
       setError(errorMsg);
     } finally {
@@ -1094,7 +1100,7 @@ Please generate the blog post now:`;
                         <div className="flex flex-col gap-1">
                           <span className={`text-xs font-bold truncate pr-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{gen.title || "Untitled Post"}</span>
                           <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-gray-400' : 'opacity-40 text-black'}`}>
-                            {gen.createdAt?.toDate().toLocaleDateString()} {gen.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {(gen.updatedAt || gen.createdAt)?.toDate().toLocaleDateString()} {(gen.updatedAt || gen.createdAt)?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           <div className="flex gap-2 mt-2">
                              <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.model?.replace('gemini-', '')}</span>
