@@ -26,12 +26,35 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{id: string, email: string} | null>(null);
   const [adminUids, setAdminUids] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<'users' | 'cleanup'>('users');
+  const [authUsers, setAuthUsers] = useState<any[]>([]);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   const currentHardcodedAdmins = ['ashdarji1@gmail.com', 'ashishdarji88@gmail.com', 'saanskarastudios@gmail.com'];
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+    if (activeTab === 'cleanup') {
+      fetchAuthUsers();
+    }
+  }, [activeTab]);
+
+  const fetchAuthUsers = async () => {
+    import('../lib/firebase').then(async ({ auth }) => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
+      try {
+        const response = await fetch(`/api/admin/auth-users?adminId=${currentUser.uid}`);
+        const data = await response.json();
+        if (data.users) {
+          setAuthUsers(data.users);
+        }
+      } catch (err) {
+        console.error("Failed to fetch auth users:", err);
+      }
+    });
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -86,17 +109,33 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
 
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
+    setIsSaving(true);
     
     try {
-      import('firebase/firestore').then(async ({ deleteDoc, doc }) => {
-        await deleteDoc(doc(db, 'users', userToDelete.id));
-        setUsers(users.filter(u => u.id !== userToDelete.id));
-        setUserToDelete(null);
+      import('../lib/firebase').then(async ({ auth }) => {
+        const adminId = auth.currentUser?.uid;
+        if (!adminId) throw new Error("Admin ID not found");
+
+        const response = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: userToDelete.id, adminId })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          setUsers(users.filter(u => u.id !== userToDelete.id));
+          setAuthUsers(authUsers.filter(u => u.uid !== userToDelete.id));
+          setUserToDelete(null);
+        } else {
+          throw new Error(data.error || "Failed to thoroughly delete user.");
+        }
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting user:", error);
-      alert("Failed to delete user.");
-      handleFirestoreError(error, OperationType.DELETE, `users/${userToDelete.id}`);
+      alert(error.message || "Failed to delete user.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -167,6 +206,27 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
           </button>
         </div>
 
+        <div className={`px-6 border-b flex items-center gap-6 shrink-0 ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'}`}>
+          <button 
+            onClick={() => setActiveTab('users')}
+            className={`py-4 text-[10px] uppercase font-mono font-bold tracking-[0.2em] relative ${
+              activeTab === 'users' ? (theme === 'dark' ? 'text-white' : 'text-black') : 'opacity-40 hover:opacity-100'
+            }`}
+          >
+            User_Registry
+            {activeTab === 'users' && <motion.div layoutId="tab" className={`absolute bottom-0 left-0 right-0 h-0.5 ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />}
+          </button>
+          <button 
+            onClick={() => setActiveTab('cleanup')}
+            className={`py-4 text-[10px] uppercase font-mono font-bold tracking-[0.2em] relative ${
+              activeTab === 'cleanup' ? (theme === 'dark' ? 'text-white' : 'text-black') : 'opacity-40 hover:opacity-100'
+            }`}
+          >
+            System_Cleanup
+            {activeTab === 'cleanup' && <motion.div layoutId="tab" className={`absolute bottom-0 left-0 right-0 h-0.5 ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />}
+          </button>
+        </div>
+
         <div className={`p-6 border-b flex items-center gap-4 shrink-0 bg-opacity-50 ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'}`}>
           <div className={`flex flex-1 items-center gap-3 p-3 border ${theme === 'dark' ? 'border-[#333] bg-[#111111]' : 'border-[#141414] bg-white'}`}>
             <Search className="w-5 h-5 opacity-50" />
@@ -187,9 +247,9 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
           {loading ? (
             <div className="h-full flex flex-col items-center justify-center opacity-50 space-y-4">
               <Loader2 className="w-8 h-8 animate-spin" />
-              <div className="font-mono text-xs uppercase tracking-widest">Loading Users...</div>
+              <div className="font-mono text-xs uppercase tracking-widest">Accessing_Data_Vault...</div>
             </div>
-          ) : (
+          ) : activeTab === 'users' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredUsers.map(user => (
                 <div key={user.id} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
@@ -211,7 +271,7 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
                             ? 'border-red-500/30 text-red-400 hover:bg-red-500/20' 
                             : 'border-red-500/30 text-red-600 hover:bg-red-50'
                         }`}
-                        title="Delete User Record"
+                        title="Thoroughly Purge User Account"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -287,6 +347,60 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="space-y-6">
+              <div className={`p-6 border-2 border-dashed ${theme === 'dark' ? 'border-indigo-500/30 bg-indigo-500/5' : 'border-indigo-600/30 bg-indigo-50/50'}`}>
+                <h3 className="text-sm font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <Shield className="w-4 h-4" /> Authentication_Integrity_Audit
+                </h3>
+                <p className="text-[10px] font-mono opacity-70 mb-4 max-w-2xl">
+                  This utility scans the Identity_Vault (Auth) and identifies accounts that lack a verified Protocol_Signature (Firestore Record) or are considered orphaned test identities.
+                </p>
+                <div className="flex items-center gap-4">
+                  <div className="px-4 py-2 border bg-black text-white font-mono text-[10px] uppercase tracking-widest font-bold">
+                    Total Auth Users: {authUsers.length}
+                  </div>
+                  <div className="px-4 py-2 border bg-indigo-600 text-white font-mono text-[10px] uppercase tracking-widest font-bold">
+                    Orphaned Accounts: {authUsers.filter(au => !users.some(u => u.id === au.uid)).length}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                 {authUsers.map(au => {
+                   const inFirestore = users.some(u => u.id === au.uid);
+                   const isHardcoded = currentHardcodedAdmins.includes(au.email);
+                   if (isHardcoded) return null;
+
+                   return (
+                     <div key={au.uid} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
+                        <div className="flex flex-col">
+                           <div className="flex items-center gap-3">
+                              <span className="font-bold text-xs">{au.email}</span>
+                              {!inFirestore && (
+                                <span className="text-[8px] px-1 bg-red-500/10 text-red-500 border border-red-500/20 font-black uppercase">Orphan</span>
+                              )}
+                              {au.emailVerified ? (
+                                <span className="text-[8px] px-1 bg-green-500/10 text-green-500 border border-green-500/20 font-black uppercase">Verified</span>
+                              ) : (
+                                <span className="text-[8px] px-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-black uppercase">Unverified</span>
+                              )}
+                           </div>
+                           <span className="text-[9px] font-mono opacity-40 mt-1 uppercase">UID: {au.uid} // Created: {new Date(au.creationTime || 0).toLocaleDateString()}</span>
+                        </div>
+                        <button 
+                          onClick={() => setUserToDelete({ id: au.uid, email: au.email })}
+                          className={`px-4 py-2 border-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all ${
+                            theme === 'dark' ? 'border-red-500/50 text-red-500 hover:bg-red-500 hover:text-black' : 'border-red-600 text-red-600 hover:bg-red-600 hover:text-white'
+                          }`}
+                        >
+                          Execute_Purge
+                        </button>
+                     </div>
+                   );
+                 })}
+              </div>
+            </div>
           )}
         </div>
       </motion.div>
@@ -315,27 +429,36 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
                 <Shield className="w-6 h-6" />
               </div>
               <div className="space-y-2">
-                <h3 className="font-serif italic text-2xl">Delete User</h3>
+                <h3 className="font-serif italic text-2xl">Execute User Purge</h3>
                 <p className="text-sm opacity-80">
-                  Are you sure you want to delete user <span className="font-bold">{userToDelete.email}</span> (ID: {userToDelete.id})? This will permanently remove their profile record from Firestore.
+                  Are you sure you want to thoroughly delete user <span className="font-bold underline decoration-dotted">{userToDelete.email}</span> (UID: <span className="font-mono text-[10px]">{userToDelete.id}</span>)?
                 </p>
+                <div className={`p-4 border text-[10px] font-mono text-left space-y-1 ${theme === 'dark' ? 'bg-red-900/10 border-red-500/20 text-red-200' : 'bg-red-50 border-red-500/20 text-red-900'}`}>
+                  <p className="font-bold opacity-100 mb-2">CLEANUP_PROTOCOL_NOTICE:</p>
+                  <p>— IRREVERSIBLE: Profile data and asset associations will be destroyed.</p>
+                  <p>— AUTHETNICATION: Access credentials will be terminated in Firebase Identity.</p>
+                  <p>— INTEGRITY: All generations and linked metadata will be scrubbed.</p>
+                </div>
               </div>
               <div className="flex gap-4 w-full">
                 <button
                   onClick={() => setUserToDelete(null)}
+                  disabled={isSaving}
                   className={`flex-1 py-3 border font-bold uppercase tracking-widest text-[10px] transition-all ${
                     theme === 'dark'
                       ? 'border-[#333] hover:bg-[#333]'
                       : 'border-black hover:bg-gray-100'
                   }`}
                 >
-                  Cancel
+                  Abort
                 </button>
                 <button
                   onClick={handleConfirmDelete}
-                  className="flex-1 py-3 border border-red-500 bg-red-500 text-white font-bold uppercase tracking-widest text-[10px] hover:bg-red-600 transition-all"
+                  disabled={isSaving}
+                  className="flex-1 py-3 border border-red-500 bg-red-500 text-white font-bold uppercase tracking-widest text-[10px] hover:bg-red-600 transition-all flex items-center justify-center gap-2"
                 >
-                  Delete
+                  {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Confirm_Purge
                 </button>
               </div>
             </motion.div>

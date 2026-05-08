@@ -603,6 +603,17 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
   };
 
   const handleGenerate = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setError("Security Identity Null: Re-authentication required.");
+      return;
+    }
+
+    if (!user.emailVerified && !isAdmin) {
+      setError("Identity verification pending. Please check your inbox and verify your email to unlock synthesis protocols.");
+      return;
+    }
+
     const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
     if (readyVideos.length === 0) return;
     
@@ -1604,66 +1615,90 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                   </div>
                 </span>
               </button>
-            ) : auth.currentUser && !auth.currentUser.emailVerified && !isAdmin ? (
-              <div className={`p-6 border-2 flex flex-col items-center gap-4 text-center ${theme === 'dark' ? 'border-orange-500/50 bg-orange-500/10' : 'border-[#141414] bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}>
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500">
-                  <AlertCircle className="w-5 h-5" />
-                  Verification Required
-                </div>
-                <p className={`text-[10px] font-mono leading-relaxed opacity-80 max-w-[300px] ${theme === 'dark' ? 'text-[#F8F8F7]' : 'text-black'}`}>
-                  Your network identity [ <span className="font-bold">{auth.currentUser.email}</span> ] is currently unverified. 
-                  Protocol synthesis requires a validated email signature for secure resource allocation.
-                </p>
-                <div className="flex gap-4 w-full">
-                  <button 
-                    onClick={async () => {
-                      if (auth.currentUser) {
-                        await auth.currentUser.reload();
-                        window.location.reload();
-                      }
-                    }}
-                    className={`flex-1 py-3 text-[10px] uppercase font-black tracking-widest border-2 transition-all ${
-                      theme === 'dark' ? 'border-[#F8F8F7] text-[#F8F8F7] hover:bg-[#F8F8F7] hover:text-black' : 'border-[#141414] text-[#141414] hover:bg-black hover:text-white'
-                    }`}
-                  >
-                    Refresh_Status
-                  </button>
-                </div>
-              </div>
             ) : (
-              <button 
-                onClick={handleGenerate}
-                disabled={mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
-                className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                  ${mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0
-                    ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
-                    : (theme === 'dark' 
-                        ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
-                        : 'bg-white text-black hover:bg-black hover:text-white border-[#141414] shadow-[6px_6px_0px_0px_rgba(20,20,20,1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]')}`}
-              >
-                {isProcessing && <div className="absolute inset-0 bg-black/5 animate-pulse" />}
-                <span className="relative z-10 flex items-center justify-center gap-3">
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Processing_{mediaFiles.length}_Streams</span>
-                    </>
-                  ) : !mediaFiles.every(v => v.status === 'ACTIVE') && mediaFiles.length > 0 ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Awaiting_Uplink...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      <div className="flex flex-col items-center">
-                        <span>Initialize Synthesis</span>
-                        <span className="text-[8px] font-mono opacity-50 tracking-widest mt-0.5 uppercase">EST_COST: {currentCost.toFixed(1)}_CRD</span>
-                      </div>
-                    </>
-                  )}
-                </span>
-              </button>
+              <div className="space-y-4">
+                {auth.currentUser && !auth.currentUser.emailVerified && !isAdmin && (
+                  <div className={`p-6 border-2 flex flex-col items-center gap-3 text-center ${theme === 'dark' ? 'border-orange-500/50 bg-orange-500/10' : 'border-[#141414] bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}>
+                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500">
+                      <AlertCircle className="w-4 h-4" />
+                      Protocol Locked
+                    </div>
+                    <p className={`text-[9px] font-mono leading-relaxed opacity-80 max-w-[300px] ${theme === 'dark' ? 'text-[#F8F8F7]' : 'text-black'}`}>
+                      Email [ <span className="font-bold underline decoration-dotted">{auth.currentUser.email}</span> ] is unverified. 
+                      Verification required to authorize synthesis credits.
+                    </p>
+                    <div className="flex gap-2 w-full mt-2">
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await fetch('/api/auth/send-verification', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ email: auth.currentUser?.email, returnUrl: window.location.origin })
+                            });
+                            alert("Verification payload transmitted to " + auth.currentUser?.email);
+                          } catch (err) {
+                             console.error(err);
+                             alert("Failed to transmit verification link.");
+                          }
+                        }}
+                        className={`flex-1 py-2 text-[9px] uppercase font-black tracking-widest border-2 transition-all ${
+                          theme === 'dark' ? 'border-[#F8F8F7] text-[#F8F8F7] hover:bg-[#F8F8F7] hover:text-black' : 'border-[#141414] text-[#141414] hover:bg-black hover:text-white'
+                        }`}
+                      >
+                        Resend_Email
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          if (auth.currentUser) {
+                            await auth.currentUser.reload();
+                            window.location.reload();
+                          }
+                        }}
+                        className={`flex-1 py-2 text-[9px] uppercase font-black tracking-widest border-2 transition-all ${
+                          theme === 'dark' ? 'border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-black' : 'border-orange-600 text-orange-600 hover:bg-orange-600 hover:text-white'
+                        }`}
+                      >
+                        Sync_Status
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={handleGenerate}
+                  disabled={mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
+                  className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
+                    ${mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
+                      ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
+                      : (theme === 'dark' 
+                          ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
+                          : 'bg-white text-black hover:bg-black hover:text-white border-[#141414] shadow-[6px_6px_0px_0px_rgba(20,20,20,1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]')}`}
+                >
+                  {isProcessing && <div className="absolute inset-0 bg-black/5 animate-pulse" />}
+                  <span className="relative z-10 flex items-center justify-center gap-3">
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Processing_{mediaFiles.length}_Streams</span>
+                      </>
+                    ) : !mediaFiles.every(v => v.status === 'ACTIVE') && mediaFiles.length > 0 ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Awaiting_Uplink...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <div className="flex flex-col items-center">
+                          <span>Initialize Synthesis</span>
+                          <span className="text-[8px] font-mono opacity-50 tracking-widest mt-0.5 uppercase">EST_COST: {currentCost.toFixed(1)}_CRD</span>
+                        </div>
+                      </>
+                    )}
+                  </span>
+                </button>
+              </div>
             )}
 
             {error && (

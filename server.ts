@@ -141,6 +141,79 @@ async function startServer() {
     }
   });
 
+  // API Route: Delete User (Admin Only)
+  app.post("/api/admin/delete-user", async (req, res) => {
+    try {
+      const { userId, adminId } = req.body;
+      if (!userId || !adminId) return res.status(400).json({ error: "Missing required IDs" });
+
+      // Verify admin status
+      const adminDoc = await admin.firestore().collection("admins").doc(adminId).get();
+      if (!adminDoc.exists) {
+        // Fallback to hardcoded admins check if caller's email is provided or check Auth directly
+        const caller = await admin.auth().getUser(adminId);
+        const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
+        if (!caller.email || !hardcoded.includes(caller.email)) {
+           return res.status(403).json({ error: "Access denied. Admin privileges required." });
+        }
+      }
+
+      // Delete from Auth
+      await admin.auth().deleteUser(userId);
+
+      // Delete from Firestore (recursive delete for user subcollections if needed)
+      // For now, delete the main document and private keys
+      await admin.firestore().collection("users").doc(userId).delete();
+      await admin.firestore().collection("users").doc(userId).collection("private").doc("keys").delete();
+
+      // Also delete items belonging to user
+      const generations = await admin.firestore().collection("generations").where("userId", "==", userId).get();
+      const files = await admin.firestore().collection("files").where("userId", "==", userId).get();
+
+      const batch = admin.firestore().batch();
+      generations.docs.forEach(doc => batch.delete(doc.ref));
+      files.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+
+      res.json({ success: true, message: `User ${userId} thoroughly purged from system.` });
+    } catch (error: any) {
+      console.error("Admin Delete Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API Route: List All Auth Users (for cleanup analysis)
+  app.get("/api/admin/auth-users", async (req, res) => {
+    try {
+      const { adminId } = req.query;
+      if (!adminId) return res.status(401).json({ error: "Unauthorized" });
+
+      const adminDoc = await admin.firestore().collection("admins").doc(adminId as string).get();
+      if (!adminDoc.exists) {
+        const caller = await admin.auth().getUser(adminId as string);
+        const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
+        if (!caller.email || !hardcoded.includes(caller.email)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+
+      const listUsersResult = await admin.auth().listUsers(1000);
+      const users = listUsersResult.users.map(u => ({
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName,
+        emailVerified: u.emailVerified,
+        lastSignInTime: u.metadata.lastSignInTime,
+        creationTime: u.metadata.creationTime
+      }));
+
+      res.json({ users });
+    } catch (error: any) {
+      console.error("List Auth Users Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Stripe Webhook needs raw body
   app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {
     const stripe = getStripe();
