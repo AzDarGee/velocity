@@ -87,22 +87,27 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow delete: if isAdmin();
       allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time && incoming().credits == 50;
-      allow update: if isOwner(userId) && isValidUser(incoming()) && (
-        // Allow updating only displayName and photoURL
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) ||
-        // Allow deducting credits (up to existing balance)
-        (
-          incoming().diff(existing()).affectedKeys().hasOnly(['credits']) &&
-          incoming().credits >= 0 &&
-          incoming().credits < existing().credits
-        ) ||
-        // Allow adding credits safely (in a real app, this should only be done via secure backend, 
-        // but since AI Studio preview backend ADC lacks permissions we temporarily allow it for the preview prototype)
-        (
-          incoming().diff(existing()).affectedKeys().hasOnly(['credits', 'fulfilled_sessions']) &&
-          incoming().credits >= existing().credits
-        )
+      allow update: if isValidUser(incoming()) && (
+        isAdmin() ||
+        (isOwner(userId) && (
+          // Allow updating only displayName and photoURL
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) ||
+          // Allow deducting credits (up to existing balance)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['credits']) &&
+            incoming().credits >= 0 &&
+            incoming().credits < existing().credits
+          ) ||
+          // Allow adding credits safely (in a real app, this should only be done via secure backend, 
+          // but since AI Studio preview backend ADC lacks permissions we temporarily allow it for the preview prototype)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['credits', 'fulfilled_sessions']) &&
+            incoming().credits >= existing().credits
+          )
+        ))
       );
 
       // Private sensitive data

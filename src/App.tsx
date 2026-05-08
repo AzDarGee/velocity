@@ -83,6 +83,22 @@ interface AttachedFile {
   extractedText?: string;
 }
 
+import { AdminDashboard } from "./components/AdminDashboard";
+
+const getOpenRouterCategory = (m: any) => {
+  const id = m.id.toLowerCase();
+  const mod = m.architecture?.modality || "";
+
+  if (mod.includes("embedding") || id.includes("embed") || id.includes("bge-")) return "3. Embeddings";
+  if (id.includes("rerank")) return "6. Rerank";
+  if (id.includes("whisper") || id.includes("transcri")) return "8. Transcription";
+  if (mod.includes("speech") || id.includes("tts") || id.includes("elevenlabs") || id.includes("speak") || id.includes("parler")) return "7. Speech";
+  if (mod.includes("audio") || id.includes("music") || id.includes("suno") || id.includes("udio")) return "4. Audio";
+  if (mod === "text->video" || mod === "image->video" || id.includes("video") || id.includes("luma") || id.includes("runway") || id.includes("kling") || id.includes("minimax/video") || id.includes("sora") || id.includes("haiper")) return "5. Video";
+  if (mod === "text->image" || mod === "image->image" || id.includes("dall-e") || id.includes("flux") || id.includes("stable-diffusion") || id.includes("midjourney") || id.includes("recraft") || id.includes("ideogram") || id.includes("black-forest-labs") || id.includes("stabilityai")) return "2. Image";
+  return "1. Text";
+};
+
 export default function App() {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -116,6 +132,7 @@ export default function App() {
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -1165,6 +1182,18 @@ Please generate the blog post now:`;
                   Operational
                 </span>
               </div>
+              {isAdmin && (
+                <button
+                  onClick={() => setIsAdminModalOpen(true)}
+                  className={`text-[10px] uppercase font-mono font-bold tracking-widest px-3 py-1.5 border transition-colors ${
+                    theme === 'dark'
+                      ? 'border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 w-fit'
+                      : 'border-indigo-600 text-indigo-600 hover:bg-indigo-50 w-fit'
+                  }`}
+                >
+                  Admin Panel
+                </button>
+              )}
               <UserButton theme={theme} />
             </div>
           </div>
@@ -1379,12 +1408,31 @@ Please generate the blog post now:`;
                     <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash (Fast & Balanced)</option>
                     <option value="gemini-3-flash-preview">Gemini 3.1 Flash-8B (High Speed)</option>
                     {hasOpenRouterKey && openRouterModels.length > 0 && (
-                      <>
-                        <option disabled className="font-bold border-t">-- Dynamic OpenRouter Models --</option>
-                        {openRouterModels.map((m: any) => (
-                          <option key={`dyn-${m.id}`} value={m.id}>{m.name}</option>
-                        ))}
-                      </>
+                      (() => {
+                        const categories = ["1. Text", "2. Image", "3. Embeddings", "4. Audio", "5. Video", "6. Rerank", "7. Speech", "8. Transcription"];
+                        const groupedModels: Record<string, any[]> = {};
+                        openRouterModels.forEach(m => {
+                          const cat = getOpenRouterCategory(m);
+                          if (!groupedModels[cat]) groupedModels[cat] = [];
+                          groupedModels[cat].push(m);
+                        });
+
+                        return (
+                          <>
+                            <option disabled className="font-bold border-t">-- Dynamic OpenRouter Models --</option>
+                            {categories.map(cat => {
+                              if (!groupedModels[cat] || groupedModels[cat].length === 0) return null;
+                              return (
+                                <optgroup key={cat} label={`-- ${cat.split('. ')[1]} --`} className="font-bold border-t bg-black/5 dark:bg-white/5">
+                                  {groupedModels[cat].map(m => (
+                                    <option key={`dyn-${m.id}`} value={m.id} className="font-normal bg-white dark:bg-[#1A1A1A]">{m.name}</option>
+                                  ))}
+                                </optgroup>
+                              );
+                            })}
+                          </>
+                        );
+                      })()
                     )}
                     {hasOpenRouterKey && (
                       <>
@@ -2301,6 +2349,11 @@ Please generate the blog post now:`;
         </div>
       </div>
     </div>
+    <AnimatePresence>
+      {isAdminModalOpen && (
+        <AdminDashboard theme={theme} onClose={() => setIsAdminModalOpen(false)} />
+      )}
+    </AnimatePresence>
     </AuthGuard>
   );
 }
