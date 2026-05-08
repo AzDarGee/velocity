@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+body {
+  @apply overflow-x-hidden;
+}
+
 /* The main app's scrollbar and all other scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

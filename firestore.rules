@@ -45,12 +45,13 @@ service cloud.firestore {
     // User Profile
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'createdAt', 'credits']) &&
-             data.keys().size() <= 11 &&
+             data.keys().size() <= 12 &&
              data.email is string && data.email.size() <= 256 &&
              data.createdAt is timestamp &&
              data.credits is int &&
              (data.get('displayName', '') is string && data.get('displayName', '').size() <= 128) &&
              (data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 1024) &&
+             (data.get('hasSeenOnboarding', false) is bool) &&
              (data.get('fulfilled_sessions', []) is list);
     }
 
@@ -92,8 +93,8 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time && incoming().credits == 50;
       allow update: if isAdmin() || (
         isValidUser(incoming()) && isOwner(userId) && (
-          // Allow updating only displayName and photoURL
-          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']) ||
+          // Allow updating only displayName, photoURL, or onboarding status
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'hasSeenOnboarding']) ||
           // Allow deducting credits (up to existing balance)
           (
             incoming().diff(existing()).affectedKeys().hasOnly(['credits']) &&

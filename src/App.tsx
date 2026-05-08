@@ -84,6 +84,8 @@ interface AttachedFile {
 }
 
 import { AdminDashboard } from "./components/AdminDashboard";
+import { OnboardingWizard } from "./components/OnboardingWizard";
+import { Header } from "./components/layout/Header";
 
 const getOpenRouterCategory = (m: any) => {
   const id = m.id.toLowerCase();
@@ -136,6 +138,7 @@ export default function App() {
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
   const [historySortBy, setHistorySortBy] = useState<'updatedAt' | 'createdAt'>('updatedAt');
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     fetch("/api/ai/openrouter/models")
@@ -219,9 +222,13 @@ export default function App() {
             .catch(() => setIsAdmin(false));
         }
         // Fetch credits
-        unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (doc) => {
-          if (doc.exists()) {
-            setCredits(doc.data().credits || 0);
+        unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            setCredits(data.credits || 0);
+            if (data.hasSeenOnboarding === false) {
+              setShowOnboarding(true);
+            }
           }
         }, (err) => {
           handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
@@ -615,7 +622,8 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           displayName: user.displayName || 'User',
           photoURL: user.photoURL || '',
           createdAt: serverTimestamp(),
-          credits: 50
+          credits: 50,
+          hasSeenOnboarding: false
         });
       }
 
@@ -1043,6 +1051,20 @@ Please generate the blog post now:`;
     }
   };
 
+  const handleOnboardingComplete = async () => {
+    setShowOnboarding(false);
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          hasSeenOnboarding: true
+        });
+      } catch (err) {
+        console.error("Failed to update onboarding status:", err);
+      }
+    }
+  };
+
   const sortedHistory = useMemo(() => {
     return [...history].sort((a: any, b: any) => {
       if (historySortBy === 'createdAt') {
@@ -1059,6 +1081,7 @@ Please generate the blog post now:`;
 
   return (
     <AuthGuard theme={theme}>
+      {showOnboarding && <OnboardingWizard theme={theme} onComplete={handleOnboardingComplete} />}
       {/* History Sidebar */}
       <AnimatePresence>
         {isHistoryOpen && (
@@ -1170,76 +1193,22 @@ Please generate the blog post now:`;
         )}
       </AnimatePresence>
       <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#0A0A0A] text-[#F8F8F7]' : 'bg-[#E4E3E0] text-[#141414]'} font-sans selection:bg-black selection:text-white transition-colors duration-300 pb-20`}>
-      {/* Visual Structure Layer: Header */}
-      <header className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'} sticky top-0 z-20 transition-colors duration-300`}>
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsHistoryOpen(true)}
-              className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
-              title="View History"
-            >
-              <Clock className="w-5 h-5" />
-            </button>
-            <div className="group cursor-pointer" onClick={handleNewPost}>
-              <div className={`w-10 h-10 border-2 relative overflow-hidden ${theme === 'dark' ? 'border-[#F8F8F7] bg-white' : 'border-[#141414] bg-black'} flex items-center justify-center transition-all duration-300 group-hover:skew-x-[-12deg] group-hover:scale-110 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]`}>
-                <span className={`${theme === 'dark' ? 'text-black' : 'text-white'} font-mono text-xl font-black italic relative z-10 transition-transform group-hover:translate-x-0.5`}>V</span>
-                <div className={`absolute inset-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 opacity-20 ${theme === 'dark' ? 'bg-black' : 'bg-white'}`} />
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-2xl font-black tracking-[-0.05em] uppercase italic leading-none hover:tracking-normal transition-all duration-300">
-                Velocity
-              </h1>
-              <p className="text-[9px] uppercase font-mono tracking-[0.2em] opacity-40 mt-0.5">
-                Synthesis_Protocol <span className="text-yellow-600 font-bold">v1.2</span>
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 md:gap-8">
-            <button 
-              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-              className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
-              aria-label="Toggle Theme"
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-            </button>
-            <div className="hidden md:flex items-center gap-8">
-               <div className={`flex flex-col items-end border-r ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} pr-8`}>
-                  <span className="text-[10px] uppercase font-mono tracking-tighter opacity-40">Queue Status</span>
-                  <span className="text-xs font-mono">{mediaFiles.length} Clip(s) Loaded</span>
-               </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] uppercase font-mono tracking-tighter opacity-40">System Status</span>
-                <span className="text-xs font-mono flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  Operational
-                </span>
-              </div>
-              {isAdmin && (
-                <button
-                  onClick={() => setIsAdminModalOpen(true)}
-                  className={`text-[10px] uppercase font-mono font-bold tracking-widest px-3 py-1.5 border transition-colors ${
-                    theme === 'dark'
-                      ? 'border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 w-fit'
-                      : 'border-indigo-600 text-indigo-600 hover:bg-indigo-50 w-fit'
-                  }`}
-                >
-                  Admin Panel
-                </button>
-              )}
-              <UserButton theme={theme} />
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header 
+        theme={theme}
+        setTheme={setTheme}
+        setIsHistoryOpen={setIsHistoryOpen}
+        setIsAdminModalOpen={setIsAdminModalOpen}
+        isAdmin={isAdmin}
+        mediaFilesCount={mediaFiles.length}
+        handleNewPost={handleNewPost}
+      />
 
       <main className="max-w-7xl mx-auto p-6 md:p-12">
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-0 border-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] bg-white shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'} transition-all`}>
           
           {/* Controls Panel */}
           <div className={`lg:col-span-5 border-b lg:border-b-0 lg:border-r ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} p-8 space-y-12`}>
-            <section className="space-y-4">
+            <section id="onboarding-intake" className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">01 / Source Intake</span>
                 <Layout className="w-3 h-3 opacity-30" />
@@ -1417,7 +1386,7 @@ Please generate the blog post now:`;
               </div>
             </section>
 
-            <section className="space-y-6">
+            <section id="onboarding-config" className="space-y-6">
               <div className="flex items-center justify-between">
                 <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">02 / Processing Prefs</span>
                 <Settings2 className="w-3 h-3 opacity-30" />
@@ -1757,7 +1726,7 @@ Please generate the blog post now:`;
           </div>
 
           {/* Preview Panel */}
-          <div className={`lg:col-span-7 lg:border-l ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'} min-h-[700px] flex flex-col transition-colors duration-300`}>
+          <div id="onboarding-preview" className={`lg:col-span-7 lg:border-l ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'} min-h-[700px] flex flex-col transition-colors duration-300`}>
             <div className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-[#141414] bg-white'} px-8 py-4 flex items-center justify-between overflow-hidden transition-colors`}>
                <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">03 / Output Preview</span>
                <div className="flex items-center gap-4">

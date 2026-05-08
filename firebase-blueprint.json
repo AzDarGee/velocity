@@ -10,6 +10,7 @@
         "photoURL": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "credits": { "type": "integer", "default": 0 },
+        "hasSeenOnboarding": { "type": "boolean", "default": false },
         "fulfilled_sessions": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["email", "createdAt", "credits"]
