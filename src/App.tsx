@@ -80,6 +80,7 @@ interface AttachedFile {
   storageUrl?: string;
   uri?: string;
   mimeType?: string;
+  extractedText?: string;
 }
 
 export default function App() {
@@ -148,23 +149,35 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadFile = (file: AttachedFile) => {
+  const downloadFile = async (file: AttachedFile) => {
     const url = file.storageUrl || file.data;
     if (!url) {
       alert("Source data missing for this asset.");
       return;
     }
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.name;
-    // Set target blank and noreferrer for external URLs to avoid some browser restrictions
-    if (file.storageUrl) {
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
+    
+    try {
+      if (file.storageUrl) {
+        // Use our proxy to stream the file natively as an attachment without blowing up browser memory
+        const proxyUrl = `/api/download?url=${encodeURIComponent(file.storageUrl)}&filename=${encodeURIComponent(file.name)}`;
+        const link = document.createElement("a");
+        link.href = proxyUrl;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error("Error downloading file:", error);
+      alert("Failed to download file. Please check console for details.");
     }
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -884,7 +897,9 @@ Please generate the blog post now:`;
               size: data.size,
               data: data.data,
               uri: data.uri,
-              mimeType: data.mimeType
+              mimeType: data.mimeType,
+              storageUrl: data.storageUrl,
+              extractedText: data.extractedText
             };
           });
         
@@ -897,10 +912,12 @@ Please generate the blog post now:`;
           type: (f.type.includes('video') ? 'video' : f.type.includes('audio') ? 'audio' : 'image') as any,
           status: 'ACTIVE',
           progress: 100,
-          previewUrl: f.data || undefined, // f.data already contains the data URL prefix from fileToBase64
+          previewUrl: f.data || f.storageUrl || undefined, // use storageUrl as previewUrl fallback
           size: f.size,
           mimeType: f.type,
-          uri: (f as any).uri
+          uri: (f as any).uri,
+          storageUrl: f.storageUrl,
+          extractedText: f.extractedText
         }));
         setMediaFiles(restoredMedia);
       } catch (err) {
@@ -1176,13 +1193,20 @@ Please generate the blog post now:`;
                             <Eye className="w-3 h-3" />
                           </button>
                           <button 
-                            onClick={() => {
+                            onClick={async () => {
                               if (v.file) downloadLocalFile(v.file);
-                              else if (v.previewUrl) {
-                                const link = document.createElement('a');
-                                link.href = v.previewUrl;
-                                link.download = v.name || 'download';
-                                link.click();
+                              else if (v.storageUrl || v.previewUrl) {
+                                await downloadFile({
+                                  id: v.id,
+                                  name: v.name || 'download',
+                                  type: v.mimeType || 'application/octet-stream',
+                                  size: v.size || 0,
+                                  storageUrl: v.storageUrl || v.previewUrl,
+                                  data: v.previewUrl,
+                                  uri: v.uri,
+                                  mimeType: v.mimeType,
+                                  extractedText: v.extractedText
+                                });
                               }
                             }}
                             className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}

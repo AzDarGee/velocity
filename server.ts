@@ -235,6 +235,44 @@ async function startServer() {
     }
   });
 
+  // API Route: Download Proxy
+  app.get("/api/download", async (req, res) => {
+    try {
+      const fileUrl = req.query.url as string;
+      const filename = req.query.filename as string || "download";
+
+      if (!fileUrl) {
+        return res.status(400).json({ error: "Missing url parameter" });
+      }
+
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.statusText}`);
+      }
+
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
+      
+      const contentType = response.headers.get("content-type");
+      if (contentType) res.setHeader("Content-Type", contentType);
+      
+      // Do not set Content-Length because fetch decompresses the response
+      // leaving the original Content-Length incorrect for the piped stream,
+      // which causes HTTP parse errors or stalled downloads.
+
+      if (response.body) {
+        const { Readable } = await import("stream");
+        const nodeStream = Readable.fromWeb(response.body as any);
+        nodeStream.pipe(res);
+      } else {
+        const buffer = await response.arrayBuffer();
+        res.end(Buffer.from(buffer));
+      }
+    } catch (error: any) {
+      console.error("Download Proxy Error:", error);
+      res.status(500).send("Error downloading file: " + error.message);
+    }
+  });
+
   // Vite integration
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
