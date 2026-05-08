@@ -469,23 +469,6 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
         onClick={async () => {
           try {
             await signOut(auth);
-            
-            // Clear application caches
-            try {
-              const cacheKeys = await caches.keys();
-              await Promise.all(cacheKeys.map(key => caches.delete(key)));
-            } catch (e) {
-              console.warn("Cache clearing failed:", e);
-            }
-            
-            // Clear local and session storage, preserving theme
-            const theme = localStorage.getItem("theme");
-            localStorage.clear();
-            sessionStorage.clear();
-            if (theme) localStorage.setItem("theme", theme);
-            
-            // Reload the page to reset all states and Firebase instances
-            window.location.reload();
           } catch (error) {
             console.error("Sign out error:", error);
           }
