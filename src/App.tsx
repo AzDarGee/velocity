@@ -742,18 +742,19 @@ Please generate the blog post now:`;
         let base64 = (vf as any).base64 || "";
 
         if (!fileId) {
-          if (vf.file.size < 800 * 1024) {
+          if (vf.file && vf.file.size < 800 * 1024) {
             base64 = await fileToBase64(vf.file);
           }
 
-          const fileDoc = {
+          const fileDoc: any = {
             userId: user.uid,
-            name: vf.file.name,
-            type: vf.file.type,
-            size: vf.file.size,
+            name: vf.file?.name || vf.name || 'unknown',
+            type: vf.file?.type || vf.mimeType || 'application/octet-stream',
+            size: vf.file?.size || vf.size || 0,
             data: base64,
             createdAt: serverTimestamp()
           };
+          if (vf.storageUrl) fileDoc.storageUrl = vf.storageUrl;
 
           const fileRef = await addDoc(collection(db, "files"), fileDoc);
           fileId = fileRef.id;
@@ -762,10 +763,11 @@ Please generate the blog post now:`;
         fileIds.push(fileId);
         attachedFiles.push({
           id: fileId,
-          name: vf.file.name,
-          type: vf.file.type,
-          size: vf.file.size,
-          data: base64
+          name: vf.file?.name || vf.name || 'unknown',
+          type: vf.file?.type || vf.mimeType || 'application/octet-stream',
+          size: vf.file?.size || vf.size || 0,
+          data: base64,
+          storageUrl: vf.storageUrl
         });
       }
 
