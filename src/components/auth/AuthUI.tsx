@@ -248,6 +248,8 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [keySuccess, setKeySuccess] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   
   useEffect(() => {
     if (!user || !showProfile) return;
@@ -601,23 +603,9 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                     )}
                  </div>
                  
-                 <div className="pt-4 border-t border-dashed border-red-500/50 mt-4">
+                  <div className="pt-4 border-t border-dashed border-red-500/50 mt-4">
                     <button
-                      onClick={async () => {
-                         if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-                            try {
-                               const currentUser = auth.currentUser;
-                               if (currentUser) {
-                                  await deleteUser(currentUser);
-                                  localStorage.clear();
-                                  sessionStorage.clear();
-                                  window.location.reload();
-                               }
-                            } catch (e) {
-                               alert(e.message || "Failed to delete account. You may need to sign in again to perform this action.");
-                            }
-                         }
-                      }}
+                      onClick={() => setShowDeleteConfirm(true)}
                       className={`w-full py-2 border-2 text-[10px] font-mono uppercase tracking-widest transition-all ${
                          theme === 'dark'
                             ? 'border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white'
@@ -629,6 +617,64 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                  </div>
                </div>
              </motion.div>
+          </div>
+        )}
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className={`relative max-w-sm w-full p-8 border-2 flex flex-col gap-6 text-center ${theme === 'dark' ? 'bg-[#0A0A0A] border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.1)]' : 'bg-white border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-4">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+                <h3 className={`text-xl font-black uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Final Warning</h3>
+                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  This will permanently delete your account, wipe your data securely, and cannot be undone. Are you absolutely sure?
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={async () => {
+                     setIsDeletingAccount(true);
+                     try {
+                        const currentUser = auth.currentUser;
+                        if (currentUser) {
+                           await deleteUser(currentUser);
+                           localStorage.clear();
+                           sessionStorage.clear();
+                           window.location.reload();
+                        }
+                     } catch (e: any) {
+                        alert(e.message || "Failed to delete account. You may need to sign in again to perform this action.");
+                     } finally {
+                        setIsDeletingAccount(false);
+                     }
+                  }}
+                  disabled={isDeletingAccount}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all ${
+                    theme === 'dark' 
+                      ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                      : 'bg-red-600 text-white border-red-600 hover:bg-black'
+                  }`}
+                >
+                  {isDeletingAccount ? "Purging_User_Data..." : "Confirm_Deletion"}
+                </button>
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeletingAccount}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all ${
+                    theme === 'dark' 
+                      ? 'border-white text-white hover:bg-white hover:text-black' 
+                      : 'border-black text-black hover:bg-black hover:text-white'
+                  }`}
+                >
+                  Abort
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
 

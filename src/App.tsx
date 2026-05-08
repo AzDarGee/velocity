@@ -123,7 +123,11 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data.data) {
-          const sorted = data.data.sort((a: any, b: any) => a.name.localeCompare(b.name));
+          // Deduplicate by model id
+          const uniqueModelsMap = new Map();
+          data.data.forEach((m: any) => uniqueModelsMap.set(m.id, m));
+          const uniqueModels = Array.from(uniqueModelsMap.values());
+          const sorted = uniqueModels.sort((a: any, b: any) => a.name.localeCompare(b.name));
           setOpenRouterModels(sorted);
         }
       })
@@ -1335,7 +1339,7 @@ Please generate the blog post now:`;
                       <>
                         <option disabled className="font-bold border-t">-- Dynamic OpenRouter Models --</option>
                         {openRouterModels.map((m: any) => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
+                          <option key={`dyn-${m.id}`} value={m.id}>{m.name}</option>
                         ))}
                       </>
                     )}
@@ -1906,9 +1910,9 @@ Please generate the blog post now:`;
                           <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">{currentAttachedFiles.length} Object(s) Persisted</span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {currentAttachedFiles.map((file) => (
+                          {currentAttachedFiles.map((file, i) => (
                             <div 
-                              key={file.id} 
+                              key={`${file.id}-${i}`} 
                               className={`p-4 border group transition-all flex items-center justify-between ${
                                 theme === 'dark' ? 'border-[#333] hover:border-white bg-[#1A1A1A]' : 'border-[#141414] hover:bg-[#F8F8F7]'
                               }`}
