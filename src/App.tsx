@@ -115,6 +115,7 @@ export default function App() {
   const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -192,6 +193,13 @@ export default function App() {
 
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
+        if (user.email === 'ashdarji1@gmail.com') {
+          setIsAdmin(true);
+        } else {
+          getDoc(doc(db, 'admins', user.uid))
+            .then(adminDoc => setIsAdmin(adminDoc.exists()))
+            .catch(() => setIsAdmin(false));
+        }
         // Fetch credits
         unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (doc) => {
           if (doc.exists()) {
@@ -233,6 +241,7 @@ export default function App() {
         setHistory([]);
         setCurrentGenerationId(null);
         setCurrentAttachedFiles([]);
+        setIsAdmin(false);
         setBlogPost(null);
         setOriginalContent(null);
         setMediaFiles([]);
@@ -585,19 +594,21 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         });
       }
 
-      await runTransaction(db, async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists()) {
-          throw new Error("User record not found");
-        }
-        
-        const currentCredits = userDoc.data().credits || 0;
-        if (currentCredits < currentCost) {
-          throw new Error(`Insufficient credits. Required: ${currentCost}, Found: ${currentCredits}`);
-        }
-        
-        transaction.update(userRef, { credits: currentCredits - currentCost });
-      });
+      if (!isAdmin) {
+        await runTransaction(db, async (transaction) => {
+          const userDoc = await transaction.get(userRef);
+          if (!userDoc.exists()) {
+            throw new Error("User record not found");
+          }
+          
+          const currentCredits = userDoc.data().credits || 0;
+          if (currentCredits < currentCost) {
+            throw new Error(`Insufficient credits. Required: ${currentCost}, Found: ${currentCredits}`);
+          }
+          
+          transaction.update(userRef, { credits: currentCredits - currentCost });
+        });
+      }
 
       const isOpenRouter = preferences.model.includes("/");
       let generatedContent = "";
@@ -1542,7 +1553,7 @@ Please generate the blog post now:`;
               </div>
             </section>
 
-            {credits !== null && credits < currentCost ? (
+            {credits !== null && credits < currentCost && !isAdmin ? (
               <button 
                 onClick={() => window.dispatchEvent(new CustomEvent('open-topup'))}
                 className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group ${

@@ -57,6 +57,13 @@
       },
       "required": ["userId", "name", "type", "createdAt"]
     },
+    "admin": {
+      "title": "Admin",
+      "description": "Indicates administration status",
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
     "userKeys": {
       "title": "UserKeys",
       "description": "Private API keys and sensitive settings",
@@ -74,6 +81,10 @@
     "users/{userId}/private/keys": {
       "schema": "userKeys",
       "description": "Sensitive user keys"
+    },
+    "admins/{userId}": {
+      "schema": "admin",
+      "description": "Users with admin privileges"
     },
     "generations/{generationId}": {
       "schema": "generation",
