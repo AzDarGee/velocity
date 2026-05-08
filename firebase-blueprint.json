@@ -35,6 +35,7 @@
         },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["processing", "completed", "failed"], "default": "completed" },
         "fileIds": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["userId", "content", "createdAt"]

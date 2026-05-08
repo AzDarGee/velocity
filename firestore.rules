@@ -63,6 +63,7 @@ service cloud.firestore {
              data.createdAt is timestamp &&
              (data.get('title', '') is string && data.get('title', '').size() <= 256) &&
              (data.get('updatedAt', request.time) is timestamp) &&
+             (data.get('status', 'completed') in ['processing', 'completed', 'failed']) &&
              (data.get('fileIds', []) is list);
     }
 
@@ -121,7 +122,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidGeneration(incoming()) && incoming().createdAt == request.time;
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidGeneration(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasAny(['content', 'title', 'updatedAt', 'preferences', 'fileIds']) &&
+        incoming().diff(existing()).affectedKeys().hasAny(['content', 'title', 'updatedAt', 'preferences', 'fileIds', 'status']) &&
         incoming().userId == existing().userId &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time

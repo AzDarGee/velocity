@@ -40,7 +40,7 @@ import { AuthGuard } from "./components/auth/AuthGuard";
 import { UserButton } from "./components/auth/AuthUI";
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage, handleFirestoreError, OperationType } from "./lib/firebase";
-import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction, collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
+import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction, collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, getDocs, increment } from "firebase/firestore";
 
 // Initialize Gemini directly on the frontend as per AI Studio guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -86,6 +86,7 @@ interface AttachedFile {
 import { AdminDashboard } from "./components/AdminDashboard";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Header } from "./components/layout/Header";
+import { GenerationViewer } from "./components/GenerationViewer";
 
 const getOpenRouterCategory = (m: any) => {
   const id = m.id.toLowerCase();
@@ -139,6 +140,8 @@ export default function App() {
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
   const [historySortBy, setHistorySortBy] = useState<'updatedAt' | 'createdAt'>('updatedAt');
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  const [viewerContent, setViewerContent] = useState<{ content: string; title: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/ai/openrouter/models")
@@ -605,16 +608,14 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
     
     setIsProcessing(true);
     setError(null);
-    setBlogPost(null);
+    
+    let tempGenId = "";
 
     try {
-      // 0. Credit Check & Deduction
       const user = auth.currentUser;
       if (!user) throw new Error("Security Identity Null: Re-authentication required.");
-
       const userRef = doc(db, "users", user.uid);
       
-      // Ensure user document exists before transaction
       const userCheck = await getDoc(userRef);
       if (!userCheck.exists()) {
         await setDoc(userRef, {
@@ -627,202 +628,122 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         });
       }
 
+      const cost = getCreditsForLength(preferences.length);
       if (!isAdmin) {
         await runTransaction(db, async (transaction) => {
           const userDoc = await transaction.get(userRef);
-          if (!userDoc.exists()) {
-            throw new Error("User record not found");
-          }
-          
+          if (!userDoc.exists()) throw new Error("User record not found");
           const currentCredits = userDoc.data().credits || 0;
-          if (currentCredits < currentCost) {
-            throw new Error(`Insufficient credits. Required: ${currentCost}, Found: ${currentCredits}`);
-          }
-          
-          transaction.update(userRef, { credits: currentCredits - currentCost });
+          if (currentCredits < cost) throw new Error(`Insufficient credits`);
+          transaction.update(userRef, { credits: currentCredits - cost });
         });
       }
 
+      // 1. Create Placeholder Generation
+      const fileIds: string[] = readyVideos.map(v => (v as any).firestoreId).filter(Boolean);
+      const generationData = {
+        userId: user.uid,
+        content: "",
+        title: "Synthesizing...",
+        preferences: preferences,
+        fileIds: fileIds,
+        status: "processing",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, "generations"), generationData);
+      tempGenId = docRef.id;
+      setGeneratingIds(prev => new Set(prev).add(tempGenId));
+      setCurrentGenerationId(tempGenId);
+      setBlogPost(""); // Clear current view for new one
+      setIsProcessing(false); // Let user interact while it works in background
+
+      // 2. Perform Generation
       const isOpenRouter = preferences.model.includes("/");
       let generatedContent = "";
 
       if (isOpenRouter) {
-        // Fetch the user's OpenRouter key from the private subcollection
         const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
         const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+        if (!apiKey) throw new Error("OpenRouter API Key is missing");
 
-        if (!apiKey) {
-          throw new Error("OpenRouter API Key is missing. Please set it in your profile settings.");
-        }
-
-        const prompt = `You are a world-class blog post writer and content strategist. 
-Convert the context from the provided media files into a high-quality blog post.
+        const prompt = `You are a world-class blog post writer. 
+Convert provided media context into a blog post.
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
-
-Note: The user has provided media files (videos/audio/images) that have been analyzed. 
-Please refer to them in your writing where appropriate:
-${readyVideos.map(v => `- [File: ${v.name}] (Type: ${v.mimeType || v.file?.type})`).join('\n')}
-
-Format the output in clear Markdown. Start immediately with the title.`;
+Refer to these files: ${readyVideos.map(v => v.name).join(', ')}. Start with title.`;
 
         let additionalText = "";
-        readyVideos.forEach(v => {
-          if (v.extractedText) {
-            additionalText += `\n\n[Content of Doc ${v.name}]:\n${v.extractedText}`;
-          }
-        });
-        const fullPrompt = prompt + additionalText;
-
+        readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
+        
         const response = await fetch("/api/ai/openrouter", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: preferences.model,
             apiKey,
-            messages: [{ role: "user", content: fullPrompt }]
+            messages: [{ role: "user", content: prompt + additionalText }]
           })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "OpenRouter Generation Failed");
+        if (!response.ok) throw new Error(data.error || "Generation Failed");
         generatedContent = data.text;
       } else {
-        const fileParts = readyVideos.map(v => {
-          if (v.extractedText) return null; // Included in prompt if we want, or as text part
-          if (!v.uri) return null;
-          return {
-            fileData: {
-              fileUri: v.uri,
-              mimeType: v.mimeType || "application/octet-stream"
-            }
-          };
-        }).filter(p => p !== null);
-
-        const prompt = `You are a world-class blog post writer and content strategist. 
-Your task is to transform the provided video(s), audio file(s), image(s), or document(s) into a high-quality, professional blog post.
-
+        const fileParts = readyVideos.map(v => v.uri ? { fileData: { fileUri: v.uri, mimeType: v.mimeType || "application/octet-stream" } } : null).filter(p => p !== null);
+        const prompt = `You are an expert technical blogger. Transform provided media into a high-quality post.
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
-
-AVAILABLE MEDIA ASSETS FOR CONTEXTUAL PLACEMENT:
-${readyVideos.map(v => `- [File: ${v.name}]: Reference ID: MEDIA_ID_${(v as any).firestoreId || v.id} (Type: ${v.mimeType || v.file?.type})${v.extractedText ? ' (Document Content Provided as Text)' : ''}`).join('\n')}
-
-INSTRUCTIONS:
-1. Analyze the media and documents thoroughly. For videos/audio, extract key insights, quotes, and narrative beats. For images, describe visual details. For word documents/PDFs, use the provided text content or context.
-2. Structure the blog post with a compelling headline, an engaging hook, well-organized sections with descriptive subheadings, and a strong conclusion.
-3. STRATEGIC ASSET PLACEMENT: You MUST contextually embed the available assets where they add the most value to the reader. Use standard markdown image syntax for ALL placements: ![Short Description of context](MEDIA_ID_ID_HERE).
-   - Place images near their descriptions.
-   - Place video/audio embeds near sections discussing their content.
-   - Place document "cards" (using the same MEDIA_ID_ syntax) when referencing a source document, case study, or whitepaper that the user provides.
-   - Do not group assets at the end; integrate them naturally into the narrative flow.
-4. Incorporate actionable takeaways and relevant context from all provided contents.
-5. If multiple files are provided, synthesize them into a cohesive narrative or a comprehensive guide.
-6. Format the output using clear Markdown. Start the post immediately with the title, do not include any preamble.
-7. Ensure the length matches the target: ${preferences.length}. 
-   - Short: ~400 words
-   - Medium: ~1000 words
-   - Long: ~1500 words
-   - SuperLong: 2000+ words. For SuperLong, provide exhaustive detail, multiple sections, and deep analysis.
-
-Please generate the blog post now:`;
+Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).firestoreId || v.id}`).join(', ')}`;
 
         let additionalText = "";
-        readyVideos.forEach(v => {
-          if (v.extractedText) {
-            additionalText += `\n\n[Content of Doc ${v.name}]:\n${v.extractedText}`;
-          }
-        });
-        const fullPrompt = prompt + additionalText;
+        readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
 
         const result = await ai.models.generateContent({
           model: preferences.model,
-          contents: [
-            ...fileParts,
-            fullPrompt
-          ],
-          config: {
-            systemInstruction: "You are an expert technical blogger who specializes in converting visual and textual content into authoritative written articles. You maintain structural integrity while enhancing readability."
-          }
+          contents: [...(fileParts as any), prompt + additionalText]
         });
 
-        if (!result.text) {
-          throw new Error("Model failed to generate a coherent blog post.");
-        }
+        if (!result.text) throw new Error("Model failed");
         generatedContent = result.text;
       }
 
-      setBlogPost(generatedContent);
-      setOriginalContent(generatedContent);
-
-    try {
-      const fileIds: string[] = [];
-      const attachedFiles: AttachedFile[] = [];
-
-      for (const vf of readyVideos) {
-        // Find if this file was already saved to Firestore during upload
-        let fileId = (vf as any).firestoreId;
-        let base64 = (vf as any).base64 || "";
-
-        if (!fileId) {
-          if (vf.file && vf.file.size < 800 * 1024) {
-            base64 = await fileToBase64(vf.file);
-          }
-
-          const fileDoc: any = {
-            userId: user.uid,
-            name: vf.file?.name || vf.name || 'unknown',
-            type: vf.file?.type || vf.mimeType || 'application/octet-stream',
-            size: vf.file?.size || vf.size || 0,
-            data: base64,
-            createdAt: serverTimestamp()
-          };
-          if (vf.storageUrl) fileDoc.storageUrl = vf.storageUrl;
-
-          const fileRef = await addDoc(collection(db, "files"), fileDoc);
-          fileId = fileRef.id;
-        }
-
-        fileIds.push(fileId);
-        attachedFiles.push({
-          id: fileId,
-          name: vf.file?.name || vf.name || 'unknown',
-          type: vf.file?.type || vf.mimeType || 'application/octet-stream',
-          size: vf.file?.size || vf.size || 0,
-          data: base64,
-          storageUrl: vf.storageUrl
-        });
-      }
-
-      setCurrentAttachedFiles(attachedFiles);
-
-      const generationData = {
-        userId: user.uid,
+      // 3. Finalize Generation Record
+      await updateDoc(doc(db, "generations", tempGenId), {
         content: generatedContent,
-        title: generatedContent.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Blog Post",
-        preferences: preferences,
-        fileIds: fileIds,
-        createdAt: serverTimestamp(),
+        title: generatedContent.split('\n')[0].replace(/^#+\s*/, '').substring(0, 100) || "Untitled Blog Post",
+        status: "completed",
         updatedAt: serverTimestamp()
-      };
-      const docRef = await addDoc(collection(db, "generations"), generationData);
-      setCurrentGenerationId(docRef.id);
-    } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, "generations/files");
-      }
+      });
+
+      // Update current view if this was the latest
+      setCurrentGenerationId(prev => {
+        if (prev === tempGenId) {
+          setBlogPost(generatedContent);
+          setOriginalContent(generatedContent);
+        }
+        return prev;
+      });
+
     } catch (err: any) {
       console.error("Synthesis Error:", err);
-      let errorMsg = "Synthesis failed. ";
-      if (err.message?.includes("quota")) errorMsg += "API Quota exceeded.";
-      else if (err.message?.includes("Insufficient credits") || err.message?.includes("Security Identity")) errorMsg += err.message;
-      else errorMsg += `The selected LLM provider could not handle this request. Please choose another LLM provider. Details: ${err.message || "Unknown error occurred."}`;
-      
-      setError(errorMsg);
+      if (tempGenId) {
+        await updateDoc(doc(db, "generations", tempGenId), { status: "failed" }).catch(() => {});
+      }
+      setError(`Synthesis failed: ${err.message || "Unknown error"}`);
     } finally {
+      if (tempGenId) {
+        setGeneratingIds(prev => {
+          const next = new Set(prev);
+          next.delete(tempGenId);
+          return next;
+        });
+      }
       setIsProcessing(false);
     }
   };
@@ -1082,6 +1003,18 @@ Please generate the blog post now:`;
   return (
     <AuthGuard theme={theme}>
       {showOnboarding && <OnboardingWizard theme={theme} onComplete={handleOnboardingComplete} />}
+      <AnimatePresence>
+        {viewerContent && (
+          <GenerationViewer 
+            content={viewerContent.content}
+            title={viewerContent.title}
+            theme={theme}
+            onClose={() => setViewerContent(null)}
+            onDownload={exportToPDF}
+            onCopy={copyToClipboard}
+          />
+        )}
+      </AnimatePresence>
       {/* History Sidebar */}
       <AnimatePresence>
         {isHistoryOpen && (
@@ -1134,45 +1067,63 @@ Please generate the blog post now:`;
                       <p className="font-mono text-xs uppercase">No historical records found</p>
                     </div>
                   ) : (
-                    sortedHistory.map((gen) => (
-                      <div 
-                        key={gen.id}
-                        onClick={() => loadGeneration(gen)}
-                        className={`p-4 border transition-all cursor-pointer group relative ${
-                          currentGenerationId === gen.id 
-                            ? (theme === 'dark' ? 'border-yellow-500 bg-yellow-500/10' : 'border-yellow-500 bg-yellow-50') 
-                            : (theme === 'dark' ? 'border-[#333] bg-[#141414] hover:border-white' : 'border-[#141414] hover:bg-[#F8F8F7]')
-                        }`}
-                      >
-                        <div className="flex flex-col gap-1">
-                          <span className={`text-xs font-bold truncate pr-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{gen.title || "Untitled Post"}</span>
-                          <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-gray-400' : 'opacity-40 text-black'}`}>
-                            {historySortBy === 'createdAt' && gen.createdAt ? (
-                              `Created: ${gen.createdAt.toDate().toLocaleDateString()} ${gen.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                            ) : (
-                              `Updated: ${(gen.updatedAt || gen.createdAt)?.toDate().toLocaleDateString()} ${(gen.updatedAt || gen.createdAt)?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                            )}
-                          </span>
-                          <div className="flex gap-2 mt-2">
-                             <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.model?.replace('gemini-', '')}</span>
-                             <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>
-                               {Array.isArray(gen.preferences?.tone) ? gen.preferences.tone.join(", ") : gen.preferences?.tone}
-                             </span>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={(e) => confirmDelete(gen.id, e)}
-                          className={`absolute top-4 right-4 opacity-50 hover:opacity-100 p-2 transition-all rounded-full ${
-                            theme === 'dark' 
-                              ? 'text-gray-400 hover:text-red-500 hover:bg-red-500/10' 
-                              : 'text-black hover:text-red-500 hover:bg-red-50'
+                    sortedHistory.map((gen) => {
+                      const isGenProcessing = gen.status === 'processing' || generatingIds.has(gen.id);
+                      return (
+                        <div 
+                          key={gen.id}
+                          onClick={() => !isGenProcessing && loadGeneration(gen)}
+                          className={`p-4 border transition-all cursor-pointer group relative ${
+                            isGenProcessing ? 'opacity-70 cursor-wait' : ''
+                          } ${
+                            currentGenerationId === gen.id 
+                              ? (theme === 'dark' ? 'border-yellow-500 bg-yellow-500/10' : 'border-yellow-500 bg-yellow-50') 
+                              : (theme === 'dark' ? 'border-[#333] bg-[#141414] hover:border-white' : 'border-[#141414] hover:bg-[#F8F8F7]')
                           }`}
-                          title="Delete Generation"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-gray-400' : 'opacity-40 text-black'}`}>
+                                {historySortBy === 'createdAt' && gen.createdAt ? (
+                                  `Created: ${gen.createdAt.toDate().toLocaleDateString()}`
+                                ) : (
+                                  `Updated: ${(gen.updatedAt || gen.createdAt)?.toDate().toLocaleDateString()}`
+                                )}
+                              </span>
+                              {isGenProcessing ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-yellow-500" />
+                              ) : gen.status === 'failed' ? (
+                                <AlertCircle className="w-3 h-3 text-red-500" />
+                              ) : (
+                                <CheckCircle2 className="w-3 h-3 opacity-20 group-hover:opacity-100 transition-opacity" />
+                              )}
+                            </div>
+                            <span className={`text-xs font-bold truncate pr-6 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                              {isGenProcessing ? "Processing Synthesis..." : (gen.title || "Untitled Post")}
+                            </span>
+                            <div className="flex gap-2 mt-2">
+                              <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>{gen.preferences?.model?.replace('gemini-', '')}</span>
+                              <span className={`text-[9px] font-mono px-1 border uppercase ${theme === 'dark' ? 'border-gray-600 text-gray-400' : 'border-black/20 opacity-40 text-black'}`}>
+                                {Array.isArray(gen.preferences?.tone) ? gen.preferences.tone.join(", ") : gen.preferences?.tone}
+                              </span>
+                            </div>
+                          </div>
+                          {!isGenProcessing && (
+                            <button 
+                              onClick={(e) => confirmDelete(gen.id, e)}
+                              className={`absolute top-4 right-4 opacity-0 group-hover:opacity-100 p-2 transition-all rounded-full ${
+                                theme === 'dark' 
+                                  ? 'text-gray-400 hover:text-red-500 hover:bg-red-500/10' 
+                                  : 'text-black hover:text-red-500 hover:bg-red-50'
+                              }`}
+                              title="Delete Generation"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
 
@@ -1681,9 +1632,9 @@ Please generate the blog post now:`;
             ) : (
               <button 
                 onClick={handleGenerate}
-                disabled={mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                disabled={mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                 className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                  ${mediaFiles.length === 0 || isProcessing || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0
+                  ${mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0
                     ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
                     : (theme === 'dark' 
                         ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
@@ -1731,7 +1682,16 @@ Please generate the blog post now:`;
                <span className="font-serif italic text-xs uppercase opacity-50 tracking-widest">03 / Output Preview</span>
                <div className="flex items-center gap-4">
                  {blogPost && (
-                   <div className={`flex items-center border p-1 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'}`}>
+                   <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setViewerContent({ content: blogPost, title: blogPost.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Synthesis" })}
+                        className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
+                        title="Enter Reading Mode"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                      </button>
+
+                      <div className={`flex items-center border p-1 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'}`}>
                       <button 
                         onClick={() => setViewMode("preview")}
                         className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest transition-colors ${viewMode === 'preview' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'hover:bg-black/5'}`}
@@ -1751,8 +1711,9 @@ Please generate the blog post now:`;
                         HTML
                       </button>
                    </div>
-                 )}
-                  {blogPost && (
+                </div>
+               )}
+               {blogPost && (
                    <div className="flex items-center gap-2">
                      {currentGenerationId && blogPost !== originalContent && (
                        <button 
