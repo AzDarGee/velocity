@@ -1960,9 +1960,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 
                 <button 
                   onClick={handleGenerate}
-                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
+                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || preferences.specificFocus.trim() === "" || !preferences.length || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
                   className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
+                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || preferences.specificFocus.trim() === "" || !preferences.length || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
                       ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
                       : (theme === 'dark' 
                           ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
