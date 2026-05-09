@@ -268,7 +268,8 @@ export default function App() {
         // Fetch generation history
         const q = query(
           collection(db, "generations"),
-          where("userId", "==", user.uid)
+          where("userId", "==", user.uid),
+          orderBy("createdAt", "desc")
         );
         unsubscribeHistory = onSnapshot(q, (snapshot) => {
           const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -702,7 +703,14 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         if (!apiKey) throw new Error("OpenRouter API Key is missing");
 
         const prompt = `You are a world-class blog post writer. 
-Convert provided media context into a blog post.
+Convert provided media context into a high-quality, professional blog post.
+
+STRUCTURE REQUIREMENTS:
+1. TITLE: Start with a compelling H1 title (e.g., # My Amazing Story).
+2. KEY SECTIONS: Use H2 (##) and H3 (###) headers to organize the content into logical sections.
+3. QUOTES: Include at least two insightful blockquotes (>) synthesizing key takeaways or "voice" from the media.
+4. NARRATIVE: Create a cohesive story, not just a description of the files.
+
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
@@ -715,7 +723,7 @@ Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA
 AVAILABLE MEDIA ASSETS (IDs and Names):
 ${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
 
-Synthesize the content from these assets into a cohesive narrative. Start with title.`;
+Synthesize the content from these assets into a cohesive narrative.`;
 
         let additionalText = "";
         readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
@@ -735,7 +743,14 @@ Synthesize the content from these assets into a cohesive narrative. Start with t
         generatedContent = data.text;
       } else {
         const fileParts = readyVideos.map(v => v.uri ? { fileData: { fileUri: v.uri, mimeType: v.mimeType || "application/octet-stream" } } : null).filter(p => p !== null);
-        const prompt = `You are an expert technical blogger. Transform provided media into a high-quality post.
+        const prompt = `You are an expert technical blogger. Transform provided media into a high-quality, professional blog post.
+
+STRUCTURE REQUIREMENTS:
+1. TITLE: Start with a compelling H1 title (e.g., # My Amazing Story).
+2. KEY SECTIONS: Use H2 (##) and H3 (###) headers to organize the content into logical sections.
+3. QUOTES: Include at least two insightful blockquotes (>) synthesizing key takeaways or "voice" from the media.
+4. NARRATIVE: Create a cohesive story, not just a description of the files.
+
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
@@ -1900,6 +1915,14 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                         <Markdown 
                           remarkPlugins={[remarkGfm]}
                           components={{
+                            h1: ({ children }) => <h1 className="text-4xl font-serif italic mb-8 uppercase tracking-tight">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-xl font-bold mt-8 mb-3">{children}</h3>,
+                            blockquote: ({ children }) => (
+                              <blockquote className={`my-8 pl-6 border-l-4 py-2 italic font-serif text-lg leading-relaxed ${theme === 'dark' ? 'border-white/20 text-white/70' : 'border-black/20 text-black/70'}`}>
+                                {children}
+                              </blockquote>
+                            ),
                             p: ({ node, children, ...props }) => {
                               // Standalone images in markdown are often wrapped in a paragraph.
                               // We use the AST node to check if any child is a MEDIA_ID_ image.

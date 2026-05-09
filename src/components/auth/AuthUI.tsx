@@ -9,8 +9,8 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction } from 'firebase/firestore';
-import { LogIn, UserPlus, Github, Mail, Lock, User as UserIcon, Loader2, LogOut, AlertCircle, Coins, CreditCard, ChevronRight, Check, X } from 'lucide-react';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction, writeBatch, collection, query, where, getDocs } from 'firebase/firestore';
+import { LogIn, UserPlus, Github, Mail, Lock, User as UserIcon, Loader2, LogOut, AlertCircle, Coins, CreditCard, ChevronRight, Check, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Cache strictly handles ongoing operations to prevent race conditions (e.g. AuthUI and UserButton calling concurrently)
@@ -368,7 +368,9 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const [keyError, setKeyError] = useState<string | null>(null);
   const [keySuccess, setKeySuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isPurgingHistory, setIsPurgingHistory] = useState(false);
   
   useEffect(() => {
     if (!user || !showProfile) return;
@@ -559,6 +561,36 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
       alert('Network error syncing credits.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handlePurgeOwnHistory = async () => {
+    if (!user) return;
+    setIsPurgingHistory(true);
+    try {
+      const q = query(collection(db, 'generations'), where('userId', '==', user.uid));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        alert("No generation history found to purge.");
+        setShowPurgeConfirm(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      
+      await batch.commit();
+      alert(`History purged! Successfully removed ${snapshot.size} records.`);
+      setShowPurgeConfirm(false);
+    } catch (error) {
+      console.error("Purge history failed:", error);
+      alert("Failed to purge history.");
+      handleFirestoreError(error, OperationType.DELETE, `generations_purge_self/${user.uid}`);
+    } finally {
+      setIsPurgingHistory(false);
     }
   };
 
@@ -769,7 +801,17 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                     )}
                  </div>
                  
-                  <div className="pt-4 border-t border-dashed border-red-500/50 mt-4">
+                  <div className="pt-4 border-t border-dashed border-current/10 flex flex-col gap-3 mt-4">
+                    <button
+                      onClick={() => setShowPurgeConfirm(true)}
+                      className={`w-full py-2 border-2 text-[10px] font-mono uppercase tracking-widest transition-all ${
+                         theme === 'dark'
+                            ? 'border-white/20 text-white opacity-60 hover:opacity-100 hover:border-white hover:bg-white/5'
+                            : 'border-black/20 text-black opacity-60 hover:opacity-100 hover:border-black hover:bg-black/5'
+                      }`}
+                    >
+                      Purge_History
+                    </button>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
                       className={`w-full py-2 border-2 text-[10px] font-mono uppercase tracking-widest transition-all ${
@@ -783,6 +825,50 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                  </div>
                </div>
              </motion.div>
+          </div>
+        )}
+
+        {showPurgeConfirm && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className={`relative max-w-sm w-full p-8 border-2 flex flex-col gap-6 text-center ${theme === 'dark' ? 'bg-[#0A0A0A] border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.1)]' : 'bg-white border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-4">
+                <Trash2 className="w-12 h-12 text-amber-500 mx-auto" />
+                <h3 className={`text-xl font-black uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Purge History</h3>
+                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  This will permanently delete all your generation results. Media assets will remain in your library.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={handlePurgeOwnHistory}
+                  disabled={isPurgingHistory}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                    theme === 'dark' 
+                      ? 'bg-amber-600 text-white border-amber-600 hover:bg-amber-700' 
+                      : 'bg-amber-600 text-white border-amber-600 hover:bg-black'
+                  }`}
+                >
+                  {isPurgingHistory && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {isPurgingHistory ? "Executing_Wipe..." : "Confirm_Purge"}
+                </button>
+                <button 
+                  onClick={() => setShowPurgeConfirm(false)}
+                  disabled={isPurgingHistory}
+                  className={`w-full py-4 border-2 font-bold text-xs uppercase tracking-widest transition-all ${
+                    theme === 'dark' 
+                      ? 'border-white text-white hover:bg-white hover:text-black' 
+                      : 'border-black text-black hover:bg-black hover:text-white'
+                  }`}
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
 

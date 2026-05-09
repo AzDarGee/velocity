@@ -93,7 +93,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                     child.tagName === "img" && child.properties?.src?.startsWith("MEDIA_ID_")
                   );
                   if (hasMedia) return <div className="mb-10 w-full" {...props}>{children}</div>;
-                  return <p className="text-base leading-relaxed mb-6" {...props}>{children}</p>;
+                  return <p className="text-lg leading-relaxed mb-6" {...props}>{children}</p>;
                 },
                 img: ({ node, src, alt, ...props }) => {
                   if (src?.startsWith('MEDIA_ID_')) {
@@ -173,6 +173,11 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                 h1: ({ children }) => <h1 className="text-4xl font-serif italic mb-8 uppercase tracking-tight">{children}</h1>,
                 h2: ({ children }) => <h2 className="text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4">{children}</h2>,
                 h3: ({ children }) => <h3 className="text-xl font-bold mt-8 mb-3">{children}</h3>,
+                blockquote: ({ children }) => (
+                  <blockquote className={`my-8 pl-6 border-l-4 py-2 italic font-serif text-lg leading-relaxed ${theme === 'dark' ? 'border-white/20 text-white/70' : 'border-black/20 text-black/70'}`}>
+                    {children}
+                  </blockquote>
+                ),
               }}
             >
               {content}

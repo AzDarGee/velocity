@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, setDoc, deleteDoc, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { X, Search, Shield, Save, Loader2 } from 'lucide-react';
+import { X, Search, Shield, Save, Loader2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AdminDashboardProps {
@@ -26,6 +26,8 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
   const [editCredits, setEditCredits] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{id: string, email: string} | null>(null);
+  const [userToPurge, setUserToPurge] = useState<{id: string, email: string} | null>(null);
+  const [showGlobalPurge, setShowGlobalPurge] = useState(false);
   const [adminUids, setAdminUids] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'users' | 'cleanup'>('users');
   const [authUsers, setAuthUsers] = useState<any[]>([]);
@@ -169,6 +171,64 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
     }
   };
 
+  const handleConfirmPurgeGenerations = async () => {
+    if (!userToPurge) return;
+    setIsSaving(true);
+    try {
+      const q = query(collection(db, 'generations'), where('userId', '==', userToPurge.id));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        alert("No generations found for this user.");
+        setUserToPurge(null);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      
+      await batch.commit();
+      alert(`Successfully purged ${snapshot.size} generations for ${userToPurge.email}`);
+      setUserToPurge(null);
+    } catch (error) {
+      console.error("Error purging generations:", error);
+      alert("Failed to purge generations.");
+      handleFirestoreError(error, OperationType.DELETE, `generations_purge/${userToPurge.id}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGlobalPurge = async () => {
+    setIsSaving(true);
+    try {
+      const q = query(collection(db, 'generations'));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        alert("System already clean. No generations found.");
+        setShowGlobalPurge(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      
+      await batch.commit();
+      alert(`System-wide purge complete. Destroyed ${snapshot.size} records.`);
+      setShowGlobalPurge(false);
+    } catch (error) {
+      console.error("Global purge failed:", error);
+      alert("Failed to execute global purge.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) || 
     u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -265,17 +325,30 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                       {isAdmin && <span className="text-[10px] font-mono opacity-50 truncate mt-1">ID: {user.id}</span>}
                     </div>
                     {!(adminUids.has(user.id) || currentHardcodedAdmins.includes(user.email || '')) && (
-                      <button 
-                        onClick={() => setUserToDelete({ id: user.id, email: user.email || 'Unknown' })}
-                        className={`p-1.5 border transition-colors ${
-                          theme === 'dark' 
-                            ? 'border-red-500/30 text-red-400 hover:bg-red-500/20' 
-                            : 'border-red-500/30 text-red-600 hover:bg-red-50'
-                        }`}
-                        title="Thoroughly Purge User Account"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setUserToPurge({ id: user.id, email: user.email || 'Unknown' })}
+                          className={`p-1.5 border transition-colors ${
+                            theme === 'dark' 
+                              ? 'border-amber-500/30 text-amber-400 hover:bg-amber-500/20' 
+                              : 'border-amber-500/30 text-amber-600 hover:bg-amber-50'
+                          }`}
+                          title="Purge User Generations"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => setUserToDelete({ id: user.id, email: user.email || 'Unknown' })}
+                          className={`p-1.5 border transition-colors ${
+                            theme === 'dark' 
+                              ? 'border-red-500/30 text-red-400 hover:bg-red-500/20' 
+                              : 'border-red-500/30 text-red-600 hover:bg-red-50'
+                          }`}
+                          title="Thoroughly Purge User Account"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
                   
@@ -364,6 +437,19 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                   <div className="px-4 py-2 border bg-indigo-600 text-white font-mono text-[10px] uppercase tracking-widest font-bold">
                     Orphaned Accounts: {authUsers.filter(au => !users.some(u => u.id === au.uid)).length}
                   </div>
+                </div>
+
+                <div className="mt-8 p-6 border border-red-500/20 bg-red-500/5">
+                   <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-red-500 mb-2">Danger_Zone</h3>
+                   <p className="text-[10px] font-mono opacity-60 mb-4 tracking-tighter uppercase">Mass_Destruction_Protocol: This will irreversibly scrub EVERY generation record from the entire system database.</p>
+                   <button 
+                     onClick={() => setShowGlobalPurge(true)}
+                     className={`px-6 py-3 border-2 font-mono text-[10px] uppercase font-black tracking-widest transition-all ${
+                       theme === 'dark' ? 'border-red-500 text-red-500 hover:bg-red-500 hover:text-black' : 'border-red-600 text-red-600 hover:bg-red-600 hover:text-white'
+                     }`}
+                   >
+                     Initialize_Global_Purge
+                   </button>
                 </div>
               </div>
 
@@ -461,6 +547,128 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                 >
                   {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
                   Confirm_Purge
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {userToPurge && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setUserToPurge(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className={`relative w-full max-w-md p-6 border-2 flex flex-col items-center gap-6 text-center shadow-2xl ${
+                theme === 'dark' 
+                  ? 'border-amber-500/50 bg-[#1A1A1A] text-[#F8F8F7]' 
+                  : 'border-amber-600 bg-white text-[#141414]'
+              }`}
+            >
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${theme === 'dark' ? 'bg-amber-500/20 text-amber-500' : 'bg-amber-100 text-amber-600'}`}>
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-serif italic text-2xl">Purge Generations</h3>
+                <p className="text-sm opacity-80">
+                  Are you sure you want to delete ALL blog generations for <span className="font-bold underline decoration-dotted">{userToPurge.email}</span>?
+                </p>
+                <div className={`p-4 border text-[10px] font-mono text-left space-y-1 ${theme === 'dark' ? 'bg-amber-900/10 border-amber-500/20 text-amber-200' : 'bg-amber-50 border-amber-500/20 text-amber-900'}`}>
+                  <p className="font-bold opacity-100 mb-2">PURGE_PROTOCOL_NOTICE:</p>
+                  <p>— IRREVERSIBLE: All generated text content will be permanently removed.</p>
+                  <p>— DATA_LOSS: Media references within the posts will be orphaned.</p>
+                  <p>— ACCOUNT_PRESERVATION: User profile and uploaded files will NOT be affected.</p>
+                </div>
+              </div>
+              <div className="flex gap-4 w-full">
+                <button
+                  onClick={() => setUserToPurge(null)}
+                  disabled={isSaving}
+                  className={`flex-1 py-3 border font-bold uppercase tracking-widest text-[10px] transition-all ${
+                    theme === 'dark'
+                      ? 'border-[#333] hover:bg-[#333]'
+                      : 'border-black hover:bg-gray-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmPurgeGenerations}
+                  disabled={isSaving}
+                  className="flex-1 py-3 border border-amber-500 bg-amber-500 text-white font-bold uppercase tracking-widest text-[10px] hover:bg-amber-600 transition-all flex items-center justify-center gap-2"
+                >
+                  {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Confirm_Purge
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showGlobalPurge && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowGlobalPurge(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className={`relative w-full max-w-md p-6 border-2 flex flex-col items-center gap-6 text-center shadow-2xl ${
+                theme === 'dark' 
+                  ? 'border-red-500/50 bg-[#1A1A1A] text-[#F8F8F7]' 
+                  : 'border-red-600 bg-white text-[#141414]'
+              }`}
+            >
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${theme === 'dark' ? 'bg-red-500/20 text-red-500' : 'bg-red-100 text-red-600'}`}>
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-serif italic text-2xl text-red-500">Global System Purge</h3>
+                <p className="text-sm opacity-80 uppercase font-mono font-bold tracking-tighter">
+                  CRITICAL: All user generations will be DESTROYED.
+                </p>
+                <div className={`p-4 border text-[10px] font-mono text-left space-y-1 ${theme === 'dark' ? 'bg-red-900/10 border-red-500/20 text-red-200' : 'bg-red-50 border-red-500/20 text-red-900'}`}>
+                  <p className="font-bold opacity-100 mb-2">SYSTEM_WIPE_NOTICE:</p>
+                  <p>— TOTAL_DESTRUCTION: 100% of generation history will be lost.</p>
+                  <p>— ORPHANED_MEDIA: Assets remain but references disappear.</p>
+                  <p>— NO_UNDO: This action cannot be reverted.</p>
+                </div>
+              </div>
+              <div className="flex gap-4 w-full">
+                <button
+                  onClick={() => setShowGlobalPurge(false)}
+                  disabled={isSaving}
+                  className={`flex-1 py-3 border font-bold uppercase tracking-widest text-[10px] transition-all ${
+                    theme === 'dark'
+                      ? 'border-[#333] hover:bg-[#333]'
+                      : 'border-black hover:bg-gray-100'
+                  }`}
+                >
+                  Abort_Wipe
+                </button>
+                <button
+                  onClick={handleGlobalPurge}
+                  disabled={isSaving}
+                  className="flex-1 py-3 border border-red-500 bg-red-500 text-white font-bold uppercase tracking-widest text-[10px] hover:bg-red-600 transition-all flex items-center justify-center gap-2"
+                >
+                  {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Confirm_Global_Purge
                 </button>
               </div>
             </motion.div>

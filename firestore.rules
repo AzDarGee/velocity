@@ -118,23 +118,23 @@ service cloud.firestore {
     }
 
     match /generations/{generationId} {
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidGeneration(incoming()) && incoming().createdAt == request.time;
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidGeneration(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasAny(['content', 'title', 'updatedAt', 'preferences', 'fileIds', 'status']) &&
         incoming().userId == existing().userId &&
         incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasAny(['content', 'title', 'updatedAt', 'preferences', 'fileIds', 'status'])
       );
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /files/{fileId} {
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidFile(incoming()) && incoming().createdAt == request.time;
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
   }
 }
