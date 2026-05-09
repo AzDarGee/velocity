@@ -508,7 +508,12 @@ export default function App() {
         uploadFile(id, file); // Trigger background upload
         return mediaFile;
       });
-      setMediaFiles((prev) => [...prev, ...newFiles]);
+      setMediaFiles((prev) => {
+        const combined = [...prev, ...newFiles];
+        // Explicitly deduplicate by ID to ensure React keys never clash
+        const unique = Array.from(new Map(combined.map(f => [f.id, f])).values());
+        return unique;
+      });
     }
   };
 
@@ -1153,7 +1158,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       const isGenProcessing = gen.status === 'processing' || generatingIds.has(gen.id);
                       return (
                         <div 
-                          key={gen.id}
+                          key={`history-gen-${gen.id}`}
                           onClick={() => !isGenProcessing && loadGeneration(gen)}
                           className={`p-4 border transition-all cursor-pointer group relative ${
                             isGenProcessing ? 'opacity-70 cursor-wait' : ''
@@ -1251,7 +1256,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 <AnimatePresence>
                   {mediaFiles.map((v) => (
                     <motion.div 
-                      key={v.id}
+                      key={`media-file-${v.id}`}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 10 }}
@@ -1459,9 +1464,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                             {categories.map(cat => {
                               if (!groupedModels[cat] || groupedModels[cat].length === 0) return null;
                               return (
-                                <optgroup key={cat} label={`-- ${cat.split('. ')[1]} --`} className="font-bold border-t bg-black/5 dark:bg-white/5">
+                                <optgroup key={`optgroup-${cat}`} label={`-- ${cat.split('. ')[1]} --`} className="font-bold border-t bg-black/5 dark:bg-white/5">
                                   {groupedModels[cat].map(m => (
-                                    <option key={`dyn-${m.id}`} value={m.id} className="font-normal bg-white dark:bg-[#1A1A1A]">{m.name}</option>
+                                    <option key={`model-opt-${m.id}`} value={m.id} className="font-normal bg-white dark:bg-[#1A1A1A]">{m.name}</option>
                                   ))}
                                 </optgroup>
                               );
@@ -1510,7 +1515,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       "Renewable Energy Techs", "Agri-Tech Innovators", "Supply Chain Logistics Pros", "Customer Success Managers",
                       "Sales Representatives", "Public Relations Experts", "Event Planners"
                     ].map((audience) => (
-                      <label key={audience} className="flex items-center gap-3 cursor-pointer group/item">
+                      <label key={`audience-seg-${audience}`} className="flex items-center gap-3 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
                             type="checkbox"
@@ -1561,7 +1566,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       "Scientific & Data-Driven", "Provocative & Contrarian", "Luxurious & Sophisticated",
                       "Nostalgic & Reflective", "Cyberpunk & Technical"
                     ].map((tone) => (
-                      <label key={tone} className="flex items-center gap-2 cursor-pointer group/item">
+                      <label key={`tone-selector-${tone}`} className="flex items-center gap-2 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
                             type="checkbox"

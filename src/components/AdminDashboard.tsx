@@ -319,7 +319,7 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
           ) : activeTab === 'users' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredUsers.map(user => (
-                <div key={user.id} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
+                <div key={`admin-user-card-${user.id}`} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-2">
@@ -467,7 +467,7 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                    if (isHardcoded || isDbAdmin) return null;
 
                    return (
-                     <div key={au.uid} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
+                     <div key={`auth-node-${au.uid}`} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
                         <div className="flex flex-col">
                            <div className="flex items-center gap-3">
                               <span className="font-bold text-xs">{au.email}</span>
