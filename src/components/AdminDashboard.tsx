@@ -51,7 +51,9 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
         const response = await fetch(`/api/admin/auth-users?adminId=${currentUser.uid}`);
         const data = await response.json();
         if (data.users) {
-          setAuthUsers(data.users);
+          // Explicit deduplication by UID
+          const uniqueAuth = Array.from(new Map(data.users.map((u: any) => [u.uid, u])).values());
+          setAuthUsers(uniqueAuth);
         }
       } catch (err) {
         console.error("Failed to fetch auth users:", err);
@@ -73,13 +75,17 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
       const adminSnapshot = await getDocs(adminQ);
       const adminIds = new Set(adminSnapshot.docs.map(d => d.id));
       setAdminUids(adminIds);
+      
+      // Deduplicate by ID
+      const uniqueUsers = Array.from(new Map(fetchedUsers.map(u => [u.id, u])).values());
+      
       // Sort by creation date if possible
-      fetchedUsers.sort((a, b) => {
+      uniqueUsers.sort((a, b) => {
         if (!a.createdAt) return 1;
         if (!b.createdAt) return -1;
         return b.createdAt.toMillis() - a.createdAt.toMillis();
       });
-      setUsers(fetchedUsers);
+      setUsers(uniqueUsers);
       } catch (error) {
         console.error("Error fetching users:", error);
         handleFirestoreError(error, OperationType.LIST, 'users');

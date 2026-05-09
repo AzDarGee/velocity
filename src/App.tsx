@@ -273,7 +273,9 @@ export default function App() {
         );
         unsubscribeHistory = onSnapshot(q, (snapshot) => {
           const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setHistory(docs);
+          // Explicit deduplication to prevent "duplicate key" error if Firestore ever sends same doc twice
+          const uniqueHistory = Array.from(new Map(docs.map(d => [d.id, d])).values());
+          setHistory(uniqueHistory);
         }, (err) => {
           handleFirestoreError(err, OperationType.LIST, "generations");
         });
@@ -674,7 +676,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
       }
 
       // 1. Create Placeholder Generation
-      const fileIds: string[] = readyVideos.map(v => (v as any).firestoreId).filter(Boolean);
+      const fileIds: string[] = Array.from(new Set(readyVideos.map(v => (v as any).firestoreId).filter(Boolean)));
       const generationData = {
         userId: user.uid,
         content: "",
@@ -703,13 +705,13 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         if (!apiKey) throw new Error("OpenRouter API Key is missing");
 
         const prompt = `You are a world-class blog post writer. 
-Convert provided media context into a high-quality, professional blog post.
+Transform provided media context into a high-quality, professional blog post.
 
-STRUCTURE REQUIREMENTS:
-1. TITLE: Start with a compelling H1 title (e.g., # My Amazing Story).
-2. KEY SECTIONS: Use H2 (##) and H3 (###) headers to organize the content into logical sections.
-3. QUOTES: Include at least two insightful blockquotes (>) synthesizing key takeaways or "voice" from the media.
-4. NARRATIVE: Create a cohesive story, not just a description of the files.
+CRITICAL ARCHITECTURE REQUIREMENTS:
+1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
+2. STRUCTURAL_HIERARCHY: Organize the article into clear logical sections using H2 (##) and H3 (###) headers. Never output a flat wall of text.
+3. NARRATIVE_QUOTES: Include at least TWO insightful blockquotes (>) synthesizing key takeaways or "voice" captured from the source media.
+4. COHESIVE_FLOW: Create a compelling narrative arc, not just a clinical description of the provided files.
 
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
@@ -723,7 +725,7 @@ Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA
 AVAILABLE MEDIA ASSETS (IDs and Names):
 ${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
 
-Synthesize the content from these assets into a cohesive narrative.`;
+Synthesize the content from these assets into a cohesive narrative. Do not just list them.`;
 
         let additionalText = "";
         readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
@@ -743,13 +745,13 @@ Synthesize the content from these assets into a cohesive narrative.`;
         generatedContent = data.text;
       } else {
         const fileParts = readyVideos.map(v => v.uri ? { fileData: { fileUri: v.uri, mimeType: v.mimeType || "application/octet-stream" } } : null).filter(p => p !== null);
-        const prompt = `You are an expert technical blogger. Transform provided media into a high-quality, professional blog post.
+        const prompt = `You are an expert technical blogger and narrative strategist. Transform provided media into a high-quality, professional blog post.
 
-STRUCTURE REQUIREMENTS:
-1. TITLE: Start with a compelling H1 title (e.g., # My Amazing Story).
-2. KEY SECTIONS: Use H2 (##) and H3 (###) headers to organize the content into logical sections.
-3. QUOTES: Include at least two insightful blockquotes (>) synthesizing key takeaways or "voice" from the media.
-4. NARRATIVE: Create a cohesive story, not just a description of the files.
+CRITICAL ARCHITECTURE REQUIREMENTS:
+1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
+2. STRUCTURAL_HIERARCHY: Organize the article into clear logical sections using H2 (##) and H3 (###) headers. Never output a flat wall of text.
+3. NARRATIVE_QUOTES: Include at least TWO insightful blockquotes (>) synthesizing key takeaways or "voice" captured from the source media.
+4. COHESIVE_FLOW: Create a compelling narrative arc, not just a clinical description of the provided files.
 
 TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
@@ -991,7 +993,10 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
           storageUrl: f.storageUrl,
           extractedText: f.extractedText
         }));
-        setMediaFiles(restoredMedia);
+        
+        // Deduplicate restored media to prevent "duplicate key" error in components
+        const uniqueMedia = Array.from(new Map(restoredMedia.map(m => [m.id, m])).values());
+        setMediaFiles(uniqueMedia);
       } catch (err) {
         console.error("Error fetching attached files:", err);
       }
