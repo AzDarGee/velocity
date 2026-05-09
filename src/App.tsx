@@ -1099,6 +1099,28 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             onClose={() => setViewerContent(null)}
             onDownload={exportToPDF}
             onCopy={copyToClipboard}
+            onDownloadAsset={async (m) => {
+              if (m.file) {
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(m.file);
+                link.download = m.name || 'download';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              } else if (m.storageUrl || m.previewUrl) {
+                await downloadFile({
+                  id: m.id,
+                  name: m.name || 'download',
+                  type: m.mimeType || 'application/octet-stream',
+                  size: m.size || 0,
+                  storageUrl: m.storageUrl || m.previewUrl,
+                  data: m.previewUrl,
+                  uri: m.uri,
+                  mimeType: m.mimeType,
+                  extractedText: m.extractedText
+                });
+              }
+            }}
           />
         )}
       </AnimatePresence>

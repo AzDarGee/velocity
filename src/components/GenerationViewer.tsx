@@ -12,6 +12,7 @@ interface MediaFile {
   firestoreId?: string;
   type?: 'video' | 'audio' | 'image';
   size?: number;
+  storageUrl?: string;
 }
 
 interface GenerationViewerProps {
@@ -23,10 +24,12 @@ interface GenerationViewerProps {
   onClose: () => void;
   onDownload: () => void;
   onCopy: () => void;
+  onDownloadAsset?: (file: MediaFile) => void;
 }
 
-export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, onClose, onDownload, onCopy }: GenerationViewerProps) {
+export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, onClose, onDownload, onCopy, onDownloadAsset }: GenerationViewerProps) {
   const [isCopied, setIsCopied] = useState(false);
+  const [showAssets, setShowAssets] = useState(false);
 
   const handleCopy = () => {
     onCopy();
@@ -53,6 +56,51 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="relative">
+            <button 
+              onClick={() => setShowAssets(!showAssets)}
+              className={`flex items-center gap-2 px-4 py-2 border-2 text-[10px] uppercase font-bold tracking-widest transition-all ${
+                theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black font-semibold' : 'border-[#141414] hover:bg-black hover:text-white'
+              } ${showAssets ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : ''}`}
+            >
+              <Download className="w-4 h-4" />
+              Source Assets ({mediaFiles.length})
+            </button>
+            
+            <AnimatePresence>
+              {showAssets && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className={`absolute top-full right-0 mt-2 w-72 border-2 p-2 z-[110] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-[#141414]'}`}
+                >
+                  <div className="space-y-1">
+                    {mediaFiles.length === 0 ? (
+                      <p className="text-[10px] font-mono opacity-40 p-4 text-center">No assets found for this synthesis.</p>
+                    ) : (
+                      mediaFiles.map((m) => (
+                        <div key={m.id} className={`flex items-center justify-between p-2 border border-transparent hover:border-current transition-colors group/asset ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+                          <div className="flex flex-col min-w-0 flex-1 mr-2">
+                             <span className="text-[10px] font-bold truncate uppercase">{m.name}</span>
+                             <span className="text-[8px] opacity-40 font-mono">{( (m.size || 0) / (1024 * 1024)).toFixed(2)}MB</span>
+                          </div>
+                          <button 
+                            onClick={() => onDownloadAsset?.(m)}
+                            className={`p-1.5 border border-current opacity-40 hover:opacity-100 transition-all ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
+                            title="Download Asset"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <button 
             onClick={handleCopy}
             className={`flex items-center gap-2 px-4 py-2 border-2 text-[10px] uppercase font-bold tracking-widest transition-all ${
