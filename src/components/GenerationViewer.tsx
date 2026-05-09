@@ -150,19 +150,21 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                   if (src?.startsWith('MEDIA_ID_')) {
                     const id = src.replace('MEDIA_ID_', '');
                     const media = mediaFiles.find(m => m.id === id || m.firestoreId === id);
-                    if (media && media.previewUrl) {
+                    if (media) {
                       const type = media.mimeType || media.type || '';
                       const name = media.name || 'Asset';
+                      const displayUrl = media.previewUrl || media.storageUrl;
 
                       if (type.includes('image')) {
                         return (
                           <div className="group my-12 space-y-4">
                             <div className="relative overflow-hidden">
                               <img 
-                                src={media.previewUrl} 
+                                src={displayUrl} 
                                 alt={alt || name} 
                                 referrerPolicy="no-referrer"
                                 className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
+                                {...props} 
                               />
                               <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
                               <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
@@ -177,10 +179,16 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                         return (
                           <div className="my-14 space-y-4">
                             <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
-                              <video src={media.previewUrl} controls className="w-full aspect-video" crossOrigin="anonymous" />
+                              <video src={displayUrl} controls className="w-full aspect-video" crossOrigin="anonymous" />
                               <div className={`absolute top-0 right-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
                                 Motion_Data_Stream
                               </div>
+                              <button 
+                                onClick={() => onDownloadAsset?.(media)}
+                                className={`absolute bottom-4 right-4 p-2 transition-all ${theme === 'dark' ? 'bg-white text-black hover:bg-black hover:text-white' : 'bg-black text-white hover:bg-white hover:text-black'}`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
                             </div>
                             <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Video Extraction: {alt || name}</p>
                           </div>
@@ -189,16 +197,24 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                       if (type.includes('audio')) {
                         return (
                           <div className={`my-12 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
-                            <div className="flex items-center gap-6 mb-8">
-                              <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                                <FileAudio className="w-6 h-6" />
+                            <div className="flex items-center justify-between mb-8">
+                              <div className="flex items-center gap-6">
+                                <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                                  <FileAudio className="w-6 h-6" />
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
+                                  <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
-                                <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
-                              </div>
+                              <button 
+                                onClick={() => onDownloadAsset?.(media)}
+                                className={`p-3 border-2 transition-all ${theme === 'dark' ? 'border-white/20 hover:bg-white hover:text-black' : 'border-black/20 hover:bg-black hover:text-white'}`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
                             </div>
-                            <audio src={media.previewUrl} controls className="w-full h-12" crossOrigin="anonymous" />
+                            <audio src={displayUrl} controls className="w-full h-12" crossOrigin="anonymous" />
                           </div>
                         );
                       }
@@ -214,6 +230,12 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                              <h4 className="text-lg font-bold uppercase truncate">{name}</h4>
                              <p className="text-[10px] font-mono opacity-40">{( (media.size || 0) / (1024 * 1024)).toFixed(2)} MB</p>
                            </div>
+                           <button 
+                            onClick={() => onDownloadAsset?.(media)}
+                            className={`p-4 border-2 transition-all hover:scale-110 active:scale-95 ${theme === 'dark' ? 'border-white/20 hover:bg-white hover:text-black' : 'border-black/20 hover:bg-black hover:text-white'}`}
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
                         </div>
                       );
                     }

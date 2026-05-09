@@ -51,6 +51,7 @@ interface BlogPreferences {
   length: string;
   specificFocus: string;
   model: string;
+  systemPrompt: string;
 }
 
 type UploadState = 'PENDING' | 'UPLOADING' | 'PROCESSING' | 'ACTIVE' | 'FAILED';
@@ -87,6 +88,7 @@ import { AdminDashboard } from "./components/AdminDashboard";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Header } from "./components/layout/Header";
 import { GenerationViewer } from "./components/GenerationViewer";
+import { RotatingQuotes } from './components/ui/RotatingQuotes';
 
 const getOpenRouterCategory = (m: any) => {
   const id = m.id.toLowerCase();
@@ -128,11 +130,13 @@ export default function App() {
     length: "Medium (approx. 600 words)",
     specificFocus: "Unique narrative stories.",
     model: "gemini-3-flash-preview",
+    systemPrompt: "",
   });
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
   const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
+  const [isGeneratingSystemPrompt, setIsGeneratingSystemPrompt] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -150,6 +154,16 @@ export default function App() {
     { title: "Refining_Voice_Profile", detail: "APPLYING SELECTED TONE AND ATTRIBUTE LAYERS..." },
     { title: "Structuring_Layout", detail: "OPTIMIZING HIERARCHY AND MARKDOWN ARCHITECTURE..." },
     { title: "Finalizing_Synthesis", detail: "PERFORMING FINAL HEURISTIC POLISH..." }
+  ];
+
+  const FOCUS_QUOTES = [
+    "Scanning content nodes...",
+    "Aligning narrative vectors...",
+    "Calibrating strategic intent...",
+    "Synthesizing unique angles...",
+    "Decoding audience resonance...",
+    "Optimizing hook frequency...",
+    "Mapping key thematic clusters..."
   ];
 
   useEffect(() => {
@@ -305,6 +319,7 @@ export default function App() {
           tone: [],
           length: "Medium (approx. 600 words)",
           specificFocus: "Unique narrative stories.",
+          systemPrompt: "",
           model: "gemini-3-flash-preview",
         });
       }
@@ -632,6 +647,83 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
     }
   };
 
+  const handleGenerateSystemPrompt = async () => {
+    if (!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) return;
+    setIsGeneratingSystemPrompt(true);
+    try {
+      const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
+      const isOpenRouter = preferences.model.includes("/");
+
+      const promptText = `You are an expert prompt engineer. Based on the provided source media, target audience, and tone parameters, design a comprehensive system prompt directed at an AI blog writer. The system prompt should explicitly define the AI's persona, writing style, formatting constraints, and the key thematic elements it needs to extract and synthesize from the source material to create a high-quality professional and creative blog post. Do not include preambles, just output the system prompt text.
+Theme: General professional content
+Target Audience: ${preferences.targetAudience.join(", ")}
+Tone: ${preferences.tone.join(", ")}`;
+
+      let additionalText = "";
+      readyVideos.forEach(v => {
+        if (v.extractedText) {
+          additionalText += `\n[Content of Doc ${v.name}]:\n${v.extractedText}\n`;
+        }
+      });
+
+      const fullPromptText = promptText + (additionalText ? "\\n\\nSource Content:\\n" + additionalText : "");
+
+      if (isOpenRouter) {
+        const user = auth.currentUser;
+        if (!user) throw new Error("Authentication Required");
+        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
+        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+
+        if (!apiKey) {
+          throw new Error("OpenRouter Key Missing");
+        }
+
+        const response = await fetch("/api/ai/openrouter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: preferences.model,
+            apiKey,
+            messages: [{ role: "user", content: fullPromptText }]
+          })
+        });
+
+        const data = await response.json();
+        if (data.text) {
+          setPreferences(prev => ({ ...prev, systemPrompt: data.text.trim() }));
+        }
+      } else {
+        const fileParts = readyVideos.map(v => {
+          if (v.extractedText) return null;
+          if (!v.uri) return null;
+          return {
+            fileData: {
+              fileUri: v.uri,
+              mimeType: v.mimeType || "application/octet-stream"
+            }
+          };
+        }).filter(p => p !== null);
+
+        const result = await ai.models.generateContent({
+          model: preferences.model,
+          contents: [
+            ...fileParts as any,
+            fullPromptText
+          ]
+        });
+
+        if (result.text) {
+          setPreferences(prev => ({ ...prev, systemPrompt: result.text.trim() }));
+        }
+      }
+    } catch (err: any) {
+      console.error("System prompt generation error:", err);
+      setError(`The selected LLM provider could not handle this request. Please choose another LLM provider. Details: ${err.message || "Unknown error."}`);
+    } finally {
+      setIsGeneratingSystemPrompt(false);
+    }
+  };
+
   const handleGenerate = async () => {
     const user = auth.currentUser;
     if (!user) {
@@ -709,7 +801,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
         const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
         if (!apiKey) throw new Error("OpenRouter API Key is missing");
 
-        const prompt = `You are a world-class blog post writer. 
+        const prompt = `${preferences.systemPrompt}
 Transform provided media context into a high-quality, professional blog post.
 
 CRITICAL ARCHITECTURE REQUIREMENTS:
@@ -750,7 +842,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         generatedContent = data.text;
       } else {
         const fileParts = readyVideos.map(v => v.uri ? { fileData: { fileUri: v.uri, mimeType: v.mimeType || "application/octet-stream" } } : null).filter(p => p !== null);
-        const prompt = `You are an expert technical blogger and narrative strategist. Transform provided media into a high-quality, professional blog post.
+        const prompt = `${preferences.systemPrompt}\nTransform provided media into a high-quality, professional blog post.
 
 CRITICAL ARCHITECTURE REQUIREMENTS:
 1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
@@ -941,6 +1033,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       tone: [],
       length: "Medium (approx. 600 words)",
       specificFocus: "Unique narrative stories.",
+      systemPrompt: "",
       model: "gemini-3-flash-preview",
     });
     setIsHistoryOpen(false);
@@ -949,22 +1042,28 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const loadGeneration = async (gen: any) => {
-    setBlogPost(gen.content);
-    setOriginalContent(gen.content);
-    setCurrentGenerationId(gen.id);
-    setCurrentAttachedFiles([]);
-    setMediaFiles([]);
-    if (gen.preferences) {
-      setPreferences(gen.preferences);
-    }
-    
-    // Fetch attached files
-    if (gen.fileIds && gen.fileIds.length > 0) {
-      try {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      // Set content immediately, but don't clear mediaFiles yet to avoid flicker if possible, 
+      // or at least wait until we have the new ones.
+      setBlogPost(gen.content);
+      setOriginalContent(gen.content);
+      setCurrentGenerationId(gen.id);
+      
+      if (gen.preferences) {
+        setPreferences(gen.preferences);
+      }
+      
+      let fetchedFiles: AttachedFile[] = [];
+      let restoredMedia: MediaFile[] = [];
+
+      // Fetch attached files
+      if (gen.fileIds && gen.fileIds.length > 0) {
         const filePromises = gen.fileIds.map((fileId: string) => getDoc(doc(db, "files", fileId)));
         const fileSnaps = await Promise.all(filePromises);
         
-        const files: AttachedFile[] = fileSnaps
+        fetchedFiles = fileSnaps
           .filter(snap => snap.exists())
           .map(snap => {
             const data = snap.data() as any;
@@ -981,33 +1080,33 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             };
           });
         
-        setCurrentAttachedFiles(files);
-        
-        // Populate mediaFiles so the preview can find them
-        const restoredMedia: MediaFile[] = files.map(f => ({
+        restoredMedia = fetchedFiles.map(f => ({
           id: f.id,
           firestoreId: f.id,
           name: f.name,
-          type: (f.type.includes('video') ? 'video' : f.type.includes('audio') ? 'audio' : f.type.includes('image') ? 'image' : undefined) as any,
+          type: (f.type?.includes('video') ? 'video' : f.type?.includes('audio') ? 'audio' : f.type?.includes('image') ? 'image' : undefined) as any,
           status: 'ACTIVE',
           progress: 100,
-          previewUrl: f.data || f.storageUrl || undefined, // use storageUrl as previewUrl fallback
+          previewUrl: f.data || f.storageUrl || undefined,
           size: f.size,
           mimeType: f.type,
-          uri: (f as any).uri,
+          uri: f.uri,
           storageUrl: f.storageUrl,
           extractedText: f.extractedText
         }));
-        
-        // Deduplicate restored media to prevent "duplicate key" error in components
-        const uniqueMedia = Array.from(new Map(restoredMedia.map(m => [m.id, m])).values());
-        setMediaFiles(uniqueMedia);
-      } catch (err) {
-        console.error("Error fetching attached files:", err);
       }
-    }
 
-    setIsHistoryOpen(false);
+      // Update states atomically at the end
+      setCurrentAttachedFiles(fetchedFiles);
+      setMediaFiles(Array.from(new Map(restoredMedia.map(m => [m.id, m])).values()));
+      
+      setIsHistoryOpen(false);
+    } catch (err: any) {
+      console.error("Error loading generation:", err);
+      setError("Failed to load historical record: " + (err.message || "Unknown error"));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const deleteGeneration = async (id: string) => {
@@ -1107,18 +1206,27 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-              } else if (m.storageUrl || m.previewUrl) {
-                await downloadFile({
-                  id: m.id,
-                  name: m.name || 'download',
-                  type: m.mimeType || 'application/octet-stream',
-                  size: m.size || 0,
-                  storageUrl: m.storageUrl || m.previewUrl,
-                  data: m.previewUrl,
-                  uri: m.uri,
-                  mimeType: m.mimeType,
-                  extractedText: m.extractedText
-                });
+              } else if (m.storageUrl || (m.previewUrl && m.previewUrl.startsWith('http'))) {
+                 const downloadUrl = m.storageUrl || m.previewUrl;
+                 if (downloadUrl) {
+                   await downloadFile({
+                    id: m.id,
+                    name: m.name || 'download',
+                    type: m.mimeType || 'application/octet-stream',
+                    size: m.size || 0,
+                    storageUrl: downloadUrl,
+                    uri: m.uri,
+                    mimeType: m.mimeType,
+                    extractedText: m.extractedText
+                  });
+                 }
+              } else if (m.previewUrl) {
+                const link = document.createElement("a");
+                link.href = m.previewUrl;
+                link.download = m.name || 'download';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
               }
             }}
           />
@@ -1282,7 +1390,8 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 10 }}
-                      className={`flex flex-col p-4 border transition-all group ${
+                      onClick={() => v.status === 'ACTIVE' && setPreviewMedia(v)}
+                      className={`flex flex-col p-4 border transition-all cursor-pointer group ${
                         v.status === 'ACTIVE' 
                           ? (theme === 'dark' ? 'border-green-500 bg-green-500/20 shadow-[4px_4px_0px_0px_rgba(34,197,94,1)] text-green-400' : 'border-green-500 bg-green-100 shadow-[4px_4px_0px_0px_rgba(34,197,94,1)] text-green-800') 
                           : (theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]')
@@ -1327,14 +1436,8 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                         </div>
                         <div className="flex items-center gap-1">
                           <button 
-                            onClick={() => setPreviewMedia(v)}
-                            className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
-                            title="Preview File"
-                          >
-                            <Eye className="w-3 h-3" />
-                          </button>
-                          <button 
-                            onClick={async () => {
+                            onClick={async (e) => {
+                              e.stopPropagation();
                               if (v.file) downloadLocalFile(v.file);
                               else if (v.storageUrl || v.previewUrl) {
                                 await downloadFile({
@@ -1356,7 +1459,10 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                             <Download className="w-3 h-3" />
                           </button>
                           <button 
-                            onClick={() => setMediaFileToDelete(v)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMediaFileToDelete(v);
+                            }}
                             className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
                             title="Remove File"
                           >
@@ -1461,15 +1567,16 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                   <select 
                     value={preferences.model}
                     onChange={(e) => setPreferences({ ...preferences, model: e.target.value })}
+                    style={{ colorScheme: theme }}
                     className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
                       theme === 'dark' 
                         ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                         : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
                     }`}
                   >
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Analytical & Deep)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast & Balanced)</option>
-                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (High Speed)</option>
+                    <option value="gemini-3.1-pro-preview" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3.1 Pro (Analytical & Deep)</option>
+                    <option value="gemini-3-flash-preview" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3 Flash (Fast & Balanced)</option>
+                    <option value="gemini-3.1-flash-lite" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3.1 Flash-Lite (High Speed)</option>
                     {hasOpenRouterKey && openRouterModels.length > 0 && (
                       (() => {
                         const categories = ["1. Text", "2. Image", "3. Embeddings", "4. Audio", "5. Video", "6. Rerank", "7. Speech", "8. Transcription"];
@@ -1482,13 +1589,23 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
 
                         return (
                           <>
-                            <option disabled className="font-bold border-t">-- Dynamic OpenRouter Models --</option>
+                            <option disabled className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-100 text-black'}`}>-- Dynamic OpenRouter Models --</option>
                             {categories.map(cat => {
                               if (!groupedModels[cat] || groupedModels[cat].length === 0) return null;
                               return (
-                                <optgroup key={`optgroup-${cat}`} label={`-- ${cat.split('. ')[1]} --`} className="font-bold border-t bg-black/5 dark:bg-white/5">
+                                <optgroup 
+                                  key={`optgroup-${cat}`} 
+                                  label={`-- ${cat.split('. ')[1]} --`} 
+                                  className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-50 text-black'}`}
+                                >
                                   {groupedModels[cat].map(m => (
-                                    <option key={`model-opt-${m.id}`} value={m.id} className="font-normal bg-white dark:bg-[#1A1A1A]">{m.name}</option>
+                                    <option 
+                                      key={`model-opt-${m.id}`} 
+                                      value={m.id} 
+                                      className={`font-normal ${theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}`}
+                                    >
+                                      {m.name}
+                                    </option>
                                   ))}
                                 </optgroup>
                               );
@@ -1499,11 +1616,11 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     )}
                     {hasOpenRouterKey && (
                       <>
-                        <option disabled className="font-bold border-t">-- OpenRouter Presets --</option>
-                        <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
-                        <option value="anthropic/claude-3.5-sonnet">Anthropic: Claude 3.5 Sonnet</option>
-                        <option value="meta-llama/llama-3.1-405b-instruct">Meta: Llama 3.1 405B</option>
-                        <option value="google/gemini-2.0-flash-exp:free">Google: Gemini 2.0 Flash (via OR)</option>
+                        <option disabled className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-100 text-black'}`}>-- OpenRouter Presets --</option>
+                        <option value="openai/gpt-4o" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>OpenAI: GPT-4o</option>
+                        <option value="anthropic/claude-3.5-sonnet" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Anthropic: Claude 3.5 Sonnet</option>
+                        <option value="meta-llama/llama-3.1-405b-instruct" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Meta: Llama 3.1 405B</option>
+                        <option value="google/gemini-2.0-flash-exp:free" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Google: Gemini 2.0 Flash (via OR)</option>
                       </>
                     )}
                   </select>
@@ -1622,6 +1739,68 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 </div>
 
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-30' : 'opacity-60'}`}>System_Prompt *</label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateSystemPrompt}
+                      disabled={isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                      className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
+                        theme === 'dark'
+                          ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
+                          : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
+                       } ${(!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {isGeneratingSystemPrompt ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3 h-3" />
+                          Auto-Generate
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <textarea 
+                      value={preferences.systemPrompt}
+                      onChange={(e) => setPreferences({ ...preferences, systemPrompt: e.target.value })}
+                      disabled={!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                      rows={6}
+                      placeholder="Enter a custom system prompt to guide the AI's behavior, style, and persona... *"
+                      className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
+                        theme === 'dark' 
+                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                      } ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingSystemPrompt ? 'text-transparent selection:text-transparent' : ''}`}
+                    />
+                    
+                    <AnimatePresence>
+                      {isGeneratingSystemPrompt && (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
+                            theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
+                          }`}
+                        >
+                          <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  {(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) && (
+                    <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
+                        Awaiting_Uplink: Media, target audience, and tones required to auto-generate system prompt.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                     <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Target_Length</label>
                     <select 
                       value={preferences.length}
@@ -1671,17 +1850,34 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       )}
                     </button>
                   </div>
-                  <textarea 
-                    value={preferences.specificFocus}
-                    onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
-                    disabled={!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
-                    rows={4}
-                    className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
-                      theme === 'dark' 
-                        ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
-                        : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                    } ${!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  />
+                  <div className="relative">
+                    <textarea 
+                      value={preferences.specificFocus}
+                      onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
+                      disabled={!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || isGeneratingFocus}
+                      rows={4}
+                      className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
+                        theme === 'dark' 
+                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                      } ${!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingFocus ? 'text-transparent selection:text-transparent' : ''}`}
+                    />
+                    
+                    <AnimatePresence>
+                      {isGeneratingFocus && (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
+                            theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
+                          }`}
+                        >
+                          <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                   {(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) && (
                     <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
                       {preferences.targetAudience.length === 0 
@@ -1764,9 +1960,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 
                 <button 
                   onClick={handleGenerate}
-                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
+                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
                   className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
+                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
                       ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
                       : (theme === 'dark' 
                           ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
@@ -2073,8 +2269,24 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                                           <button 
                                             id={`btn-dl-${media.id}`}
                                             onClick={() => {
-                                              if (media.storageUrl) downloadFile({ ...media, id: media.id, name: media.name || 'document', type: media.mimeType || 'application/octet-stream', size: media.size || 0 });
+                                              if (media.storageUrl || (media.previewUrl && (media.previewUrl.startsWith('http') || media.previewUrl.startsWith('https')))) {
+                                                downloadFile({ 
+                                                  id: media.id, 
+                                                  name: media.name || 'document', 
+                                                  type: media.mimeType || 'application/octet-stream', 
+                                                  size: media.size || 0,
+                                                  storageUrl: media.storageUrl || media.previewUrl
+                                                });
+                                              }
                                               else if (media.file) downloadLocalFile(media.file);
+                                              else if (media.previewUrl) {
+                                                const link = document.createElement("a");
+                                                link.href = media.previewUrl;
+                                                link.download = media.name || 'document';
+                                                document.body.appendChild(link);
+                                                link.click();
+                                                document.body.removeChild(link);
+                                              }
                                             }}
                                             className={`p-3 border-2 transition-all hover:rotate-12 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'}`}
                                           >
