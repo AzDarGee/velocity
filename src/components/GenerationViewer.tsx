@@ -13,6 +13,9 @@ interface MediaFile {
   type?: 'video' | 'audio' | 'image';
   size?: number;
   storageUrl?: string;
+  file?: File;
+  uri?: string;
+  extractedText?: string;
 }
 
 interface GenerationViewerProps {
@@ -42,7 +45,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-[100] flex flex-col ${theme === 'dark' ? 'bg-[#0A0A0A]' : 'bg-[#F8F8F7]'}`}
+      className={`fixed inset-0 z-[100] flex flex-col ${theme === 'dark' ? 'bg-[#0A0A0A] text-white' : 'bg-[#F8F8F7] text-black'}`}
     >
       <header className={`h-20 border-b flex items-center justify-between px-8 ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'}`}>
         <div className="flex items-center gap-4">
@@ -123,7 +126,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
 
           <button 
             onClick={onClose}
-            className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'}`}
+            className={`p-2 border-2 transition-colors ${theme === 'dark' ? 'border-[#333] text-white hover:bg-white hover:text-black' : 'border-[#141414] text-black hover:bg-black hover:text-white'}`}
           >
             <X className="w-6 h-6" />
           </button>
@@ -218,9 +221,9 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                   }
                   return <img src={src} alt={alt} referrerPolicy="no-referrer" className="max-w-full rounded" {...props} />;
                 },
-                h1: ({ children }) => <h1 className="text-4xl font-serif italic mb-8 uppercase tracking-tight">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-xl font-bold mt-8 mb-3">{children}</h3>,
+                h1: ({ children }) => <h1 className={`text-4xl font-serif italic mb-8 uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{children}</h1>,
+                h2: ({ children }) => <h2 className={`text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{children}</h2>,
+                h3: ({ children }) => <h3 className={`text-xl font-bold mt-8 mb-3 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{children}</h3>,
                 blockquote: ({ children }) => (
                   <blockquote className={`my-8 pl-6 border-l-4 py-2 italic font-serif text-lg leading-relaxed ${theme === 'dark' ? 'border-white/20 text-white/70' : 'border-black/20 text-black/70'}`}>
                     {children}
@@ -234,8 +237,8 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
         </article>
       </main>
 
-      <footer className={`h-12 border-t flex items-center justify-center ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'}`}>
-        <p className="text-[10px] uppercase font-mono tracking-[0.3em] opacity-30">Velocity Synthesis Protocol // End of Transcript</p>
+      <footer className={`h-12 border-t flex items-center justify-center ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A] text-white/30' : 'border-[#141414] bg-white text-black/30'}`}>
+        <p className="text-[10px] uppercase font-mono tracking-[0.3em]">Velocity Synthesis Protocol // End of Transcript</p>
       </footer>
     </motion.div>
   );
