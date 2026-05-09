@@ -112,7 +112,20 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
     setError(null);
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        if (!userCredential.user.emailVerified) {
+          // Send custom verification email via Resend if unverified on login
+          try {
+            await fetch('/api/auth/send-verification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: userCredential.user.email, returnUrl: window.location.origin })
+            });
+            setError("Security check: Your email signature is unverified. A fresh verification link has been transmitted to your inbox. Please authorize to unlock all synthesis protocols.");
+          } catch (vErr) {
+            console.error("Verification email failed to send on login:", vErr);
+          }
+        }
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, { displayName });
@@ -612,7 +625,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
               <div className="flex justify-between items-start mb-6 pb-6 border-b border-dashed border-current/20">
                 <div>
                   <h2 className="text-xl font-bold uppercase tracking-widest">User_Profile</h2>
-                  <p className="text-[10px] opacity-50 mt-1 uppercase">ID: {user.uid}</p>
+                  {isAdmin && <p className="text-[10px] opacity-50 mt-1 uppercase">ID: {user.uid}</p>}
                 </div>
                 <button 
                   onClick={() => setShowProfile(false)}

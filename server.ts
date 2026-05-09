@@ -6,10 +6,67 @@ import Stripe from "stripe";
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
 
+import { getFirestore } from "firebase-admin/firestore";
+
 // Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp();
+let firebaseConfig: any = null;
+const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+if (fs.existsSync(firebaseConfigPath)) {
+  try {
+    firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
+    console.log("Loaded firebase-applet-config.json. Project ID:", firebaseConfig.projectId);
+  } catch (err) {
+    console.error("Error reading firebase-applet-config.json:", err);
+  }
+} else {
+  console.warn("firebase-applet-config.json NOT FOUND!");
 }
+
+// Ensure the default app is initialized
+try {
+  if (!admin.apps.length) {
+    console.log("Starting Firebase Admin Initialization...");
+    console.log("Environment Project:", process.env.GOOGLE_CLOUD_PROJECT);
+    console.log("Config Project:", firebaseConfig?.projectId);
+
+    // We MUST use the projectId from the config if we want to target the user's intended project.
+    // Zero-config ADC defaults to the environment's project (which may not have APIs enabled).
+    admin.initializeApp({
+      projectId: firebaseConfig?.projectId || process.env.GOOGLE_CLOUD_PROJECT,
+    });
+    
+    console.log("Firebase Admin Initialized. Targeted Project ID:", admin.app().options.projectId);
+    if (admin.app().options.projectId !== firebaseConfig?.projectId) {
+      console.warn("WARNING: Target project does NOT match config project!");
+    }
+  } else {
+    console.log("Firebase Admin already initialized. Project:", admin.app().options.projectId);
+  }
+} catch (err) {
+  console.error("Firebase Admin Initialization Error:", err);
+}
+
+/**
+ * Helper to get the correct Firestore instance
+ */
+const getDb = () => {
+  try {
+    const app = admin.app();
+    
+    // If we have a named database ID from config, use it.
+    if (firebaseConfig && firebaseConfig.firestoreDatabaseId) {
+      return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    }
+    return getFirestore(app);
+  } catch (err) {
+    console.error("Failed to get Firestore instance:", err);
+  }
+  return getFirestore();
+};
+
+const getAuth = () => {
+  return admin.auth();
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,10 +75,10 @@ const getTransporter = () => {
   const host = process.env.RESEND_SMTP_HOST || "smtp.resend.com";
   const port = parseInt(process.env.RESEND_SMTP_PORT || "465");
   const user = process.env.RESEND_SMTP_USER || "resend";
-  const pass = process.env.RESEND_SMTP_PASSWORD;
+  const pass = process.env.RESEND_SMTP_PASSWORD || process.env.RESEND_API_KEY;
 
   if (!pass) {
-    console.warn("RESEND_SMTP_PASSWORD not set. Email sending will fail.");
+    console.warn("Neither RESEND_SMTP_PASSWORD nor RESEND_API_KEY set. Email sending will fail.");
   }
 
   return nodemailer.createTransport({
@@ -69,18 +126,74 @@ async function startServer() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // Debug Config (Admin Only)
+  app.get("/api/admin/debug-config", async (req, res) => {
+    try {
+      const { adminId } = req.query;
+      if (!adminId) return res.status(401).json({ error: "Unauthorized" });
+      
+      const userId = adminId as string;
+      const caller = await getAuth().getUser(userId);
+      const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
+      
+      if (!caller.email || !hardcoded.includes(caller.email)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      res.json({
+        projectId: admin.app().options.projectId,
+        configProjectId: firebaseConfig?.projectId,
+        databaseId: firebaseConfig?.firestoreDatabaseId,
+        nodeEnv: process.env.NODE_ENV,
+        hasFirebaseConfig: !!firebaseConfig
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Stripe Webhook needs raw body - must be defined BEFORE any general express.json() middleware
+  // to ensure signature verification receives the unmodified raw buffer.
+  app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {
+    const stripe = getStripe();
+    const sig = req.headers["stripe-signature"];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+      if (!sig || !endpointSecret) throw new Error("Missing signature or webhook secret");
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    } catch (err: any) {
+      console.error(`Webhook Error: ${err.message}`);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      console.log(`Payment successful for user ${session.metadata?.userId}`);
+    }
+
+    res.json({ received: true });
+  });
+
+  // Regular body parser for all subsequent routes
+  app.use(express.json());
+
   // API Route: Send Verification Email via Resend
   app.post("/api/auth/send-verification", async (req, res) => {
     try {
       const { email, returnUrl } = req.body;
       if (!email) return res.status(400).json({ error: "Email is required" });
 
-      const link = await admin.auth().generateEmailVerificationLink(email, {
+      const link = await getAuth().generateEmailVerificationLink(email, {
         url: returnUrl || process.env.APP_URL || "http://localhost:3000",
       });
 
       const transporter = getTransporter();
       const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+      console.log(`Sending verification email to ${email} from ${fromEmail}`);
 
       await transporter.sendMail({
         from: `Velocity Blog Synth <${fromEmail}>`,
@@ -98,10 +211,15 @@ async function startServer() {
         `,
       });
 
+      console.log(`Verification email sent successfully to ${email}`);
       res.json({ success: true });
     } catch (error: any) {
-      console.error("Verification Email Error:", error);
-      res.status(500).json({ error: error.message });
+      const isAuthError = error.code?.startsWith("auth/") || error.message?.includes("Identity Toolkit");
+      console.error(isAuthError ? "Auth Link generation failed:" : "Email transport failed:", error.message);
+      res.status(500).json({ 
+        error: error.message,
+        stage: isAuthError ? "auth_generation" : "email_sending"
+      });
     }
   });
 
@@ -111,7 +229,7 @@ async function startServer() {
       const { email, returnUrl } = req.body;
       if (!email) return res.status(400).json({ error: "Email is required" });
 
-      const link = await admin.auth().generatePasswordResetLink(email, {
+      const link = await getAuth().generatePasswordResetLink(email, {
         url: returnUrl || process.env.APP_URL || "http://localhost:3000",
       });
 
@@ -147,37 +265,87 @@ async function startServer() {
       const { userId, adminId } = req.body;
       if (!userId || !adminId) return res.status(400).json({ error: "Missing required IDs" });
 
+      console.log(`Admin ${adminId} requesting delete of user ${userId}`);
+
       // Verify admin status
-      const adminDoc = await admin.firestore().collection("admins").doc(adminId).get();
-      if (!adminDoc.exists) {
-        // Fallback to hardcoded admins check if caller's email is provided or check Auth directly
-        const caller = await admin.auth().getUser(adminId);
-        const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
-        if (!caller.email || !hardcoded.includes(caller.email)) {
-           return res.status(403).json({ error: "Access denied. Admin privileges required." });
+      const db = getDb();
+      let isAdmin = false;
+      
+      try {
+        const adminDoc = await db.collection("admins").doc(adminId).get();
+        if (adminDoc.exists) {
+          isAdmin = true;
+        }
+      } catch (err: any) {
+        console.error("Firestore Admin Check Error:", err.message);
+      }
+
+      if (!isAdmin) {
+        try {
+          const caller = await getAuth().getUser(adminId);
+          const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
+          if (caller.email && hardcoded.includes(caller.email)) {
+            isAdmin = true;
+          }
+        } catch (err: any) {
+          console.error("Auth Admin Check Error:", err.message);
         }
       }
 
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Access denied. Admin privileges required." });
+      }
+
+      // CHECK IF TARGET USER IS AN ADMIN - Prevent deleting admins
+      const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
+      try {
+        const targetAuthUser = await getAuth().getUser(userId);
+        if (targetAuthUser.email && hardcoded.includes(targetAuthUser.email)) {
+          return res.status(403).json({ error: "Access denied. Cannot delete a root administrator." });
+        }
+      } catch (err) {
+        // Auth user might not exist or other error, proceed with caution
+        console.warn("Could not check target user's auth email:", err);
+      }
+
+      const targetAdminDoc = await db.collection("admins").doc(userId).get();
+      if (targetAdminDoc.exists) {
+        return res.status(403).json({ error: "Access denied. Cannot delete an administrator account." });
+      }
+
       // Delete from Auth
-      await admin.auth().deleteUser(userId);
+      try {
+        await getAuth().deleteUser(userId);
+      } catch (err: any) {
+        console.error("Auth Delete Error:", err.message);
+        // Continue anyway if auth delete fails? No, usually that's the main goal.
+        return res.status(500).json({ error: `Auth Delete Failed: ${err.message}` });
+      }
 
-      // Delete from Firestore (recursive delete for user subcollections if needed)
-      // For now, delete the main document and private keys
-      await admin.firestore().collection("users").doc(userId).delete();
-      await admin.firestore().collection("users").doc(userId).collection("private").doc("keys").delete();
+      // Delete from Firestore
+      try {
+        await db.collection("users").doc(userId).delete();
+        await db.collection("users").doc(userId).collection("private").doc("keys").delete();
 
-      // Also delete items belonging to user
-      const generations = await admin.firestore().collection("generations").where("userId", "==", userId).get();
-      const files = await admin.firestore().collection("files").where("userId", "==", userId).get();
+        const generations = await db.collection("generations").where("userId", "==", userId).get();
+        const files = await db.collection("files").where("userId", "==", userId).get();
+        const adminEntry = await db.collection("admins").doc(userId).get();
 
-      const batch = admin.firestore().batch();
-      generations.docs.forEach(doc => batch.delete(doc.ref));
-      files.docs.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
+        const batch = db.batch();
+        generations.docs.forEach(doc => batch.delete(doc.ref));
+        files.docs.forEach(doc => batch.delete(doc.ref));
+        if (adminEntry.exists) {
+          batch.delete(adminEntry.ref);
+        }
+        await batch.commit();
+      } catch (err: any) {
+        console.error("Firestore Cleanup Error:", err.message);
+        return res.status(500).json({ error: `Firestore Cleanup Failed: ${err.message}` });
+      }
 
       res.json({ success: true, message: `User ${userId} thoroughly purged from system.` });
     } catch (error: any) {
-      console.error("Admin Delete Error:", error);
+      console.error("General Admin Delete Error:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -188,16 +356,35 @@ async function startServer() {
       const { adminId } = req.query;
       if (!adminId) return res.status(401).json({ error: "Unauthorized" });
 
-      const adminDoc = await admin.firestore().collection("admins").doc(adminId as string).get();
-      if (!adminDoc.exists) {
-        const caller = await admin.auth().getUser(adminId as string);
-        const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
-        if (!caller.email || !hardcoded.includes(caller.email)) {
-          return res.status(403).json({ error: "Forbidden" });
+      const db = getDb();
+      let isAdmin = false;
+
+      try {
+        const adminDoc = await db.collection("admins").doc(adminId as string).get();
+        if (adminDoc.exists) {
+          isAdmin = true;
+        }
+      } catch (err: any) {
+        console.error("Firestore ListAuth Check Error:", err.message);
+      }
+
+      if (!isAdmin) {
+        try {
+          const caller = await getAuth().getUser(adminId as string);
+          const hardcoded = ["ashdarji1@gmail.com", "ashishdarji88@gmail.com", "saanskarastudios@gmail.com"];
+          if (caller.email && hardcoded.includes(caller.email)) {
+            isAdmin = true;
+          }
+        } catch (err: any) {
+          console.error("Auth ListAuth Check Error:", err.message);
         }
       }
 
-      const listUsersResult = await admin.auth().listUsers(1000);
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const listUsersResult = await getAuth().listUsers(1000);
       const users = listUsersResult.users.map(u => ({
         uid: u.uid,
         email: u.email,
@@ -209,37 +396,10 @@ async function startServer() {
 
       res.json({ users });
     } catch (error: any) {
-      console.error("List Auth Users Error:", error);
+      console.error("Internal List Auth Users Error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
-
-  // Stripe Webhook needs raw body
-  app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {
-    const stripe = getStripe();
-    const sig = req.headers["stripe-signature"];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    let event;
-
-    try {
-      if (!sig || !endpointSecret) throw new Error("Missing signature or webhook secret");
-      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    } catch (err: any) {
-      console.error(`Webhook Error: ${err.message}`);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      console.log(`Payment successful for user ${session.metadata?.userId}`);
-    }
-
-    res.json({ received: true });
-  });
-
-  // Regular body parser for other routes
-  app.use(express.json());
 
   // API Route: Create Checkout Session
   app.post("/api/stripe/create-checkout-session", async (req, res) => {

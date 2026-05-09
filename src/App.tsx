@@ -127,7 +127,7 @@ export default function App() {
     tone: [],
     length: "Medium (approx. 600 words)",
     specificFocus: "Unique narrative stories.",
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3-flash-preview",
   });
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
@@ -142,6 +142,27 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [viewerContent, setViewerContent] = useState<{ content: string; title: string } | null>(null);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const loadingMessages = [
+    { title: "Initializing_Protocol", detail: "ESTABLISHING SECURE UPLINK TO MULTIMODAL CORES..." },
+    { title: "Analyzing_Data_Streams", detail: "EXTRACTING SEMANTIC VECTORS FROM SOURCE MEDIA..." },
+    { title: "Synthesizing_Narrative", detail: "MAPPING CONTENT TO TARGET AUDIENCE SEGMENTS..." },
+    { title: "Refining_Voice_Profile", detail: "APPLYING SELECTED TONE AND ATTRIBUTE LAYERS..." },
+    { title: "Structuring_Layout", detail: "OPTIMIZING HIERARCHY AND MARKDOWN ARCHITECTURE..." },
+    { title: "Finalizing_Synthesis", detail: "PERFORMING FINAL HEURISTIC POLISH..." }
+  ];
+
+  useEffect(() => {
+    let interval: any;
+    if (isProcessing) {
+      interval = setInterval(() => {
+        setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+      }, 2500);
+    } else {
+      setLoadingMessageIndex(0);
+    }
+    return () => clearInterval(interval);
+  }, [isProcessing]);
 
   useEffect(() => {
     fetch("/api/ai/openrouter/models")
@@ -281,7 +302,7 @@ export default function App() {
           tone: [],
           length: "Medium (approx. 600 words)",
           specificFocus: "Unique narrative stories.",
-          model: "gemini-3.1-pro-preview",
+          model: "gemini-3-flash-preview",
         });
       }
     });
@@ -583,15 +604,16 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           };
         }).filter(p => p !== null);
 
-        const response = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite-preview",
+        const result = await ai.models.generateContent({
+          model: preferences.model,
           contents: [
-            ...fileParts,
+            ...fileParts as any,
             fullPromptText
           ]
         });
-        if (response.text) {
-          setPreferences(prev => ({ ...prev, specificFocus: response.text.trim() }));
+
+        if (result.text) {
+          setPreferences(prev => ({ ...prev, specificFocus: result.text.trim() }));
         }
       }
     } catch (err: any) {
@@ -668,7 +690,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
       setGeneratingIds(prev => new Set(prev).add(tempGenId));
       setCurrentGenerationId(tempGenId);
       setBlogPost(""); // Clear current view for new one
-      setIsProcessing(false); // Let user interact while it works in background
+      // REMOVED setIsProcessing(false) here to keep loading state visible during synthesis
 
       // 2. Perform Generation
       const isOpenRouter = preferences.model.includes("/");
@@ -685,7 +707,15 @@ TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
-Refer to these files: ${readyVideos.map(v => v.name).join(', ')}. Start with title.`;
+
+IMPORTANT: You MUST embed the provided media assets at relevant points in the article using standard Markdown image syntax with the specific Media IDs provided below.
+Syntax: ![Description](MEDIA_ID_ID)
+Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA_ID_abc)
+
+AVAILABLE MEDIA ASSETS (IDs and Names):
+${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
+
+Synthesize the content from these assets into a cohesive narrative. Start with title.`;
 
         let additionalText = "";
         readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
@@ -710,18 +740,26 @@ TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
 TONE: ${preferences.tone.join(", ")}
 LENGTH: ${preferences.length}
 SPECIFIC FOCUS: ${preferences.specificFocus}
-Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).firestoreId || v.id}`).join(', ')}`;
+
+IMPORTANT: You MUST embed the provided media assets at relevant points in the article using standard Markdown image syntax with the specific Media IDs provided below.
+Syntax: ![Description](MEDIA_ID_ID)
+Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA_ID_abc)
+
+AVAILABLE MEDIA ASSETS (IDs and Names):
+${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
+
+Synthesize the content from these assets into a cohesive narrative. Do not just list them.`;
 
         let additionalText = "";
         readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
 
-        const result = await ai.models.generateContent({
+        const response = await ai.models.generateContent({
           model: preferences.model,
           contents: [...(fileParts as any), prompt + additionalText]
         });
 
-        if (!result.text) throw new Error("Model failed");
-        generatedContent = result.text;
+        if (!response.text) throw new Error("Model failed");
+        generatedContent = response.text;
       }
 
       // 3. Finalize Generation Record
@@ -731,6 +769,8 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
         status: "completed",
         updatedAt: serverTimestamp()
       });
+
+      setIsProcessing(false); // FINALLY set to false after completion
 
       // Update current view if this was the latest
       setCurrentGenerationId(prev => {
@@ -743,10 +783,18 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
 
     } catch (err: any) {
       console.error("Synthesis Error:", err);
+      let errorMsg = `Synthesis failed: ${err.message || "Unknown error"}`;
+      
+      if (err.message?.includes("429") || err.message?.includes("quota") || err.message?.toLowerCase().includes("exhausted")) {
+        errorMsg = "Critical Quota Alert: You have exceeded the daily request limit for this AI model. Please try switching to a different model (like Gemini 1.5 Flash) or wait for the quota to reset (usually every 24 hours).";
+      } else if (err.message?.includes("permission") || err.message?.includes("Identity Toolkit")) {
+        errorMsg = "Security Initialization Failure: The server identity lacks the necessary permissions to verify your request. Please ensure 'Identity Toolkit API' is enabled and the service account has 'Service Usage Consumer' and 'Authentication Admin' roles.";
+      }
+
       if (tempGenId) {
         await updateDoc(doc(db, "generations", tempGenId), { status: "failed" }).catch(() => {});
       }
-      setError(`Synthesis failed: ${err.message || "Unknown error"}`);
+      setError(errorMsg);
     } finally {
       if (tempGenId) {
         setGeneratingIds(prev => {
@@ -871,7 +919,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
       tone: [],
       length: "Medium (approx. 600 words)",
       specificFocus: "Unique narrative stories.",
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
     });
     setIsHistoryOpen(false);
   };
@@ -916,8 +964,9 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
         // Populate mediaFiles so the preview can find them
         const restoredMedia: MediaFile[] = files.map(f => ({
           id: f.id,
+          firestoreId: f.id,
           name: f.name,
-          type: (f.type.includes('video') ? 'video' : f.type.includes('audio') ? 'audio' : 'image') as any,
+          type: (f.type.includes('video') ? 'video' : f.type.includes('audio') ? 'audio' : f.type.includes('image') ? 'image' : undefined) as any,
           status: 'ACTIVE',
           progress: 100,
           previewUrl: f.data || f.storageUrl || undefined, // use storageUrl as previewUrl fallback
@@ -1020,6 +1069,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
             content={viewerContent.content}
             title={viewerContent.title}
             theme={theme}
+            isAdmin={isAdmin}
             mediaFiles={mediaFiles}
             onClose={() => setViewerContent(null)}
             onDownload={exportToPDF}
@@ -1371,8 +1421,8 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                     }`}
                   >
                     <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Analytical & Deep)</option>
-                    <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash (Fast & Balanced)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3.1 Flash-8B (High Speed)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast & Balanced)</option>
+                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (High Speed)</option>
                     {hasOpenRouterKey && openRouterModels.length > 0 && (
                       (() => {
                         const categories = ["1. Text", "2. Image", "3. Embeddings", "4. Audio", "5. Video", "6. Rerank", "7. Speech", "8. Transcription"];
@@ -1667,9 +1717,9 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                 
                 <button 
                   onClick={handleGenerate}
-                  disabled={mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
+                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
                   className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                    ${mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
+                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
                       ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
                       : (theme === 'dark' 
                           ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
@@ -1680,7 +1730,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                     {isProcessing ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Processing_{mediaFiles.length}_Streams</span>
+                        <span>{loadingMessages[loadingMessageIndex].title}</span>
                       </>
                     ) : !mediaFiles.every(v => v.status === 'ACTIVE') && mediaFiles.length > 0 ? (
                       <>
@@ -1791,10 +1841,22 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                </div>
             </div>
             
-            <div className={`flex-1 overflow-y-auto p-12 md:p-16 m-4 border selection:bg-yellow-200 transition-colors ${
+            <div className={`flex-1 overflow-y-auto relative p-12 md:p-16 m-4 border selection:bg-yellow-200 transition-colors ${
               theme === 'dark' ? 'bg-[#141414] border-[#333]' : 'bg-white border-[#141414]'
             }`}>
               <AnimatePresence mode="wait">
+                {isProcessing && (
+                  <div className="absolute top-0 left-0 w-full h-1.5 z-30 overflow-hidden">
+                    <motion.div 
+                      className={`h-full ${theme === 'dark' ? 'bg-white' : 'bg-black'}`}
+                      initial={{ left: "-100%" }}
+                      animate={{ left: "100%" }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                      style={{ position: "absolute", width: "40%" }}
+                    />
+                    <div className={`absolute inset-0 opacity-20 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/5'}`} />
+                  </div>
+                )}
                 {isProcessing ? (
                   <motion.div 
                     key="loading"
@@ -1810,10 +1872,9 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                        <span className={`w-4 h-4 animate-bounce ${theme === 'dark' ? 'bg-white' : 'bg-black'}`} />
                     </div>
                     <div className="space-y-3">
-                      <h3 className="font-mono text-sm font-bold uppercase tracking-[0.3em]">Synthesizing_Narrative</h3>
+                      <h3 className="font-mono text-sm font-bold uppercase tracking-[0.3em]">{loadingMessages[loadingMessageIndex].title}</h3>
                       <p className="font-mono text-[10px] text-[#8E9299] max-w-[200px] mx-auto leading-relaxed">
-                        ENGAGING MULTIMODAL SENSORS AND 
-                        SEMANTIC EXTRACTION LAYERS...
+                        {loadingMessages[loadingMessageIndex].detail}
                       </p>
                     </div>
                   </motion.div>
@@ -1857,7 +1918,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                                 // Check both id and firestoreId to handle current session and restored history
                                 const media = mediaFiles.find(m => m.id === id || m.firestoreId === id);
                                 if (media && media.previewUrl) {
-                                  const type = media.mimeType || media.file?.type || '';
+                                  const type = media.mimeType || media.file?.type || media.type || '';
                                   const name = media.name || media.file?.name || 'Asset';
 
                                   if (type.includes('image')) {
@@ -1867,6 +1928,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                                           <img 
                                             src={media.previewUrl} 
                                             alt={alt || name} 
+                                            referrerPolicy="no-referrer"
                                             className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
                                           />
                                           {/* Aesthetic Scanline Overlay */}
@@ -1875,7 +1937,9 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                                             Visual_Asset_Ingested
                                           </div>
                                         </div>
-                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— {alt || name} (ID: {media.firestoreId || media.id})</p>
+                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">
+                                          — {alt || name} {isAdmin && `(ID: ${media.firestoreId || media.id})`}
+                                        </p>
                                       </div>
                                     );
                                   }
@@ -1883,7 +1947,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                                     return (
                                       <div className="my-14 space-y-4">
                                           <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
-                                          <video src={media.previewUrl} controls className="w-full aspect-video" />
+                                          <video src={media.previewUrl} controls className="w-full aspect-video" crossOrigin="anonymous" />
                                           <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 bg-red-600">
                                             <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                             <span className="text-[8px] font-mono font-bold text-white uppercase tracking-tighter">Live_Context</span>
@@ -1910,7 +1974,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                                             <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
                                           </div>
                                         </div>
-                                        <audio src={media.previewUrl} controls className="w-full h-12" />
+                                        <audio src={media.previewUrl} controls className="w-full h-12" crossOrigin="anonymous" />
                                       </div>
                                     );
                                   }
@@ -1975,7 +2039,11 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                                   );
                                 }
                               }
-                              return <img src={src} alt={alt} className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
+                                if (src?.startsWith('MEDIA_ID_')) {
+                                  const id = src.replace('MEDIA_ID_', '');
+                                  return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Lost {isAdmin && `: ${id}`}</div>;
+                                }
+                                return <img src={src} alt={alt} referrerPolicy="no-referrer" className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
                             }
                           }}
                         >
@@ -2017,52 +2085,6 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                             theme === 'dark' ? 'bg-[#000] text-green-500/80' : 'bg-[#141414] text-[#00FF41]'
                           }`}
                         />
-                      </div>
-                    )}
-
-                    {currentAttachedFiles.length > 0 && (
-                      <div className={`mt-16 pt-12 border-t ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} space-y-6`}>
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-serif italic text-xl uppercase tracking-tighter">Saved Attachments</h4>
-                          <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">{currentAttachedFiles.length} Object(s) Persisted</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {currentAttachedFiles.map((file, i) => (
-                            <div 
-                              key={`${file.id}-${i}`} 
-                              className={`p-4 border group transition-all flex items-center justify-between ${
-                                theme === 'dark' ? 'border-[#333] hover:border-white bg-[#1A1A1A]' : 'border-[#141414] hover:bg-[#F8F8F7]'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <div className={`p-2 transition-colors ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                                  {file.type.includes('audio') ? <FileAudio className="w-3 h-3" /> : 
-                                   file.type.includes('image') ? <FileImage className="w-3 h-3" /> : 
-                                   file.type.includes('video') ? <FileVideo className="w-3 h-3" /> :
-                                   <FileText className="w-3 h-3" />}
-                                </div>
-                                <div className="overflow-hidden">
-                                  <p className="text-[10px] font-bold truncate uppercase">{file.name}</p>
-                                  <p className="text-[9px] font-mono opacity-40">{(file.size / (1024 * 1024)).toFixed(2)}MB • {file.data ? "PERSISTED" : "METADATA_ONLY"}</p>
-                                </div>
-                              </div>
-                              <button 
-                                onClick={() => downloadFile(file)}
-                                className={`p-2 border transition-colors ${
-                                  theme === 'dark' ? 'border-[#333] group-hover:bg-white group-hover:text-black' : 'border-[#141414] group-hover:bg-black group-hover:text-white'
-                                }`}
-                                title="Download File"
-                              >
-                                <Download className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        {!currentAttachedFiles.some(f => f.data) && (
-                          <div className={`p-4 border border-orange-500/20 bg-orange-500/5 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-700'} text-[10px] font-mono uppercase leading-relaxed italic`}>
-                            Note: Some files may not have been persisted due to baseline Firestore document limits (1MB). Only metadata remains for these larger assets.
-                          </div>
-                        )}
                       </div>
                     )}
                   </motion.div>
@@ -2128,6 +2150,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                     controls 
                     className="max-w-full max-h-[75vh] shadow-[0_0_100px_rgba(0,0,0,0.5)]"
                     autoPlay
+                    crossOrigin="anonymous"
                   />
                 )}
                 {(previewMedia.mimeType?.includes('audio') || previewMedia.file?.type.includes('audio')) && (
@@ -2137,7 +2160,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                           <FileAudio className="w-10 h-10 text-white/40" />
                           <div className="absolute inset-0 rounded-full border-b-2 border-white/20 animate-spin" />
                        </div>
-                       <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay />
+                       <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay crossOrigin="anonymous" />
                        <div className="text-center space-y-2">
                          <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.3em]">Temporal_Data_Source</p>
                        </div>
@@ -2148,6 +2171,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                   <img 
                     src={previewMedia.previewUrl} 
                     alt={previewMedia.name} 
+                    referrerPolicy="no-referrer"
                     className="max-w-full max-h-[80vh] object-contain shadow-2xl"
                   />
                 )}
@@ -2157,6 +2181,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
                     src={previewMedia.storageUrl || previewMedia.previewUrl} 
                     className="w-full h-full border-none bg-white"
                     title="PDF Preview"
+                    referrerPolicy="no-referrer"
                   />
                 )}
                 {/* Robust Word/Doc Support */}
@@ -2351,7 +2376,7 @@ Embedded Media IDs for placement: ${readyVideos.map(v => `MEDIA_ID_${(v as any).
     </div>
     <AnimatePresence>
       {isAdminModalOpen && (
-        <AdminDashboard theme={theme} onClose={() => setIsAdminModalOpen(false)} />
+        <AdminDashboard theme={theme} isAdmin={isAdmin} onClose={() => setIsAdminModalOpen(false)} />
       )}
     </AnimatePresence>
     </AuthGuard>

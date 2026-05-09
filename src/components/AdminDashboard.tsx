@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface AdminDashboardProps {
   theme: 'light' | 'dark';
+  isAdmin: boolean;
   onClose: () => void;
 }
 
@@ -17,7 +18,7 @@ interface UserData {
   createdAt?: any;
 }
 
-export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
+export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps) {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -261,7 +262,7 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
                           <span className={`text-[9px] px-1.5 py-0.5 uppercase tracking-widest font-mono font-bold border ${theme === 'dark' ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10' : 'border-indigo-600/30 text-indigo-600 bg-indigo-50'}`}>Admin</span>
                         )}
                       </div>
-                      <span className="text-[10px] font-mono opacity-50 truncate mt-1">ID: {user.id}</span>
+                      {isAdmin && <span className="text-[10px] font-mono opacity-50 truncate mt-1">ID: {user.id}</span>}
                     </div>
                     {!(adminUids.has(user.id) || currentHardcodedAdmins.includes(user.email || '')) && (
                       <button 
@@ -370,7 +371,8 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
                  {authUsers.map(au => {
                    const inFirestore = users.some(u => u.id === au.uid);
                    const isHardcoded = currentHardcodedAdmins.includes(au.email);
-                   if (isHardcoded) return null;
+                   const isDbAdmin = adminUids.has(au.uid);
+                   if (isHardcoded || isDbAdmin) return null;
 
                    return (
                      <div key={au.uid} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
@@ -386,7 +388,7 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
                                 <span className="text-[8px] px-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-black uppercase">Unverified</span>
                               )}
                            </div>
-                           <span className="text-[9px] font-mono opacity-40 mt-1 uppercase">UID: {au.uid} // Created: {new Date(au.creationTime || 0).toLocaleDateString()}</span>
+                           {isAdmin && <span className="text-[9px] font-mono opacity-40 mt-1 uppercase">UID: {au.uid} // Created: {new Date(au.creationTime || 0).toLocaleDateString()}</span>}
                         </div>
                         <button 
                           onClick={() => setUserToDelete({ id: au.uid, email: au.email })}
@@ -431,7 +433,7 @@ export function AdminDashboard({ theme, onClose }: AdminDashboardProps) {
               <div className="space-y-2">
                 <h3 className="font-serif italic text-2xl">Execute User Purge</h3>
                 <p className="text-sm opacity-80">
-                  Are you sure you want to thoroughly delete user <span className="font-bold underline decoration-dotted">{userToDelete.email}</span> (UID: <span className="font-mono text-[10px]">{userToDelete.id}</span>)?
+                  Are you sure you want to thoroughly delete user <span className="font-bold underline decoration-dotted">{userToDelete.email}</span> {isAdmin && <>(UID: <span className="font-mono text-[10px]">{userToDelete.id}</span>)</>}?
                 </p>
                 <div className={`p-4 border text-[10px] font-mono text-left space-y-1 ${theme === 'dark' ? 'bg-red-900/10 border-red-500/20 text-red-200' : 'bg-red-50 border-red-500/20 text-red-900'}`}>
                   <p className="font-bold opacity-100 mb-2">CLEANUP_PROTOCOL_NOTICE:</p>
