@@ -79,7 +79,6 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
           <img 
             src={displayUrl} 
             alt={alt || name} 
-            referrerPolicy="no-referrer"
             className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
           />
           <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
@@ -192,7 +191,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
     const initialHtml = DOMPurify.sanitize(parsed, {
       ADD_ATTR: ['src', 'alt', 'controls'],
       ADD_TAGS: ['img', 'video', 'audio', 'iframe']
-    });
+    }).replace(/&nbsp;/g, ' ');
 
     setEditorContent(initialHtml);
   }, [content, mediaFiles]);
@@ -435,7 +434,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
       <main className="flex-1 overflow-y-auto overflow-x-hidden history-scrollbar p-8 md:p-20 flex justify-center">
         <article className={`max-w-3xl w-full break-words ${activeMode === 'rich-text' ? 'max-w-5xl' : ''}`}>
           {activeMode === 'preview' && (
-            <div className={`prose ${theme === 'dark' ? 'prose-invert' : 'prose-neutral'} prose-headings:font-serif prose-headings:italic prose-p:font-sans prose-p:leading-relaxed selection:bg-yellow-200 selection:text-black max-w-full overflow-x-hidden`}>
+            <div className={`prose ${theme === 'dark' ? 'prose-invert' : 'prose-neutral'} w-full max-w-none [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_img]:max-w-full [&_*]:!break-words`}>
               {/* Fallback to markdown renderer but usually you want dangerouslySetInnerHTML parsing the saved HTML */}
               {renderPreview()}
             </div>
