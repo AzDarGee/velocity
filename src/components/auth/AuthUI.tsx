@@ -362,7 +362,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const [isBuying, setIsBuying] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  const [topUpMode, setTopUpMode] = useState<'packs' | 'subs'>('packs');
+  const [topUpMode, setTopUpMode] = useState<'packs' | 'subs' | 'tier'>('packs');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -974,6 +974,16 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                 >
                   Subscription_Tiers
                 </button>
+                <button
+                  onClick={() => setTopUpMode('tier')}
+                  className={`flex-1 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                    topUpMode === 'tier' 
+                      ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') 
+                      : 'opacity-50 hover:opacity-100'
+                  }`}
+                >
+                  Expansion_Tiers
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1023,7 +1033,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                       )}
                     </div>
                   </button>
-                )) : [
+                )) : topUpMode === 'subs' ? [
                   { id: 'sub-weekly', name: 'Weekly', credits: 50, price: '$7', interval: 'week' },
                   { id: 'sub-monthly', name: 'Monthly', credits: 200, price: '$19', interval: 'month', tag: 'Most Popular' },
                   { id: 'sub-yearly', name: 'Yearly', credits: 1200, price: '$99', interval: 'year', tag: 'Best Value' }
@@ -1064,6 +1074,50 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                         <>
                           <CreditCard className="w-3 h-3" />
                           Activate_Recurring_Protocol
+                        </>
+                      )}
+                    </div>
+                  </button>
+                )) : [
+                  { id: 'tier-basic-mo', name: 'Basic', credits: 200, price: '$20', interval: 'mo', label: 'Monthly' },
+                  { id: 'tier-basic-yr', name: 'Basic', credits: 200, price: '$200', interval: 'yr', label: 'Yearly' },
+                  { id: 'tier-pro-mo', name: 'Pro', credits: 500, price: '$40', interval: 'mo', label: 'Monthly' },
+                  { id: 'tier-pro-yr', name: 'Pro', credits: 500, price: '$420', interval: 'yr', label: 'Yearly' },
+                  { id: 'tier-unlimited-mo', name: 'Unlimited', credits: 1000, price: '$75', interval: 'mo', label: 'Monthly' },
+                  { id: 'tier-unlimited-yr', name: 'Unlimited', credits: 1000, price: '$800', interval: 'yr', label: 'Yearly' }
+                ].map((tier) => (
+                  <button
+                    key={tier.id}
+                    onClick={() => handleBuy(tier.id)}
+                    disabled={isBuying !== null}
+                    className={`p-4 border-2 flex flex-col items-start gap-2 transition-all relative group
+                      ${theme === 'dark' 
+                        ? 'border-[#333] bg-[#141414] hover:border-white shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
+                        : 'border-black bg-white hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}
+                      active:shadow-none active:translate-x-[2px] active:translate-y-[2px] overflow-hidden`}
+                  >
+                    <div className="absolute top-2 right-2 text-[8px] font-mono uppercase bg-black/10 px-1 py-0.5 opacity-60">
+                      {tier.label}
+                    </div>
+                    <div className="flex items-center justify-between w-full">
+                       <span className="text-[10px] uppercase font-mono tracking-widest font-bold">{tier.name}</span>
+                       <span className={`text-xl font-bold font-mono ${theme === 'dark' ? 'text-yellow-500' : 'text-yellow-600'}`}>
+                          {tier.price}<span className="text-[9px] opacity-40">/{tier.interval}</span>
+                       </span>
+                    </div>
+                    <div className="text-xl font-bold font-mono">
+                      {tier.credits} <span className="text-xs italic opacity-60">CRD / MO</span>
+                      {tier.interval === 'yr' && <span className="text-[8px] block opacity-40 italic">(accrued monthly)</span>}
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60">
+                      {isBuying === tier.id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Initializing
+                        </>
+                      ) : (
+                        <>
+                          Authorize
                         </>
                       )}
                     </div>

@@ -115,6 +115,12 @@ const SUBSCRIPTION_PLANS = {
   "sub-weekly": { credits: 50, priceInCents: 700, name: "Weekly Content Tier", interval: "week" as const },
   "sub-monthly": { credits: 200, priceInCents: 1900, name: "Monthly Content Tier", interval: "month" as const },
   "sub-yearly": { credits: 1200, priceInCents: 9900, name: "Yearly Content Tier", interval: "year" as const },
+  "tier-basic-mo": { credits: 200, priceInCents: 2000, name: "Basic Content Tier", interval: "month" as const },
+  "tier-basic-yr": { credits: 2400, priceInCents: 20000, name: "Basic Content Tier", interval: "year" as const },
+  "tier-pro-mo": { credits: 500, priceInCents: 4000, name: "Pro Content Tier", interval: "month" as const },
+  "tier-pro-yr": { credits: 6000, priceInCents: 42000, name: "Pro Content Tier", interval: "year" as const },
+  "tier-unlimited-mo": { credits: 1000, priceInCents: 7500, name: "Unlimited Content Tier", interval: "month" as const },
+  "tier-unlimited-yr": { credits: 12000, priceInCents: 80000, name: "Unlimited Content Tier", interval: "year" as const },
 };
 
 async function startServer() {
