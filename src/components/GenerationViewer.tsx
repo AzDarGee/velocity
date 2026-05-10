@@ -137,6 +137,63 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
   }
 
   const isPdf = type.includes('pdf');
+  const isDoc = type.includes('word') || type.includes('officedocument.wordprocessingml') || name.endsWith('.docx') || name.endsWith('.doc');
+
+  if (isPdf) {
+    return (
+      <div className="my-10 space-y-4">
+        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-white shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] h-[600px] flex flex-col`}>
+          <div className={`px-4 py-2 border-b-2 flex items-center justify-between ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-black bg-[#F5F5F5]'}`}>
+             <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-red-500" />
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest truncate max-w-[200px]">{name}</span>
+             </div>
+             <button 
+               onClick={() => onDownloadAsset?.(media)}
+               className={`p-1 hover:scale-110 transition-transform ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+             >
+                <Download className="w-4 h-4" />
+             </button>
+          </div>
+          <iframe 
+            src={displayUrl} 
+            className="w-full flex-1 border-none" 
+            title={name} 
+          />
+        </div>
+        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— PDF_Document_Extraction: {name}</p>
+      </div>
+    );
+  }
+
+  if (isDoc) {
+    const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(displayUrl)}`;
+    return (
+      <div className="my-10 space-y-4">
+        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-white shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] h-[600px] flex flex-col`}>
+          <div className={`px-4 py-2 border-b-2 flex items-center justify-between ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-black bg-[#F5F5F5]'}`}>
+             <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-500" />
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest truncate max-w-[200px]">{name}</span>
+             </div>
+             <button 
+               onClick={() => onDownloadAsset?.(media)}
+               className={`p-1 hover:scale-110 transition-transform ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+             >
+                <Download className="w-4 h-4" />
+             </button>
+          </div>
+          <iframe 
+            src={viewerUrl} 
+            className="w-full flex-1 border-none" 
+            title={name} 
+          />
+        </div>
+        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Word_Document_Extraction: {name}</p>
+      </div>
+    );
+  }
+
   return (
     <div className={`my-8 relative border-2 p-6 flex items-center gap-6 transition-all ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-black bg-white'}`}>
       <div className={`w-14 h-14 flex items-center justify-center border-2 ${isPdf ? 'border-red-500/40 bg-red-500/5' : 'border-indigo-500/40 bg-indigo-500/5'}`}>
@@ -189,7 +246,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
     const parsed = marked.parse(preProcessedContent) as string;
 
     const initialHtml = DOMPurify.sanitize(parsed, {
-      ADD_ATTR: ['src', 'alt', 'controls'],
+      ADD_ATTR: ['src', 'alt', 'controls', 'title', 'frameborder', 'allowfullscreen'],
       ADD_TAGS: ['img', 'video', 'audio', 'iframe']
     }).replace(/&nbsp;/g, ' ');
 
@@ -207,7 +264,10 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
     setSaveSuccess(false);
     
     // 1. Sanitize the output HTML from Quill before sending
-    const sanitizedHtml = DOMPurify.sanitize(editorContent);
+    const sanitizedHtml = DOMPurify.sanitize(editorContent, {
+      ADD_ATTR: ['src', 'alt', 'controls', 'title', 'frameborder', 'allowfullscreen'],
+      ADD_TAGS: ['img', 'video', 'audio', 'iframe']
+    });
     
     try {
       if (onSave) {
@@ -238,17 +298,20 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
   const renderPreview = () => {
     return parse(editorContent, {
       replace: (domNode: any) => {
-        // If it's a P tag that contains only an image (with our MEDIA ID), we replace the P tag itself to avoid <p><div> invalid HTML
-        if (domNode.type === 'tag' && domNode.name === 'p' && domNode.children?.length === 1 && domNode.children[0].name === 'img') {
-          const src = domNode.children[0].attribs?.src;
-          if (src && src.includes('MEDIA_ID_')) {
-            const replacement = handleMediaReplacement(domNode.children[0]);
-            if (replacement) return replacement;
+        // If it's a P tag that contains only a media element, we replace the P tag itself
+        if (domNode.type === 'tag' && domNode.name === 'p' && domNode.children?.length === 1) {
+          const childName = domNode.children[0].name;
+          if (['img', 'video', 'audio', 'iframe'].includes(childName)) {
+            const src = domNode.children[0].attribs?.src;
+            if (src && (src.includes('MEDIA_ID_') || mediaFiles.some(m => src.includes(m.storageUrl?.split('?')[0] || 'never')))) {
+              const replacement = handleMediaReplacement(domNode.children[0]);
+              if (replacement) return replacement;
+            }
           }
         }
 
-        // We replace img tags
-        if (domNode.type === 'tag' && domNode.name === 'img') {
+        // We replace media tags
+        if (domNode.type === 'tag' && ['img', 'video', 'audio', 'iframe'].includes(domNode.name)) {
           return handleMediaReplacement(domNode);
         }
       }
