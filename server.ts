@@ -384,20 +384,38 @@ async function startServer() {
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      const listUsersResult = await getAuth().listUsers(1000);
-      const users = listUsersResult.users.map(u => ({
-        uid: u.uid,
-        email: u.email,
-        displayName: u.displayName,
-        emailVerified: u.emailVerified,
-        lastSignInTime: u.metadata.lastSignInTime,
-        creationTime: u.metadata.creationTime
-      }));
+      try {
+        const listUsersResult = await getAuth().listUsers(1000);
+        const users = listUsersResult.users.map(u => ({
+          uid: u.uid,
+          email: u.email,
+          displayName: u.displayName,
+          emailVerified: u.emailVerified,
+          lastSignInTime: u.metadata.lastSignInTime,
+          creationTime: u.metadata.creationTime
+        }));
 
-      res.json({ users });
+        res.json({ users });
+      } catch (error: any) {
+        // More robust check for permission errors
+        const isForbidden = error.code === 'permission-denied' || 
+                           error.message?.includes('403') || 
+                           error.message?.includes('Identity Toolkit');
+        
+        if (isForbidden) {
+          console.warn("Auth listUsers PERMISSION_DENIED. Returning empty user list.");
+          res.json({ users: [], note: "IAM permissions restricted: listing auth users forbidden" });
+        } else {
+          throw error;
+        }
+      }
     } catch (error: any) {
       console.error("Internal List Auth Users Error:", error.message);
-      res.status(500).json({ error: error.message });
+      res.status(error.code === 403 ? 403 : 500).json({ 
+        error: "Failed to list users", 
+        detail: error.message,
+        code: error.code || 'unknown_error'
+      });
     }
   });
 

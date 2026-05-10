@@ -341,6 +341,8 @@ export default function App() {
       setMediaFiles(prev => prev.map(v => v.id === id ? { ...v, status: 'UPLOADING', progress: 0 } : v));
 
       const isDocx = file.name.toLowerCase().endsWith('.docx');
+      const isTextRecord = ['text/plain', 'text/markdown', 'text/csv', 'text/html', 'application/json', 'application/rtf'].includes(file.type) || file.name.toLowerCase().endsWith('.md') || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.rtf');
+      
       let extractedText = "";
 
       if (isDocx) {
@@ -351,6 +353,13 @@ export default function App() {
         } catch (mErr) {
           console.error("Mammoth Error:", mErr);
           extractedText = "Error: Failed to extract text from Word document.";
+        }
+      } else if (isTextRecord) {
+        try {
+          extractedText = await file.text();
+        } catch (tErr) {
+          console.error("Text Extraction Error:", tErr);
+          extractedText = "Error: Failed to read text file.";
         }
       }
 
@@ -1435,6 +1444,18 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
+                          {v.status === 'ACTIVE' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewMedia(v);
+                              }}
+                              className={`p-1 transition-colors outline-none focus:outline-none ${theme === 'dark' ? 'hover:bg-white hover:text-black focus:bg-white focus:text-black' : 'hover:bg-black hover:text-white focus:bg-black focus:text-white'}`}
+                              title="Preview File"
+                            >
+                              <Eye className="w-3 h-3" />
+                            </button>
+                          )}
                           <button 
                             onClick={async (e) => {
                               e.stopPropagation();
@@ -1527,7 +1548,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     type="file" 
                     ref={fileInputRef}
                     className="hidden" 
-                    accept="video/*,audio/*,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+                    accept="video/*,audio/*,image/*,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,.md,.mkv,.flac,.csv,.rtf"
                     multiple
                     onChange={handleFileChange}
                   />
@@ -1539,7 +1560,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       {mediaFiles.length === 0 ? "Mount Source Media" : "Add More Clips"}
                     </p>
                     {mediaFiles.length === 0 && (
-                      <p className="text-[10px] mt-2 font-mono opacity-50">Support: .mp4, .mp3, .wav, .mov, etc (Max 5GB/file)</p>
+                      <p className="text-[10px] mt-2 font-mono opacity-50">Support: Video, Audio, Image, text, PDF, DOCX, etc (Max 5GB/file)</p>
                     )}
                   </div>
                 </div>
@@ -2452,7 +2473,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                   />
                 )}
                 {/* Robust Word/Doc Support */}
-                {(previewMedia.mimeType?.includes('word') || previewMedia.name?.toLowerCase().endsWith('.docx') || previewMedia.name?.toLowerCase().endsWith('.doc')) && (
+                {(previewMedia.mimeType?.includes('word') || ['text/plain', 'text/markdown', 'text/csv', 'text/html', 'application/json', 'application/rtf'].includes(previewMedia.mimeType || '') || previewMedia.name?.toLowerCase().endsWith('.docx') || previewMedia.name?.toLowerCase().endsWith('.doc') || previewMedia.name?.toLowerCase().endsWith('.txt') || previewMedia.name?.toLowerCase().endsWith('.md') || previewMedia.name?.toLowerCase().endsWith('.csv') || previewMedia.name?.toLowerCase().endsWith('.rtf')) && (
                   <div className="w-full h-full overflow-y-auto bg-gray-200/50 p-4 md:p-8 flex justify-center">
                     <div className="w-full max-w-3xl bg-white text-black font-serif shadow-[0_20px_50px_rgba(0,0,0,0.2)] min-h-[1100px] p-12 md:p-20 relative">
                        {/* Document Header Branding */}
