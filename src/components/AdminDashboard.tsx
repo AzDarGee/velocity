@@ -229,17 +229,23 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
     setIsSaving(true);
     
     try {
-      import('../lib/firebase').then(async ({ auth }) => {
-        const adminId = auth.currentUser?.uid;
-        if (!adminId) throw new Error("Admin ID not found");
+      const adminId = auth.currentUser?.uid;
+      if (!adminId) throw new Error("Admin ID not found");
 
-        const response = await fetch('/api/admin/delete-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: userToDelete.id, adminId })
-        });
+      const response = await fetch('/api/users/remove-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userToDelete.id, adminId })
+      });
 
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
         const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || `Failed to delete user: HTTP ${response.status}`);
+        }
+
         if (data.success) {
           setUsers(users.filter(u => u.id !== userToDelete.id));
           setAuthUsers(authUsers.filter(u => u.uid !== userToDelete.id));
@@ -247,7 +253,11 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
         } else {
           throw new Error(data.error || "Failed to thoroughly delete user.");
         }
-      });
+      } else {
+        const text = await response.text();
+        console.error("Server HTML response:", text);
+        throw new Error(`Server Error: ${response.status} ${response.statusText}. Check console for details.`);
+      }
     } catch (error: any) {
       console.error("Error deleting user:", error);
       alert(error.message || "Failed to delete user.");
@@ -486,8 +496,8 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
             </div>
           ) : activeTab === 'users' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredUsers.map(user => (
-                <div key={`admin-user-card-${user.id}`} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
+              {filteredUsers.map((user, index) => (
+                <div key={`admin-user-card-${user.id || index}-${index}`} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-2">
@@ -675,14 +685,14 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                 {authUsers.map(au => {
+                 {authUsers.map((au, index) => {
                    const inFirestore = users.some(u => u.id === au.uid);
                    const isHardcoded = currentHardcodedAdmins.includes(au.email);
                    const isDbAdmin = adminUids.has(au.uid);
                    if (isHardcoded || isDbAdmin) return null;
 
                    return (
-                     <div key={`auth-node-${au.uid}`} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
+                     <div key={`auth-node-${au.uid || index}-${index}`} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
                         <div className="flex flex-col">
                            <div className="flex items-center gap-3">
                               <span className="font-bold text-xs">{au.email}</span>
@@ -926,8 +936,8 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                  <div className="flex-1 flex items-center justify-center opacity-50"><Loader2 className="w-8 h-8 animate-spin" /></div>
               ) : (
                 <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {userAssets.map((asset) => (
-                    <div key={`asset-card-${asset.id}-${asset.storageUrl || 'no-url'}`} className={`p-2 border flex flex-col justify-between ${theme === 'dark' ? 'border-[#333] bg-[#111]' : 'border-black/10 bg-gray-50'}`}>
+                  {userAssets.map((asset, index) => (
+                    <div key={`asset-card-${asset.id || index}-${index}`} className={`p-2 border flex flex-col justify-between ${theme === 'dark' ? 'border-[#333] bg-[#111]' : 'border-black/10 bg-gray-50'}`}>
                       <div>
                         <div className="h-24 bg-black/5 flex items-center justify-center mb-2 overflow-hidden">
                           {(asset.mimeType?.startsWith('image')) ? (

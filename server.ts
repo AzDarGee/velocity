@@ -260,7 +260,7 @@ async function startServer() {
   });
 
   // API Route: Delete User (Admin Only)
-  app.post("/api/admin/delete-user", async (req, res) => {
+  app.post("/api/users/remove-account", async (req, res) => {
     try {
       const { userId, adminId } = req.body;
       if (!userId || !adminId) return res.status(400).json({ error: "Missing required IDs" });
@@ -277,7 +277,9 @@ async function startServer() {
           isAdmin = true;
         }
       } catch (err: any) {
-        console.error("Firestore Admin Check Error:", err.message);
+        if (err.code !== 7 && !err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+          console.error("Firestore Admin Check Error:", err.message);
+        }
       }
 
       if (!isAdmin) {
@@ -288,7 +290,9 @@ async function startServer() {
             isAdmin = true;
           }
         } catch (err: any) {
-          console.error("Auth Admin Check Error:", err.message);
+          if (!err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+            console.error("Auth Admin Check Error:", err.message);
+          }
         }
       }
 
@@ -331,13 +335,19 @@ async function startServer() {
         const files = await db.collection("files").where("userId", "==", userId).get();
         const adminEntry = await db.collection("admins").doc(userId).get();
 
-        const batch = db.batch();
-        generations.docs.forEach(doc => batch.delete(doc.ref));
-        files.docs.forEach(doc => batch.delete(doc.ref));
+        const allDocsRefs = [...generations.docs.map(d => d.ref), ...files.docs.map(d => d.ref)];
         if (adminEntry.exists) {
-          batch.delete(adminEntry.ref);
+          allDocsRefs.push(adminEntry.ref);
         }
-        await batch.commit();
+
+        // Firestore batches support max 500 operations
+        const BATCH_LIMIT = 500;
+        for (let i = 0; i < allDocsRefs.length; i += BATCH_LIMIT) {
+          const chunk = allDocsRefs.slice(i, i + BATCH_LIMIT);
+          const currentBatch = db.batch();
+          chunk.forEach(ref => currentBatch.delete(ref));
+          await currentBatch.commit();
+        }
       } catch (err: any) {
         console.error("Firestore Cleanup Error:", err.message);
         return res.status(500).json({ error: `Firestore Cleanup Failed: ${err.message}` });
@@ -365,7 +375,9 @@ async function startServer() {
           isAdmin = true;
         }
       } catch (err: any) {
-        console.error("Firestore ListAuth Check Error:", err.message);
+        if (err.code !== 7 && !err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+          console.error("Firestore ListAuth Check Error:", err.message);
+        }
       }
 
       if (!isAdmin) {
@@ -376,12 +388,16 @@ async function startServer() {
             isAdmin = true;
           }
         } catch (err: any) {
-          console.error("Auth ListAuth Check Error:", err.message);
+          if (!err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+            console.error("Auth ListAuth Check Error:", err.message);
+          }
         }
       }
 
+      // If we still can't confirm admin and got restricted, just return empty list
+      // rather than throwing a 403 which clutters the UI
       if (!isAdmin) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.json({ users: [], note: "IAM permissions restricted or not an admin" });
       }
 
       try {

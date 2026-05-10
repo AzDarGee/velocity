@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import parse from "html-react-parser";
 import { GoogleGenAI } from "@google/genai";
 import * as mammoth from "mammoth";
 import { jsPDF } from "jspdf";
@@ -103,6 +104,109 @@ const getOpenRouterCategory = (m: any) => {
   if (mod.includes("image") || id.includes("dall-e") || id.includes("flux") || id.includes("stable-diffusion") || id.includes("midjourney") || id.includes("recraft") || id.includes("ideogram") || id.includes("black-forest-labs") || id.includes("stabilityai")) return "2. Image";
   return "1. Text";
 };
+
+// Sub-component for individual media assets to keep main logic cleaner
+function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', media: any, alt?: string, isAdmin: boolean }) {
+  const displayUrl = media.previewUrl || media.storageUrl || media.uri;
+  if (!displayUrl) return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Unplayable: Missing URL</div>;
+
+  const type = media.mimeType || media.file?.type || media.type || '';
+  const name = media.name || media.file?.name || 'Asset';
+
+  if (type.includes('image')) {
+    return (
+      <div className="group my-12 space-y-4">
+        <div className="relative overflow-hidden">
+          <img 
+            src={displayUrl} 
+            alt={alt || name} 
+            referrerPolicy="no-referrer"
+            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
+          />
+          <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
+          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+            Visual_Asset_Ingested
+          </div>
+        </div>
+        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">
+          — {alt || name} {isAdmin && `(ID: ${media.firestoreId || media.id})`}
+        </p>
+      </div>
+    );
+  }
+
+  if (type.includes('video')) {
+    return (
+      <div className="my-14 space-y-4">
+        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
+          <video src={displayUrl} controls className="w-full aspect-video" />
+          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 bg-red-600">
+            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="text-[8px] font-mono font-bold text-white uppercase tracking-tighter">Live_Context</span>
+          </div>
+          <a 
+            href={displayUrl} 
+            download={name}
+            className={`absolute bottom-4 right-4 p-2 transition-all ${theme === 'dark' ? 'bg-white text-black hover:bg-black hover:text-white' : 'bg-black text-white hover:bg-white hover:text-black'}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        </div>
+        <div className="flex items-center justify-center gap-4">
+           <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
+           <p className="text-[10px] font-mono font-bold opacity-30 uppercase tracking-[0.3em]">Temporal_Data_Source: {name}</p>
+           <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
+        </div>
+      </div>
+    );
+  }
+
+  if (type.includes('audio')) {
+    return (
+      <div className={`my-12 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
+        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-6">
+            <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
+              <FileAudio className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
+              <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
+            </div>
+          </div>
+          <a 
+            href={displayUrl} 
+            download={name}
+            className={`p-3 border-2 transition-all ${theme === 'dark' ? 'border-white/20 hover:bg-white hover:text-black' : 'border-black/20 hover:bg-black hover:text-white'}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        </div>
+        <audio src={displayUrl} controls className="w-full h-12" />
+      </div>
+    );
+  }
+
+  const isPdf = type.includes('pdf');
+  return (
+    <div className={`my-12 relative group max-w-2xl mx-auto ${theme === 'dark' ? 'bg-[#0A0A0A]' : 'bg-white'}`}>
+      <div className={`relative border-2 p-8 flex flex-col md:flex-row items-center gap-8 transition-all duration-500 ${theme === 'dark' ? 'border-[#333]' : 'border-black'}`}>
+        <div className={`w-20 h-20 shrink-0 flex items-center justify-center border-2 rounded-sm ${isPdf ? 'border-red-500/40 bg-red-500/5' : 'border-indigo-500/40 bg-indigo-500/5'}`}>
+          <FileText className={`w-10 h-10 ${isPdf ? 'text-red-500' : 'text-indigo-500'}`} />
+        </div>
+        <div className="flex-1 min-w-0 space-y-2 text-center md:text-left">
+          <h4 className="text-xl font-bold uppercase tracking-tighter truncate leading-none">{name}</h4>
+          <p className="text-[10px] font-mono opacity-50 uppercase tracking-widest leading-none">{((media.size || 0) / (1024 * 1024)).toFixed(2)} MB • VERIFIED SOURCE</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
@@ -1096,11 +1200,11 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
           type: (f.type?.includes('video') ? 'video' : f.type?.includes('audio') ? 'audio' : f.type?.includes('image') ? 'image' : undefined) as any,
           status: 'ACTIVE',
           progress: 100,
-          previewUrl: f.data || f.storageUrl || undefined,
+          storageUrl: f.storageUrl,
+          previewUrl: f.storageUrl || f.data || undefined,
           size: f.size,
           mimeType: f.type,
           uri: f.uri,
-          storageUrl: f.storageUrl,
           extractedText: f.extractedText
         }));
       }
@@ -1204,6 +1308,26 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             theme={theme}
             isAdmin={isAdmin}
             mediaFiles={mediaFiles}
+            generationId={currentGenerationId || undefined}
+            onSave={async (newHtml) => {
+               if (currentGenerationId) {
+                  try {
+                    await updateDoc(doc(db, "generations", currentGenerationId), {
+                      content: newHtml,
+                      updatedAt: serverTimestamp()
+                    });
+                    // Because user is previewing an already loaded generation (this doesn't affect `blogPost` state, unless it's the current one)
+                    if (blogPost) {
+                      setBlogPost(newHtml);
+                      setOriginalContent(newHtml);
+                    }
+                    setViewerContent({ content: newHtml, title: viewerContent.title });
+                  } catch (e) {
+                     handleFirestoreError(e, OperationType.UPDATE, `generations/${currentGenerationId}`);
+                     throw e;
+                  }
+               }
+            }}
             onClose={() => setViewerContent(null)}
             onDownload={exportToPDF}
             onCopy={copyToClipboard}
@@ -1293,16 +1417,17 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       <p className="font-mono text-xs uppercase">No historical records found</p>
                     </div>
                   ) : (
-                    sortedHistory.map((gen) => {
-                      const isGenProcessing = gen.status === 'processing' || generatingIds.has(gen.id);
+                    sortedHistory.map((gen, index) => {
+                      const id = gen.id || `temp-${index}`;
+                      const isGenProcessing = gen.status === 'processing' || generatingIds.has(id);
                       return (
                         <div 
-                          key={`history-gen-${gen.id}`}
+                          key={`history-gen-${id}-${index}`}
                           onClick={() => !isGenProcessing && loadGeneration(gen)}
                           className={`p-4 border transition-all cursor-pointer group relative ${
                             isGenProcessing ? 'opacity-70 cursor-wait' : ''
                           } ${
-                            currentGenerationId === gen.id 
+                            currentGenerationId === id 
                               ? (theme === 'dark' ? 'border-yellow-500 bg-yellow-500/10' : 'border-yellow-500 bg-yellow-50') 
                               : (theme === 'dark' ? 'border-[#333] bg-[#141414] hover:border-white' : 'border-[#141414] hover:bg-[#F8F8F7]')
                           }`}
@@ -1393,9 +1518,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               
               <div className="space-y-4">
                 <AnimatePresence>
-                  {mediaFiles.map((v) => (
+                  {mediaFiles.map((v, index) => (
                     <motion.div 
-                      key={`media-file-${v.id}`}
+                      key={`media-file-${v.id || index}-${index}`}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 10 }}
@@ -2161,182 +2286,100 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                         prose-blockquote:bg-gray-50 prose-blockquote-dark:bg-white/5 prose-blockquote:px-6 prose-blockquote:py-4 prose-blockquote:not-italic
                         ${theme === 'dark' ? 'prose-blockquote:border-l-white prose-blockquote:bg-white/5' : 'prose-blockquote:border-l-black prose-blockquote:bg-gray-50'}
                       `}>
-                        <Markdown 
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            h1: ({ children }) => <h1 className="text-4xl font-serif italic mb-8 uppercase tracking-tight">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-xl font-bold mt-8 mb-3">{children}</h3>,
-                            blockquote: ({ children }) => (
-                              <blockquote className={`my-8 pl-6 border-l-4 py-2 italic font-serif text-lg leading-relaxed ${theme === 'dark' ? 'border-white/20 text-white/70' : 'border-black/20 text-black/70'}`}>
-                                {children}
-                              </blockquote>
-                            ),
-                            p: ({ node, children, ...props }) => {
-                              // Standalone images in markdown are often wrapped in a paragraph.
-                              // We use the AST node to check if any child is a MEDIA_ID_ image.
-                              const hasMedia = node?.children?.some((child: any) => 
-                                child.tagName === "img" && child.properties?.src?.startsWith("MEDIA_ID_")
-                              );
+                        {blogPost.trim().startsWith('<') ? (
+                          <div className="html-content">
+                            {parse(blogPost, {
+                              replace: (domNode: any) => {
+                                if (domNode.type === 'tag' && domNode.name === 'img') {
+                                  const src = domNode.attribs?.src;
+                                  const alt = domNode.attribs?.alt;
+                                  
+                                  let media = null;
+                                  let foundId = "";
 
-                              if (hasMedia) {
-                                return <div className="mb-10 w-full" {...props}>{children}</div>;
-                              }
-                              return <p className={`text-base leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-800'}`} {...props}>{children}</p>;
-                            },
-                            img: ({ node, src, alt, ...props }) => {
-                              if (src?.startsWith('MEDIA_ID_')) {
-                                const id = src.replace('MEDIA_ID_', '');
-                                // Check both id and firestoreId to handle current session and restored history
-                                const media = mediaFiles.find(m => m.id === id || m.firestoreId === id);
-                                if (media && media.previewUrl) {
-                                  const type = media.mimeType || media.file?.type || media.type || '';
-                                  const name = media.name || media.file?.name || 'Asset';
+                                  if (src) {
+                                    const match = src.match(/MEDIA_ID_([a-zA-Z0-9_\-]+)/);
+                                    if (match) {
+                                      foundId = match[1].trim();
+                                      media = mediaFiles.find(m => m.id === foundId || m.firestoreId === foundId);
+                                    }
 
-                                  if (type.includes('image')) {
-                                    return (
-                                      <div className="group my-12 space-y-4">
-                                        <div className="relative overflow-hidden">
-                                          <img 
-                                            src={media.previewUrl} 
-                                            alt={alt || name} 
-                                            referrerPolicy="no-referrer"
-                                            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
-                                          />
-                                          {/* Aesthetic Scanline Overlay */}
-                                          <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
-                                          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                                            Visual_Asset_Ingested
-                                          </div>
-                                        </div>
-                                        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">
-                                          — {alt || name} {isAdmin && `(ID: ${media.firestoreId || media.id})`}
-                                        </p>
-                                      </div>
-                                    );
+                                    if (!media) {
+                                      const cleanSrc = src.split('#')[0];
+                                      media = mediaFiles.find(m => 
+                                        (m.storageUrl && cleanSrc.includes(m.storageUrl.split('?')[0])) || 
+                                        (m.previewUrl && cleanSrc.includes(m.previewUrl.split('?')[0]))
+                                      );
+                                    }
                                   }
-                                  if (type.includes('video')) {
-                                    return (
-                                      <div className="my-14 space-y-4">
-                                          <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
-                                          <video src={media.previewUrl} controls className="w-full aspect-video" crossOrigin="anonymous" />
-                                          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 bg-red-600">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                                            <span className="text-[8px] font-mono font-bold text-white uppercase tracking-tighter">Live_Context</span>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center justify-center gap-4">
-                                           <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
-                                           <p className="text-[10px] font-mono font-bold opacity-30 uppercase tracking-[0.3em]">Temporal_Data_Source: {name}</p>
-                                           <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
-                                        </div>
-                                      </div>
-                                    );
-                                  }
-                                  if (type.includes('audio')) {
-                                    return (
-                                        <div className={`my-12 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
-                                        <div className="flex items-center gap-6 mb-8">
-                                          <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                                            <FileAudio className="w-6 h-6" />
-                                          </div>
-                                          <div>
-                                            <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
-                                            <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
-                                          </div>
-                                        </div>
-                                        <audio src={media.previewUrl} controls className="w-full h-12" crossOrigin="anonymous" />
-                                      </div>
-                                    );
-                                  }
-                                  // Generic Document / PDF Card
-                                  const isPdf = type.includes('pdf');
-                                  return (
-                                    <div className={`my-12 relative group max-w-2xl mx-auto ${theme === 'dark' ? 'bg-[#0A0A0A]' : 'bg-white'}`} id={`doc-card-${media.id}`}>
-                                      <div className={`absolute -inset-1 ${isPdf ? 'bg-red-500/10' : 'bg-indigo-500/10'} rounded-sm blur-xl opacity-0 group-hover:opacity-100 transition-all duration-700`} />
-                                      <div className={`relative border-2 p-8 flex flex-col md:flex-row items-center gap-8 transition-all duration-500 shadow-[0_0_0_0_rgba(0,0,0,0)] hover:shadow-[0_20px_40px_-20px_rgba(0,0,0,0.2)] ${theme === 'dark' ? 'border-[#333] hover:border-white/40' : 'border-black hover:-translate-y-1'}`}>
-                                        <div className={`w-20 h-20 shrink-0 flex items-center justify-center border-2 rounded-sm transition-transform duration-500 group-hover:scale-110 ${isPdf ? 'border-red-500/40 bg-red-500/5' : 'border-indigo-500/40 bg-indigo-500/5'}`}>
-                                          {isPdf ? (
-                                            <div className="text-center">
-                                              <FileText className="w-10 h-10 text-red-600 mb-0.5" />
-                                              <span className="text-[8px] font-mono font-black text-red-600 block uppercase tracking-tighter">PDF_DOC</span>
-                                            </div>
-                                          ) : (
-                                            <div className="text-center">
-                                              <FileText className="w-10 h-10 text-indigo-600 mb-0.5" />
-                                              <span className="text-[8px] font-mono font-black text-indigo-600 block uppercase tracking-tighter">WORD_DOC</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div className="flex-1 min-w-0 space-y-2 text-center md:text-left">
-                                          <div className="flex items-center justify-center md:justify-start gap-2">
-                                            <div className={`w-2 h-2 rounded-full ${isPdf ? 'bg-red-500' : 'bg-indigo-500'} animate-pulse`} />
-                                            <p className="text-[9px] font-mono font-bold opacity-40 uppercase tracking-[0.4em]">{isPdf ? 'Source_Document_Ref' : 'Knowledge_Fragment_Node'}</p>
-                                          </div>
-                                          <h4 className="text-xl font-bold uppercase tracking-tighter truncate leading-none">{name}</h4>
-                                          <p className="text-[10px] font-mono opacity-50 uppercase tracking-widest leading-none">{( (media.size || 0) / (1024 * 1024)).toFixed(2)} MB • {media.status} • VERIFIED SOURCE</p>
-                                        </div>
-                                        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-                                          <button 
-                                            id={`btn-view-${media.id}`}
-                                            onClick={() => setPreviewMedia(media)}
-                                            className={`flex-1 md:flex-none px-6 py-3 border-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95 ${
-                                              theme === 'dark' ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'
-                                            }`}
-                                          >
-                                            View_Source
-                                          </button>
-                                          <button 
-                                            id={`btn-dl-${media.id}`}
-                                            onClick={() => {
-                                              if (media.storageUrl || (media.previewUrl && (media.previewUrl.startsWith('http') || media.previewUrl.startsWith('https')))) {
-                                                downloadFile({ 
-                                                  id: media.id, 
-                                                  name: media.name || 'document', 
-                                                  type: media.mimeType || 'application/octet-stream', 
-                                                  size: media.size || 0,
-                                                  storageUrl: media.storageUrl || media.previewUrl
-                                                });
-                                              }
-                                              else if (media.file) downloadLocalFile(media.file);
-                                              else if (media.previewUrl) {
-                                                const link = document.createElement("a");
-                                                link.href = media.previewUrl;
-                                                link.download = media.name || 'document';
-                                                document.body.appendChild(link);
-                                                link.click();
-                                                document.body.removeChild(link);
-                                              }
-                                            }}
-                                            className={`p-3 border-2 transition-all hover:rotate-12 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'}`}
-                                          >
-                                            <Download className="w-5 h-5" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                      {/* Snippet preview for docs if available */}
-                                      {media.extractedText && (
-                                        <div className={`mt-2 p-6 border-l-4 border-dashed text-[11px] font-mono opacity-60 italic leading-relaxed transition-all group-hover:opacity-100 ${theme === 'dark' ? 'bg-[#141414] border-white/20' : 'bg-gray-50/50 border-black/20'}`}>
-                                           <span className="text-lg leading-none opacity-20 mr-2">"</span>
-                                           {media.extractedText.substring(0, 240).trim()}...
-                                           <span className="text-lg leading-none opacity-20 ml-2">"</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
+
+                                  if (media) return <MediaAsset theme={theme} media={media} alt={alt} isAdmin={isAdmin} />;
+                                  if (foundId) return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Lost: {foundId}</div>;
                                 }
                               }
-                                if (src?.startsWith('MEDIA_ID_')) {
-                                  const id = src.replace('MEDIA_ID_', '');
-                                  return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Lost {isAdmin && `: ${id}`}</div>;
+                            })}
+                          </div>
+                        ) : (
+                          <Markdown 
+                            urlTransform={(url) => {
+                              if (url.startsWith('MEDIA_ID_')) return url;
+                              return url; 
+                            }}
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({ children }) => <h1 className="text-4xl font-serif italic mb-8 uppercase tracking-tight">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-2xl font-serif italic mt-12 mb-4 border-l-4 border-current pl-4">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-xl font-bold mt-8 mb-3">{children}</h3>,
+                              blockquote: ({ children }) => (
+                                <blockquote className={`my-8 pl-6 border-l-4 py-2 italic font-serif text-lg leading-relaxed ${theme === 'dark' ? 'border-white/20 text-white/70' : 'border-black/20 text-black/70'}`}>
+                                  {children}
+                                </blockquote>
+                              ),
+                              p: ({ node, children, ...props }) => {
+                                const hasMedia = node?.children?.some((child: any) => 
+                                  child.tagName === "img" && child.properties?.src?.includes("MEDIA_ID_")
+                                );
+
+                                if (hasMedia) {
+                                  return <div className="mb-10 w-full" {...props}>{children}</div>;
                                 }
+                                return <p className={`text-base leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-800'}`} {...props}>{children}</p>;
+                              },
+                              img: ({ node, src, alt, ...props }) => {
+                                let media = null;
+                                let foundId = "";
+
+                                if (src) {
+                                  const match = src.match(/MEDIA_ID_([a-zA-Z0-9_\-]+)/);
+                                  if (match) {
+                                    foundId = match[1].trim();
+                                    media = mediaFiles.find(m => m.id === foundId || m.firestoreId === foundId);
+                                  }
+
+                                  if (!media) {
+                                    const cleanSrc = src.split('#')[0];
+                                    media = mediaFiles.find(m => 
+                                      (m.storageUrl && cleanSrc.includes(m.storageUrl.split('?')[0])) || 
+                                      (m.previewUrl && cleanSrc.includes(m.previewUrl.split('?')[0]))
+                                    );
+                                  }
+                                }
+
+                                if (media) {
+                                  return <MediaAsset theme={theme} media={media} alt={alt} isAdmin={isAdmin} />;
+                                }
+                                
+                                if (foundId) {
+                                  return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Lost {isAdmin && `: ${foundId}`}</div>;
+                                }
+                                
                                 return <img src={src} alt={alt} referrerPolicy="no-referrer" className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
-                            }
-                          }}
-                        >
-                          {sanitizedPost}
-                        </Markdown>
+                              }
+                            }}
+                          >
+                            {sanitizedPost}
+                          </Markdown>
+                        )}
                       </div>
                     ) : viewMode === 'raw' ? (
                       <div className="flex-1 min-h-[600px] flex flex-col relative">
@@ -2438,7 +2481,6 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     controls 
                     className="max-w-full max-h-[75vh] shadow-[0_0_100px_rgba(0,0,0,0.5)]"
                     autoPlay
-                    crossOrigin="anonymous"
                   />
                 )}
                 {(previewMedia.mimeType?.includes('audio') || previewMedia.file?.type.includes('audio')) && (
@@ -2448,7 +2490,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           <FileAudio className="w-10 h-10 text-white/40" />
                           <div className="absolute inset-0 rounded-full border-b-2 border-white/20 animate-spin" />
                        </div>
-                       <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay crossOrigin="anonymous" />
+                       <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay />
                        <div className="text-center space-y-2">
                          <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.3em]">Temporal_Data_Source</p>
                        </div>

@@ -81,6 +81,15 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    // Asset (for RBAC demonstration)
+    function isValidAsset(data) {
+      return data.keys().hasAll(['ownerId', 'ownerRole', 'name', 'createdAt']) &&
+             data.ownerId == request.auth.uid &&
+             data.ownerRole in ['user', 'admin'] &&
+             data.name is string && data.name.size() <= 256 &&
+             data.createdAt is timestamp;
+    }
+
     match /admins/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
@@ -135,6 +144,31 @@ service cloud.firestore {
       allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidFile(incoming()) && incoming().createdAt == request.time;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /assets/{assetId} {
+      // Create/Update only by owner. We strictly enforce that ownerRole matches their actual role
+      // to prevent spoofing and allow efficient client-side `where("ownerRole", "==", "user")` queries.
+      allow create: if isSignedIn() && isValidAsset(incoming()) && incoming().createdAt == request.time &&
+                    incoming().ownerRole == (isAdmin() ? 'admin' : 'user');
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid && isValidAsset(incoming()) &&
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().ownerRole == existing().ownerRole &&
+                    incoming().createdAt == existing().createdAt;
+      
+      // Admin sees all 'user' assets efficiently. Because we enforced ownerRole at creation, 
+      // the client can query safely without massive O(n) get() read spikes.
+      allow get, list: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (isAdmin() && resource.data.ownerRole == 'user')
+      );
+
+      // Deletion strictly uses get() to guarantee at mutation-time that the target user 
+      // hasn't been promoted to an admin since the asset was created.
+      allow delete: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (isAdmin() && resource.data.ownerRole == 'user' && !exists(/databases/$(database)/documents/admins/$(resource.data.ownerId)))
+      );
     }
   }
 }

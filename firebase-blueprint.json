@@ -73,6 +73,18 @@
       "properties": {
         "openRouterKey": { "type": "string" }
       }
+    },
+    "asset": {
+      "title": "Asset",
+      "description": "Any user asset to test RBAC",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "ownerRole": { "type": "string", "enum": ["user", "admin"] },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "ownerRole", "name", "createdAt"]
     }
   },
   "firestore": {
@@ -95,6 +107,10 @@
     "files/{fileId}": {
       "schema": "file",
       "description": "Uploaded file assets"
+    },
+    "assets/{assetId}": {
+      "schema": "asset",
+      "description": "User assets"
     }
   }
 }
