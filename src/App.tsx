@@ -46,6 +46,33 @@ import { onSnapshot, doc, getDoc, setDoc, serverTimestamp, runTransaction, colle
 // Initialize Gemini directly on the frontend as per AI Studio guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+const DEFAULT_AUDIENCES = [
+  "Business Professionals & Content Marketers", "General Audience / Beginners", "Technical Audience / Developers", 
+  "Students & Educators", "Executives & Decision Makers", "Hobbyists & Enthusiasts", "Creative Professionals",
+  "Digital Nomads", "E-commerce Founders", "SaaS Product Managers", "Environmental Activists", "Health & Wellness Coaches",
+  "Financial Advisors", "Real Estate Agents", "Cybersecurity Specialists", "AI Researchers", "UX/UI Designers",
+  "Data Scientists", "Blockchain Developers", "Cloud Architects", "Mobile App Developers", "Game Developers",
+  "Virtual Reality Content Creators", "Social Media Influencers", "Small Business Owners", "Startup Founders",
+  "Venture Capitalists", "Angel Investors", "HR Professionals", "Legal Tech Specialists", "Medical Professionals",
+  "Fitness Trainers", "Travel Bloggers", "Food Critics & Chefs", "Parent Communities", "Retirement Planners",
+  "Sustainability Consultants", "Non-Profit Directors", "Philanthropists", "Government Policy Makers", "Urban Planners",
+  "Architecture Enthusiasts", "Interior Designers", "Fashion Designers", "Music Producers", "Podcast Hosts",
+  "Video Editors", "Journalists & Reporters", "Bio-Tech Engineers", "Aerospace Enthusiasts", "Robotics Engineers",
+  "Renewable Energy Techs", "Agri-Tech Innovators", "Supply Chain Logistics Pros", "Customer Success Managers",
+  "Sales Representatives", "Public Relations Experts", "Event Planners"
+];
+
+const DEFAULT_TONES = [
+  "Professional", "Humorous", "Conversational", "Authoritative",
+  "Casual & Relatable", "Inspirational & Uplifting", "Direct & No-Nonsense",
+  "Playful & Quirky", "Thought-Provoking & Philosophical", "Urgent & Bold",
+  "Empathetic & Supportive", "Skeptical & Analytical", "Visionary & Future-Focused",
+  "Story-Driven & Narrative", "Educational & Instructive", "Minimalist & Concise",
+  "Energetic & High-Vibe", "Humble & Authentic", "Sarcastic & Witty",
+  "Scientific & Data-Driven", "Provocative & Contrarian", "Luxurious & Sophisticated",
+  "Nostalgic & Reflective", "Cyberpunk & Technical"
+];
+
 interface BlogPreferences {
   targetAudience: string[];
   tone: string[];
@@ -236,6 +263,11 @@ export default function App() {
     model: "gemini-3-flash-preview",
     systemPrompt: "",
   });
+  const [customAudiences, setCustomAudiences] = useState<string[]>([]);
+  const [customTones, setCustomTones] = useState<string[]>([]);
+  const [newAudience, setNewAudience] = useState("");
+  const [newTone, setNewTone] = useState("");
+
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
   const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
@@ -1778,38 +1810,73 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 <div className="space-y-4 group">
                   <div className="flex justify-between items-center px-1">
                     <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Target_Audience_Segments [{preferences.targetAudience.length}]</label>
-                    <BookOpen className="w-3 h-3 opacity-20" />
+                    <div className="flex items-center gap-4">
+                      {preferences.targetAudience.length > 0 && (
+                        <button 
+                          onClick={() => setPreferences({ ...preferences, targetAudience: [] })}
+                          className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                        >
+                          De-select All
+                        </button>
+                      )}
+                      <BookOpen className="w-3 h-3 opacity-20" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={newAudience}
+                      onChange={(e) => setNewAudience(e.target.value)}
+                      placeholder="Add custom segment..."
+                      className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newAudience.trim()) {
+                          e.preventDefault();
+                          const val = newAudience.trim();
+                          if (!customAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
+                            setCustomAudiences([...customAudiences, val]);
+                          }
+                          if (!preferences.targetAudience.includes(val)) {
+                            setPreferences({ ...preferences, targetAudience: [...preferences.targetAudience, val] });
+                          }
+                          setNewAudience("");
+                        }
+                      }}
+                    />
+                    <button 
+                      onClick={() => {
+                        if (newAudience.trim()) {
+                          const val = newAudience.trim();
+                          if (!customAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
+                            setCustomAudiences([...customAudiences, val]);
+                          }
+                          if (!preferences.targetAudience.includes(val)) {
+                            setPreferences({ ...preferences, targetAudience: [...preferences.targetAudience, val] });
+                          }
+                          setNewAudience("");
+                        }
+                      }}
+                      className={`px-3 py-2 border text-[10px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]' : 'border-[#141414]/10 hover:bg-[#141414]/10 text-[#141414]'}`}
+                    >
+                      Add
+                    </button>
                   </div>
                   <div className={`w-full border max-h-48 overflow-y-auto p-4 space-y-2 scrollbar-thin ${
                     theme === 'dark' 
                       ? 'bg-[#1A1A1A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
                       : 'bg-white/40 border-[#141414]/10 scrollbar-thumb-black/20 scrollbar-track-transparent'
                   }`}>
-                    {[
-                      "Business Professionals & Content Marketers", "General Audience / Beginners", "Technical Audience / Developers", 
-                      "Students & Educators", "Executives & Decision Makers", "Hobbyists & Enthusiasts", "Creative Professionals",
-                      "Digital Nomads", "E-commerce Founders", "SaaS Product Managers", "Environmental Activists", "Health & Wellness Coaches",
-                      "Financial Advisors", "Real Estate Agents", "Cybersecurity Specialists", "AI Researchers", "UX/UI Designers",
-                      "Data Scientists", "Blockchain Developers", "Cloud Architects", "Mobile App Developers", "Game Developers",
-                      "Virtual Reality Content Creators", "Social Media Influencers", "Small Business Owners", "Startup Founders",
-                      "Venture Capitalists", "Angel Investors", "HR Professionals", "Legal Tech Specialists", "Medical Professionals",
-                      "Fitness Trainers", "Travel Bloggers", "Food Critics & Chefs", "Parent Communities", "Retirement Planners",
-                      "Sustainability Consultants", "Non-Profit Directors", "Philanthropists", "Government Policy Makers", "Urban Planners",
-                      "Architecture Enthusiasts", "Interior Designers", "Fashion Designers", "Music Producers", "Podcast Hosts",
-                      "Video Editors", "Journalists & Reporters", "Bio-Tech Engineers", "Aerospace Enthusiasts", "Robotics Engineers",
-                      "Renewable Energy Techs", "Agri-Tech Innovators", "Supply Chain Logistics Pros", "Customer Success Managers",
-                      "Sales Representatives", "Public Relations Experts", "Event Planners"
-                    ].map((audience) => (
+                    {Array.from(new Set([...DEFAULT_AUDIENCES, ...customAudiences])).map((audience) => (
                       <label key={`audience-seg-${audience}`} className="flex items-center gap-3 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
                             type="checkbox"
                             checked={preferences.targetAudience.includes(audience)}
                             onChange={(e) => {
-                              const newAudience = e.target.checked 
+                              const newAudienceList = e.target.checked 
                                 ? [...preferences.targetAudience, audience]
                                 : preferences.targetAudience.filter(a => a !== audience);
-                              setPreferences({ ...preferences, targetAudience: newAudience });
+                              setPreferences({ ...preferences, targetAudience: newAudienceList });
                             }}
                             className={`peer appearance-none w-4 h-4 border transition-colors ${
                               theme === 'dark' 
@@ -1836,31 +1903,71 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-1">
                     <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Voice_Tones [{preferences.tone.length}]</label>
-                    <div className="text-[8px] font-mono opacity-40 uppercase">Multi_Selection_Active</div>
+                    <div className="flex items-center gap-4">
+                      {preferences.tone.length > 0 && (
+                        <button 
+                          onClick={() => setPreferences({ ...preferences, tone: [] })}
+                          className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                        >
+                          De-select All
+                        </button>
+                      )}
+                      <div className="text-[8px] font-mono opacity-40 uppercase">Multi_Selection_Active</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={newTone}
+                      onChange={(e) => setNewTone(e.target.value)}
+                      placeholder="Add custom tone..."
+                      className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newTone.trim()) {
+                          e.preventDefault();
+                          const val = newTone.trim();
+                          if (!customTones.includes(val) && !DEFAULT_TONES.includes(val)) {
+                            setCustomTones([...customTones, val]);
+                          }
+                          if (!preferences.tone.includes(val)) {
+                            setPreferences({ ...preferences, tone: [...preferences.tone, val] });
+                          }
+                          setNewTone("");
+                        }
+                      }}
+                    />
+                    <button 
+                      onClick={() => {
+                        if (newTone.trim()) {
+                          const val = newTone.trim();
+                          if (!customTones.includes(val) && !DEFAULT_TONES.includes(val)) {
+                            setCustomTones([...customTones, val]);
+                          }
+                          if (!preferences.tone.includes(val)) {
+                            setPreferences({ ...preferences, tone: [...preferences.tone, val] });
+                          }
+                          setNewTone("");
+                        }
+                      }}
+                      className={`px-3 py-2 border text-[10px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]' : 'border-[#141414]/10 hover:bg-[#141414]/10 text-[#141414]'}`}
+                    >
+                      Add
+                    </button>
                   </div>
                   <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 border p-4 max-h-48 overflow-y-auto custom-scrollbar ${
                     theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414]/10 bg-white/40'
                   }`}>
-                    {[
-                      "Professional", "Humorous", "Conversational", "Authoritative",
-                      "Casual & Relatable", "Inspirational & Uplifting", "Direct & No-Nonsense",
-                      "Playful & Quirky", "Thought-Provoking & Philosophical", "Urgent & Bold",
-                      "Empathetic & Supportive", "Skeptical & Analytical", "Visionary & Future-Focused",
-                      "Story-Driven & Narrative", "Educational & Instructive", "Minimalist & Concise",
-                      "Energetic & High-Vibe", "Humble & Authentic", "Sarcastic & Witty",
-                      "Scientific & Data-Driven", "Provocative & Contrarian", "Luxurious & Sophisticated",
-                      "Nostalgic & Reflective", "Cyberpunk & Technical"
-                    ].map((tone) => (
+                    {Array.from(new Set([...DEFAULT_TONES, ...customTones])).map((tone) => (
                       <label key={`tone-selector-${tone}`} className="flex items-center gap-2 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
                             type="checkbox"
                             checked={preferences.tone.includes(tone)}
                             onChange={(e) => {
-                              const newTone = e.target.checked 
+                              const newToneList = e.target.checked 
                                 ? [...preferences.tone, tone]
                                 : preferences.tone.filter(t => t !== tone);
-                              setPreferences({ ...preferences, tone: newTone });
+                              setPreferences({ ...preferences, tone: newToneList });
                             }}
                             className={`peer appearance-none w-3 h-3 border transition-colors ${
                               theme === 'dark' 
