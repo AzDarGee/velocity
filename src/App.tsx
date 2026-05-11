@@ -1827,18 +1827,24 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       type="text"
                       value={newAudience}
                       onChange={(e) => setNewAudience(e.target.value)}
-                      placeholder="Add custom segment..."
+                      placeholder="Add custom segment (comma-separated for multiple)..."
                       className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && newAudience.trim()) {
                           e.preventDefault();
-                          const val = newAudience.trim();
-                          if (!customAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
-                            setCustomAudiences([val, ...customAudiences]);
-                          }
-                          if (!preferences.targetAudience.includes(val)) {
-                            setPreferences({ ...preferences, targetAudience: [...preferences.targetAudience, val] });
-                          }
+                          const vals = newAudience.split(',').map(v => v.trim()).filter(Boolean);
+                          let addedAudiences = [...customAudiences];
+                          let selectedAudiences = [...preferences.targetAudience];
+                          vals.forEach(val => {
+                            if (!addedAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
+                              addedAudiences = [val, ...addedAudiences];
+                            }
+                            if (!selectedAudiences.includes(val)) {
+                              selectedAudiences = [...selectedAudiences, val];
+                            }
+                          });
+                          setCustomAudiences(addedAudiences);
+                          setPreferences({ ...preferences, targetAudience: selectedAudiences });
                           setNewAudience("");
                         }
                       }}
@@ -1846,13 +1852,19 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <button 
                       onClick={() => {
                         if (newAudience.trim()) {
-                          const val = newAudience.trim();
-                          if (!customAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
-                            setCustomAudiences([val, ...customAudiences]);
-                          }
-                          if (!preferences.targetAudience.includes(val)) {
-                            setPreferences({ ...preferences, targetAudience: [...preferences.targetAudience, val] });
-                          }
+                          const vals = newAudience.split(',').map(v => v.trim()).filter(Boolean);
+                          let addedAudiences = [...customAudiences];
+                          let selectedAudiences = [...preferences.targetAudience];
+                          vals.forEach(val => {
+                            if (!addedAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
+                              addedAudiences = [val, ...addedAudiences];
+                            }
+                            if (!selectedAudiences.includes(val)) {
+                              selectedAudiences = [...selectedAudiences, val];
+                            }
+                          });
+                          setCustomAudiences(addedAudiences);
+                          setPreferences({ ...preferences, targetAudience: selectedAudiences });
                           setNewAudience("");
                         }
                       }}
@@ -1920,18 +1932,24 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       type="text"
                       value={newTone}
                       onChange={(e) => setNewTone(e.target.value)}
-                      placeholder="Add custom tone..."
+                      placeholder="Add custom tone (comma-separated for multiple)..."
                       className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && newTone.trim()) {
                           e.preventDefault();
-                          const val = newTone.trim();
-                          if (!customTones.includes(val) && !DEFAULT_TONES.includes(val)) {
-                            setCustomTones([val, ...customTones]);
-                          }
-                          if (!preferences.tone.includes(val)) {
-                            setPreferences({ ...preferences, tone: [...preferences.tone, val] });
-                          }
+                          const vals = newTone.split(',').map(v => v.trim()).filter(Boolean);
+                          let addedTones = [...customTones];
+                          let selectedTones = [...preferences.tone];
+                          vals.forEach(val => {
+                            if (!addedTones.includes(val) && !DEFAULT_TONES.includes(val)) {
+                              addedTones = [val, ...addedTones];
+                            }
+                            if (!selectedTones.includes(val)) {
+                              selectedTones = [...selectedTones, val];
+                            }
+                          });
+                          setCustomTones(addedTones);
+                          setPreferences({ ...preferences, tone: selectedTones });
                           setNewTone("");
                         }
                       }}
@@ -1939,13 +1957,19 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <button 
                       onClick={() => {
                         if (newTone.trim()) {
-                          const val = newTone.trim();
-                          if (!customTones.includes(val) && !DEFAULT_TONES.includes(val)) {
-                            setCustomTones([val, ...customTones]);
-                          }
-                          if (!preferences.tone.includes(val)) {
-                            setPreferences({ ...preferences, tone: [...preferences.tone, val] });
-                          }
+                          const vals = newTone.split(',').map(v => v.trim()).filter(Boolean);
+                          let addedTones = [...customTones];
+                          let selectedTones = [...preferences.tone];
+                          vals.forEach(val => {
+                            if (!addedTones.includes(val) && !DEFAULT_TONES.includes(val)) {
+                              addedTones = [val, ...addedTones];
+                            }
+                            if (!selectedTones.includes(val)) {
+                              selectedTones = [...selectedTones, val];
+                            }
+                          });
+                          setCustomTones(addedTones);
+                          setPreferences({ ...preferences, tone: selectedTones });
                           setNewTone("");
                         }
                       }}
