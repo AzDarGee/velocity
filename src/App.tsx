@@ -116,6 +116,7 @@ import { AdminDashboard } from "./components/AdminDashboard";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Header } from "./components/layout/Header";
 import { GenerationViewer } from "./components/GenerationViewer";
+import { MultiModalStudio } from "./components/MultiModalStudio";
 import { RotatingQuotes } from './components/ui/RotatingQuotes';
 
 const getOpenRouterCategory = (m: any) => {
@@ -236,6 +237,7 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
 }
 
 export default function App() {
+  const [appMode, setAppMode] = useState<'narrative' | 'media'>('narrative');
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [blogPost, setBlogPost] = useState<string | null>(null);
@@ -1535,9 +1537,16 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         isAdmin={isAdmin}
         mediaFilesCount={mediaFiles.length}
         handleNewPost={handleNewPost}
+        appMode={appMode}
+        setAppMode={setAppMode}
       />
 
-      <main className="max-w-7xl mx-auto p-6 md:p-12">
+      <main className={`max-w-7xl mx-auto p-6 md:p-12 ${appMode === 'media' ? 'h-[calc(100vh-80px)] p-0 md:p-0' : ''}`}>
+        {appMode === 'media' ? (
+          <div className={`h-full border-2 ${theme === 'dark' ? 'border-[#333] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'}`}>
+            <MultiModalStudio theme={theme} />
+          </div>
+        ) : (
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-0 border-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] bg-white shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'} transition-all`}>
           
           {/* Controls Panel */}
@@ -2528,7 +2537,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       </div>
                     ) : (
                       <div className="flex-1 min-h-[600px] flex flex-col relative">
-                         <div className={`absolute top-4 right-4 z-10 px-2 py-1 text-[8px] font-mono uppercase tracking-widest border ${theme === 'dark' ? 'bg-black text-white border-white/20' : 'bg-white text-black border-black/20'}`}>
+                         <div className={`absolute top-4 right-4 z-10 px-2 py-1 text-[8px] font-mono uppercase tracking-widest border ${theme === 'dark' ? 'bg-[#222222] text-[#F8F8F7] border-[#333]' : 'bg-white text-black border-black/20'}`}>
                            Raw_HTML_Source
                          </div>
                          <textarea
@@ -2545,7 +2554,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                             }
                           }}
                           className={`flex-1 w-full p-8 font-mono text-[11px] outline-none resize-none transition-colors border-none focus:ring-0 leading-tight ${
-                            theme === 'dark' ? 'bg-[#000] text-green-500/80' : 'bg-[#141414] text-[#00FF41]'
+                            theme === 'dark' ? 'bg-[#111111] text-[#F8F8F7]' : 'bg-[#F8F8F7] text-[#141414]'
                           }`}
                         />
                       </div>
@@ -2566,6 +2575,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             </div>
           </div>
         </div>
+        )}
       </main>
 
       {/* Media Preview Modal */}

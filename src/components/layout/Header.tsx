@@ -9,6 +9,8 @@ interface HeaderProps {
   isAdmin: boolean;
   mediaFilesCount: number;
   handleNewPost: () => void;
+  appMode: 'narrative' | 'media';
+  setAppMode: (mode: 'narrative' | 'media') => void;
 }
 
 export function Header({
@@ -18,7 +20,9 @@ export function Header({
   setIsAdminModalOpen,
   isAdmin,
   mediaFilesCount,
-  handleNewPost
+  handleNewPost,
+  appMode,
+  setAppMode
 }: HeaderProps) {
   return (
     <header id="onboarding-header" className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'} sticky top-0 z-20 transition-colors duration-300`}>
@@ -48,6 +52,21 @@ export function Header({
           <ThemeToggle theme={theme} setTheme={setTheme} />
           
           <div className="hidden lg:flex items-center gap-6">
+            <div className={`flex rounded-none overflow-hidden border ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'} font-mono text-[10px] uppercase tracking-widest font-bold`}>
+              <button 
+                onClick={() => setAppMode('narrative')}
+                className={`px-4 py-2 transition-colors ${appMode === 'narrative' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+              >
+                Narrative
+              </button>
+              <button 
+                onClick={() => setAppMode('media')}
+                className={`px-4 py-2 border-l ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'} transition-colors ${appMode === 'media' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+              >
+                Media Studio
+              </button>
+            </div>
+
             <div className={`flex items-center gap-3 px-3 py-1.5 border ${theme === 'dark' ? 'border-[#333] bg-white/5' : 'border-[#141414] bg-black/5'} font-mono text-[10px]`}>
               <div className="flex items-center gap-2 pr-3 border-r border-current/20">
                 <Activity className="w-3 h-3 text-green-500 animate-pulse" />

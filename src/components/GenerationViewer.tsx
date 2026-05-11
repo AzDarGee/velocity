@@ -485,13 +485,6 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
           <Type className="w-3 h-3 mr-2" />
           Rich_Text
         </button>
-        <button
-          onClick={() => setActiveMode('html')}
-          className={`h-full px-4 text-[10px] font-mono font-bold tracking-widest uppercase transition-all flex items-center border-b-2 ${activeMode === 'html' ? (theme === 'dark' ? 'border-white text-white' : 'border-black text-black') : 'border-transparent opacity-40 hover:opacity-100'}`}
-        >
-          <FileCode className="w-3 h-3 mr-2" />
-          HTML
-        </button>
       </div>
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden history-scrollbar p-8 md:p-20 flex justify-center">
@@ -533,11 +526,6 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                 formats={QUILL_FORMATS}
                 className="quill-editor-custom min-h-[500px]"
               />
-            </div>
-          )}
-          {activeMode === 'html' && (
-            <div className={`p-6 min-h-[500px] border-2 font-mono text-xs whitespace-pre-wrap break-all overflow-x-hidden ${theme === 'dark' ? 'border-[#333] bg-[#111] text-indigo-300' : 'border-[#141414] bg-white text-indigo-700'}`}>
-              {DOMPurify.sanitize(editorContent)}
             </div>
           )}
         </article>
