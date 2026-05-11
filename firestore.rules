@@ -90,6 +90,16 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    // Activity
+    function isValidActivity(data) {
+      return data.keys().hasAll(['type', 'description', 'cost', 'timestamp']) &&
+             data.type is string && data.type.size() <= 64 &&
+             data.description is string && data.description.size() <= 256 &&
+             (data.cost is int || data.cost is number) &&
+             data.timestamp is timestamp &&
+             (data.get('metadata', {}) is map);
+    }
+
     match /admins/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
@@ -123,6 +133,14 @@ service cloud.firestore {
       // Private sensitive data
       match /private/keys {
         allow get, write: if isOwner(userId);
+      }
+
+      // Activity history
+      match /activity/{activityId} {
+        allow list: if isOwner(userId) || isAdmin();
+        allow get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidActivity(incoming()) && incoming().timestamp == request.time;
+        allow delete: if isAdmin() || isOwner(userId);
       }
     }
 

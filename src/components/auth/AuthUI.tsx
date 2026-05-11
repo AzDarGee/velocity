@@ -6,12 +6,27 @@ import {
   updateProfile,
   signOut,
   deleteUser,
+  onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction, writeBatch, collection, query, where, getDocs } from 'firebase/firestore';
-import { LogIn, UserPlus, Github, Mail, Lock, User as UserIcon, Loader2, LogOut, AlertCircle, Coins, CreditCard, ChevronRight, Check, X, Trash2 } from 'lucide-react';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, runTransaction, writeBatch, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { LogIn, UserPlus, Github, Mail, Lock, User as UserIcon, Loader2, LogOut, AlertCircle, Coins, CreditCard, ChevronRight, Check, X, Trash2, Activity, History as HistoryIcon, Wallet, Wand2, Star, Sparkles, Settings, Clock, Shield, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+export function useAuth() {
+  const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
+  const [loading, setLoading] = useState(!auth.currentUser);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+    });
+  }, []);
+
+  return { user, loading };
+}
 
 // Cache strictly handles ongoing operations to prevent race conditions (e.g. AuthUI and UserButton calling concurrently)
 const ensureUserProfilePromises = new Map<string, Promise<void>>();
@@ -353,14 +368,28 @@ export function AuthUI({ theme }: { theme: 'light' | 'dark' }) {
   );
 }
 
-export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
-  const user = auth.currentUser;
-  const [showTopUp, setShowTopUp] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+interface UserButtonProps {
+  theme: 'light' | 'dark';
+  setTheme?: (theme: 'light' | 'dark') => void;
+  setIsHistoryOpen?: (open: boolean) => void;
+  setIsAdminModalOpen?: (open: boolean) => void;
+  isAdmin?: boolean;
+}
+
+export function UserButton({ 
+  theme, 
+  setTheme, 
+  setIsHistoryOpen, 
+  setIsAdminModalOpen, 
+  isAdmin: isAdminProp 
+}: UserButtonProps) {
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(isAdminProp || false);
   const [credits, setCredits] = useState<number | null>(null);
   const [isBuying, setIsBuying] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showTopUp, setShowTopUp] = useState(false);
   
   const [topUpMode, setTopUpMode] = useState<'packs' | 'subs' | 'tier'>('packs');
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -371,7 +400,34 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isPurgingHistory, setIsPurgingHistory] = useState(false);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   
+  useEffect(() => {
+    if (!user || !showProfile) return;
+    
+    setIsLoadingActivity(true);
+    const q = query(
+      collection(db, 'users', user.uid, 'activity'),
+      orderBy('timestamp', 'desc'),
+      limit(20)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const activityData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setActivity(activityData);
+      setIsLoadingActivity(false);
+    }, (err) => {
+      console.error("Activity fetch failed:", err);
+      setIsLoadingActivity(false);
+    });
+    
+    return () => unsubscribe();
+  }, [user, showProfile]);
+
   useEffect(() => {
     if (!user || !showProfile) return;
     
@@ -443,6 +499,17 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                   credits: (userData.credits || 0) + data.creditsToAdd,
                   fulfilled_sessions: [...fulfilled, data.sessionId]
                 });
+                
+                // Log activity
+                const activityRef = doc(collection(db, 'users', user.uid, 'activity'));
+                transaction.set(activityRef, {
+                  type: 'purchase',
+                  description: data.packName || `Credit Synthesis Protocol`,
+                  cost: -data.creditsToAdd,
+                  timestamp: serverTimestamp(),
+                  metadata: { sessionId: data.sessionId }
+                });
+                
                 actuallyAdded = true;
               }
             }
@@ -476,6 +543,23 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   if (!user) return null;
 
   const handleBuy = async (packId: string) => {
+    const packNames: Record<string, string> = {
+      'pack-50': 'Starter Expansion',
+      'pack-200': 'Content Protocol',
+      'pack-500': 'Pro Synthesis',
+      'pack-1000': 'Enterprise Relay',
+      'sub-weekly': 'Weekly Access',
+      'sub-monthly': 'Monthly Protocol',
+      'sub-yearly': 'Yearly Archive',
+      'tier-basic-mo': 'Basic Tier (Mo)',
+      'tier-basic-yr': 'Basic Tier (Yr)',
+      'tier-pro-mo': 'Pro Tier (Mo)',
+      'tier-pro-yr': 'Pro Tier (Yr)',
+      'tier-unlimited-mo': 'Max Tier (Mo)',
+      'tier-unlimited-yr': 'Max Tier (Yr)',
+    };
+    const packName = packNames[packId] || 'Credit Top-Up';
+
     const checkoutWindow = window.open('', '_blank');
     if (!checkoutWindow) {
       alert("Popup blocker prevented checkout. Please open the app in a new tab or allow popups.");
@@ -491,7 +575,8 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
         body: JSON.stringify({
           packId,
           userId: user.uid,
-          userEmail: user.email
+          userEmail: user.email,
+          packName // Pass pack name for better metadata
         })
       });
       const data = await response.json();
@@ -544,6 +629,21 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                   credits: currentCredits,
                   fulfilled_sessions: fulfilled
                 });
+                
+                // Log activity if sessions were added
+                for (const session of data.validSessions) {
+                  const fulfilledBefore = userData.fulfilled_sessions || [];
+                  if (!fulfilledBefore.includes(session.sessionId)) {
+                     const activityRef = doc(collection(db, 'users', user.uid, 'activity'));
+                     transaction.set(activityRef, {
+                        type: 'purchase',
+                        description: `Credit Protocol Sync`,
+                        cost: -session.creditsToAdd,
+                        timestamp: serverTimestamp(),
+                        metadata: { sessionId: session.sessionId, sync: true }
+                     });
+                  }
+                }
               }
             }
           });
@@ -595,36 +695,46 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
   };
 
   return (
-    <div className="flex items-center gap-4 pl-8 border-l border-[#333]/20">
-      <div className="flex items-center gap-4">
+    <div className="flex items-center gap-2 md:gap-4 md:pl-8 md:border-l md:border-[#333]/20">
+      <div className="flex items-center gap-2 md:gap-4">
+        {/* Credits Badge - Mobile Friendly */}
         <button 
           onClick={() => setShowTopUp(true)}
-          className={`flex items-center gap-3 px-4 py-2 border-2 transition-all group
+          className={`flex items-center gap-2 md:gap-3 px-2 md:px-4 py-1.5 md:py-2 border-2 transition-all group
             ${theme === 'dark' 
               ? 'border-yellow-900/50 bg-yellow-900/10 hover:border-yellow-500' 
               : 'border-yellow-200 bg-yellow-50 hover:border-yellow-500'}`}
         >
           <div className="flex flex-col items-start">
-            <span className="text-[10px] uppercase font-mono tracking-tighter opacity-40">Credits_Bank</span>
-            <span className="text-xs font-mono font-bold flex items-center gap-2">
-              <Coins className={`w-3 h-3 ${credits !== null && credits < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-500'}`} />
+            <span className="text-[7px] md:text-[10px] uppercase font-mono tracking-tighter opacity-40 leading-none">Credits</span>
+            <span className="text-[10px] md:text-xs font-mono font-bold flex items-center gap-1.5 leading-none mt-0.5">
+              <Coins className={`w-2.5 h-2.5 md:w-3 md:h-3 ${credits !== null && credits < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-500'}`} />
               {credits !== null ? credits : '...'}
             </span>
           </div>
-          <div className={`p-1 border ${theme === 'dark' ? 'border-yellow-900/50 group-hover:bg-yellow-500 active:bg-yellow-600' : 'border-yellow-200 group-hover:bg-yellow-500 active:bg-yellow-600'} group-hover:text-black transition-colors`}>
-            <CreditCard className="w-3 h-3" />
+          <div className={`p-0.5 md:p-1 border hidden sm:block ${theme === 'dark' ? 'border-yellow-900/50 group-hover:bg-yellow-500 active:bg-yellow-600' : 'border-yellow-200 group-hover:bg-yellow-500 active:bg-yellow-600'} group-hover:text-black transition-colors`}>
+            <CreditCard className="w-2.5 h-2.5 md:w-3 md:h-3" />
           </div>
         </button>
 
+        {/* Profile Trigger */}
         <button 
           onClick={() => setShowProfile(true)}
-          className="flex flex-col items-end text-left hover:opacity-70 transition-opacity group"
+          className="flex items-center gap-2 hover:opacity-70 transition-opacity group"
         >
-          <div className="flex items-center gap-1 opacity-40">
-            {isAdmin && <span className="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 font-black uppercase tracking-tighter">Admin</span>}
-            <span className="text-[10px] uppercase font-mono tracking-tighter">Active_User</span>
+          <div className={`w-8 h-8 md:w-auto md:h-auto rounded-none flex items-center justify-center border-2 
+            ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black'} md:border-0 md:bg-transparent`}>
+            <UserIcon className="w-4 h-4 md:hidden" />
+            <div className="hidden md:flex flex-col items-end text-left">
+              <div className="flex items-center gap-1 opacity-40">
+                {isAdmin && <span className="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 font-black uppercase tracking-tighter">Admin</span>}
+                <span className="text-[10px] uppercase font-mono tracking-tighter">Active_User</span>
+              </div>
+              <span className="text-xs font-mono font-bold truncate max-w-[120px] group-hover:text-yellow-500 transition-colors">
+                {user?.displayName || user?.email?.split('@')[0]}
+              </span>
+            </div>
           </div>
-          <span className="text-xs font-mono font-bold truncate max-w-[120px] group-hover:text-yellow-500 transition-colors">{user.displayName || user.email}</span>
         </button>
       </div>
 
@@ -636,7 +746,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
             console.error("Sign out error:", error);
           }
         }}
-        className={`p-2 border ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'} transition-all`}
+        className={`p-2 border hidden lg:block ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'} transition-all`}
         title="Terminate_Session"
       >
         <LogOut className="w-4 h-4" />
@@ -649,7 +759,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className={`w-full max-w-sm border-2 p-6 font-mono
+              className={`w-full max-w-sm border-2 p-4 md:p-6 font-mono max-h-[90vh] overflow-y-auto
                 ${theme === 'dark' 
                   ? 'bg-black border-[#F8F8F7] shadow-[8px_8px_0px_0px_rgba(255,255,255,0.1)] text-white' 
                   : 'bg-white border-[#141414] shadow-[8px_8px_0px_0px_rgba(20,20,20,1)] text-[#141414]'}`}
@@ -657,7 +767,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
               <div className="flex justify-between items-start mb-6 pb-6 border-b border-dashed border-current/20">
                 <div>
                   <h2 className="text-xl font-bold uppercase tracking-widest">User_Profile</h2>
-                  {isAdmin && <p className="text-[10px] opacity-50 mt-1 uppercase">ID: {user.uid}</p>}
+                  {isAdmin && <p className="text-[10px] opacity-50 mt-1 uppercase">ID: {user?.uid}</p>}
                 </div>
                 <button 
                   onClick={() => setShowProfile(false)}
@@ -668,39 +778,58 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
               </div>
 
               <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded flex items-center justify-center text-xl font-bold border-2 relative
-                    ${theme === 'dark' ? 'bg-[#333] border-white text-white' : 'bg-gray-100 border-black text-black'}`}>
-                    {user.email?.[0].toUpperCase()}
-                    {isAdmin && (
-                      <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[8px] font-black px-1 py-0.5 border border-black rotate-12 uppercase tracking-tighter">
-                        Admin
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                       <div className="text-sm font-bold truncate max-w-[200px]">{user.displayName || 'Anonymous User'}</div>
-                       {isAdmin && (
-                         <span className="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 py-0.5 uppercase font-black tracking-tighter">Operator</span>
-                       )}
+                <div className="space-y-3">
+                  <div className="text-[10px] uppercase font-bold tracking-widest opacity-60">Identity_Vectors</div>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded flex items-center justify-center text-xl font-bold border-2 relative
+                      ${theme === 'dark' ? 'bg-[#333] border-white text-white' : 'bg-gray-100 border-black text-black'}`}>
+                      {user?.email?.[0].toUpperCase()}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <div className="text-xs opacity-60 truncate max-w-[150px]">{user.email}</div>
-                      {user.emailVerified ? (
-                        <div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500 bg-green-500/10 px-1 border border-green-500/20">
-                          <Check className="w-2 h-2" /> Verified
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-[8px] font-black uppercase text-yellow-500 bg-yellow-500/10 px-1 border border-yellow-500/20">
-                          Pending
-                        </div>
-                      )}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                         <div className="text-sm font-bold truncate max-w-[200px]">{user?.displayName || 'Anonymous User'}</div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <div className="text-xs opacity-60 truncate max-w-[150px]">{user?.email}</div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {!user.emailVerified && user.email && (
+                <div className="lg:hidden space-y-4 pt-4 border-t border-dashed border-current/10">
+                  <div className="text-[10px] uppercase font-bold tracking-widest opacity-60">System_Controls</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {setIsHistoryOpen && (
+                      <button 
+                         onClick={() => { setShowProfile(false); setIsHistoryOpen(true); }}
+                         className={`p-3 border-2 flex flex-col gap-2 items-center justify-center ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
+                      >
+                        <Clock className="w-4 h-4" />
+                        <span className="text-[8px] uppercase font-bold tracking-widest">History</span>
+                      </button>
+                    )}
+                    {setIsAdminModalOpen && isAdmin && (
+                      <button 
+                         onClick={() => { setShowProfile(false); setIsAdminModalOpen(true); }}
+                         className={`p-3 border-2 flex flex-col gap-2 items-center justify-center border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all`}
+                      >
+                        <Shield className="w-4 h-4" />
+                        <span className="text-[8px] uppercase font-bold tracking-widest">Admin</span>
+                      </button>
+                    )}
+                    {setTheme && (
+                      <button 
+                         onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                         className={`p-3 border-2 flex flex-col gap-2 items-center justify-center ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all col-span-2`}
+                      >
+                        {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                        <span className="text-[8px] uppercase font-bold tracking-widest">Appearance: {theme.toUpperCase()}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* Verification Alert if needed */}
+                {!user?.emailVerified && user?.email && (
                   <div className={`p-4 border border-dashed ${theme === 'dark' ? 'bg-yellow-900/10 border-yellow-500/30 text-yellow-200' : 'bg-yellow-50 border-yellow-500/30 text-yellow-800'}`}>
                     <div className="flex items-center gap-2 mb-2 font-black text-[10px] uppercase tracking-widest">
                        <AlertCircle className="w-3 h-3" />
@@ -715,9 +844,9 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                           await fetch('/api/auth/send-verification', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ email: user.email, returnUrl: window.location.origin })
+                            body: JSON.stringify({ email: user?.email, returnUrl: window.location.origin })
                           });
-                          alert("Verification link sent to " + user.email);
+                          alert("Verification link sent to " + user?.email);
                         } catch (err) {
                            console.error(err);
                            alert("Failed to send verification link.");
@@ -752,6 +881,8 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                         onClick={() => {
                           setShowProfile(false);
                           setShowTopUp(true);
+                          const scrollElement = document.getElementById('topup-content');
+                          if (scrollElement) scrollElement.scrollIntoView({ behavior: 'smooth' });
                         }}
                         className={`px-3 py-1 text-xs font-bold border uppercase tracking-wider
                           ${theme === 'dark' ? 'hover:bg-white hover:text-black border-white' : 'hover:bg-black hover:text-white border-black'} transition-colors`}
@@ -759,6 +890,48 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                         Top Up
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-dashed border-current/10">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase font-bold tracking-widest opacity-60">Synthesis_Ledger_Archive</div>
+                    <HistoryIcon className="w-3 h-3 opacity-20" />
+                  </div>
+                  
+                  <div className={`max-h-[250px] overflow-y-auto pr-2 space-y-2 font-mono scrollbar-thin ${theme === 'dark' ? 'scrollbar-thumb-white/10' : 'scrollbar-thumb-black/10'}`}>
+                    {isLoadingActivity && activity.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 opacity-20 italic text-[10px]">
+                        <Loader2 className="w-4 h-4 animate-spin mb-2" />
+                        Scanning_Blocks...
+                      </div>
+                    ) : activity.length === 0 ? (
+                      <div className="py-12 text-center opacity-20 italic text-[10px] uppercase tracking-widest border border-dashed border-current/10">
+                        No_Transactions_Recorded
+                      </div>
+                    ) : (
+                      activity.map((item) => (
+                        <div 
+                          key={item.id} 
+                          className={`p-3 border border-current/10 flex items-center justify-between group transition-all transform hover:-translate-y-0.5 ${theme === 'dark' ? 'hover:bg-white/5 hover:border-white/30' : 'hover:bg-black/5 hover:border-black/30'}`}
+                        >
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <span className="text-[10px] font-bold uppercase truncate max-w-[140px] md:max-w-[180px]">
+                              {item.description || item.type?.replace(/_/g, ' ')}
+                            </span>
+                            <div className="flex items-center gap-2 text-[8px] opacity-40 uppercase">
+                              <span>{item.timestamp?.toDate ? item.timestamp.toDate().toLocaleDateString() : 'Pending'}</span>
+                              {item.metadata?.packId && <span className="px-1 border border-current/20">{item.metadata.packId}</span>}
+                              {item.metadata?.prompt && <span className="truncate italic">"{item.metadata.prompt}"</span>}
+                            </div>
+                          </div>
+                          <div className={`text-[10px] font-bold shrink-0 ${item.type === 'purchase' || (item.cost < 0) ? 'text-green-500' : 'text-orange-500'}`}>
+                            {item.cost > 0 ? `-${item.cost}` : `+${Math.abs(item.cost)}`}
+                             <span className="text-[8px] ml-1 opacity-60 italic uppercase tracking-tighter">REQ</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -935,19 +1108,20 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
         )}
 
         {showTopUp && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className={`relative max-w-2xl w-full border-2 overflow-hidden flex flex-col p-8 space-y-8
+              id="topup-content"
+              className={`relative max-w-2xl w-full border-2 flex flex-col p-4 md:p-8 space-y-4 md:space-y-8 my-auto
                 ${theme === 'dark' ? 'bg-[#0A0A0A] border-white/20' : 'bg-[#E4E3E0] border-black'}`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h3 className="text-2xl font-bold tracking-tighter uppercase italic">Credit_Expansion_Protocol</h3>
-                  <p className="text-[10px] font-mono tracking-widest opacity-40 uppercase">Upgrade synthesis capacity via secure terminal</p>
+                  <h3 className="text-xl md:text-2xl font-bold tracking-tighter uppercase italic">Credit_Expansion_Protocol</h3>
+                  <p className="text-[8px] md:text-[10px] font-mono tracking-widest opacity-40 uppercase">Upgrade synthesis capacity via secure terminal</p>
                 </div>
                 <button 
                   onClick={() => setShowTopUp(false)}
@@ -957,40 +1131,40 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                 </button>
               </div>
 
-              <div className={`flex border p-1 ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'}`}>
+              <div className={`flex p-1 gap-1 border ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5'} overflow-x-auto no-scrollbar`}>
                 <button
                   onClick={() => setTopUpMode('packs')}
-                  className={`flex-1 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                  className={`flex-1 min-w-[100px] py-2.5 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                     topUpMode === 'packs' 
-                      ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') 
-                      : 'opacity-50 hover:opacity-100'
+                      ? (theme === 'dark' ? 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]' : 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]') 
+                      : 'opacity-50 hover:opacity-100 hover:bg-current/5'
                   }`}
                 >
                   One-time_Packs
                 </button>
                 <button
                   onClick={() => setTopUpMode('subs')}
-                  className={`flex-1 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                  className={`flex-1 min-w-[100px] py-2.5 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                     topUpMode === 'subs' 
-                      ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') 
-                      : 'opacity-50 hover:opacity-100'
+                      ? (theme === 'dark' ? 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]' : 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]') 
+                      : 'opacity-50 hover:opacity-100 hover:bg-current/5'
                   }`}
                 >
-                  Subscription_Tiers
+                  Subscriptions
                 </button>
                 <button
                   onClick={() => setTopUpMode('tier')}
-                  className={`flex-1 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                  className={`flex-1 min-w-[100px] py-2.5 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                     topUpMode === 'tier' 
-                      ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') 
-                      : 'opacity-50 hover:opacity-100'
+                      ? (theme === 'dark' ? 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]' : 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]') 
+                      : 'opacity-50 hover:opacity-100 hover:bg-current/5'
                   }`}
                 >
-                  Expansion_Tiers
+                  Usage_Tiers
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
                 {topUpMode === 'packs' ? [
                   { id: 'pack-50', name: 'Starter', credits: 50, price: '$10' },
                   { id: 'pack-200', name: 'Content', credits: 200, price: '$25', tag: 'Best Value' },
@@ -1001,7 +1175,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                     key={pack.id}
                     onClick={() => handleBuy(pack.id)}
                     disabled={isBuying !== null}
-                    className={`p-6 border-2 flex flex-col items-start gap-4 transition-all relative group
+                    className={`p-4 md:p-6 border-2 flex flex-col items-start gap-3 md:gap-4 transition-all relative group
                       ${theme === 'dark' 
                         ? 'border-[#333] bg-[#141414] hover:border-white shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
                         : 'border-black bg-white hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}
@@ -1046,7 +1220,7 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                     key={plan.id}
                     onClick={() => handleBuy(plan.id)}
                     disabled={isBuying !== null}
-                    className={`p-6 border-2 flex flex-col items-start gap-4 transition-all relative group
+                    className={`p-4 md:p-6 border-2 flex flex-col items-start gap-3 md:gap-4 transition-all relative group
                       ${theme === 'dark' 
                         ? 'border-[#333] bg-[#141414] hover:border-white shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
                         : 'border-black bg-white hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}

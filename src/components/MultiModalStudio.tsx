@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2 } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
   onAddAssetToNarrative?: (asset: MediaAsset) => void;
+  credits: number;
+  userId: string;
+  isAdmin: boolean;
 }
+
+const GENERATION_COSTS: Record<GenerationMode, number> = {
+  image: 10,
+  video: 40,
+  music: 40
+};
 
 type GenerationMode = 'image' | 'video' | 'music';
 
@@ -20,10 +29,13 @@ export interface MediaAsset {
   metadata?: any;
 }
 
-export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStudioProps) {
+export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>('image');
   const [prompt, setPrompt] = useState("");
+  const [aspectRatio, setAspectRatio] = useState<string>("1:1");
+  const [resolution, setResolution] = useState<string>("1080p");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [assets, setAssets] = useState<MediaAsset[]>([
     {
       id: 'mock-1',
@@ -36,23 +48,62 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStu
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+    setError(null);
+
+    const cost = GENERATION_COSTS[activeMode];
+    if (!isAdmin && credits < cost) {
+      setError(`Insufficient Credits: Generation requires ${cost} credits. You have ${credits}.`);
+      return;
+    }
+
     setIsGenerating(true);
 
     let finalUrl: string | undefined = undefined;
+    let modelUsed = "";
 
-    if (activeMode === 'music') {
-      try {
+    try {
+      if (!isAdmin) {
+        // Deduct credits via Firestore transaction
+        // Importing db here to avoid dependency issues if needed, but it's better to expect it in lib/firebase
+        const { db, handleFirestoreError, OperationType } = await import('../lib/firebase');
+        const { doc, runTransaction, collection, serverTimestamp } = await import('firebase/firestore');
+        
+        await runTransaction(db, async (transaction) => {
+          const userRef = doc(db, 'users', userId);
+          const userDoc = await transaction.get(userRef);
+          if (!userDoc.exists()) throw new Error("User record not found");
+          const currentCredits = userDoc.data().credits || 0;
+          if (currentCredits < cost) throw new Error(`Insufficient credits`);
+          
+          transaction.update(userRef, { credits: currentCredits - cost });
+          
+          // Log activity
+          const activityRef = doc(collection(db, 'users', userId, 'activity'));
+          transaction.set(activityRef, {
+            type: `${activeMode}_generation`,
+            description: `${activeMode.charAt(0).toUpperCase() + activeMode.slice(1)} Synthesis`,
+            cost: cost,
+            timestamp: serverTimestamp(),
+            metadata: {
+              prompt: prompt.substring(0, 500)
+            }
+          });
+        }).catch(err => {
+          handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+          throw err;
+        });
+      }
+
+      if (activeMode === 'music') {
         const apiKey = (import.meta as any).env.VITE_ELEVENLABS_API_KEY || 'sk_5bdf15ff04861db538ef1bb3d49e71f4c49269829297ff0d';
-        // Use ElevenLabs music generation endpoint
+        modelUsed = "ElevenLabs";
         const response = await fetch('https://api.elevenlabs.io/v1/music', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'xi-api-key': apiKey
           },
-          body: JSON.stringify({
-            prompt: prompt
-          })
+          body: JSON.stringify({ prompt: prompt })
         });
 
         if (response.ok) {
@@ -60,35 +111,96 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStu
           finalUrl = URL.createObjectURL(blob);
         } else {
           const errText = await response.text();
-          console.error("ElevenLabs API failed, using mock", errText);
-          if (response.status === 402) {
-             alert(`ElevenLabs error: ${errText}. Please note that the Music API requires a paid plan.`);
-          } else {
-             alert(`ElevenLabs error: ${errText}`);
+          throw new Error(`ElevenLabs Music Generation failed: ${errText}`);
+        }
+      } else if (activeMode === 'image' || activeMode === 'video') {
+        const { GoogleGenAI } = await import("@google/genai");
+        
+        // Paid model check
+        if (typeof (window as any).aistudio !== 'undefined') {
+          const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+          if (!hasKey) {
+            await (window as any).aistudio.openSelectKey();
           }
         }
-      } catch (err) {
-        console.error("Failed to generate audio via ElevenLabs", err);
+        
+        // Ensure we use the most up-to-date API key (often GEMINI_API_KEY or API_KEY in this env)
+        const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
+        if (!apiKey) throw new Error("Gemini API Key is required for synthesis.");
+        const genAI = new GoogleGenAI({ apiKey });
+
+        if (activeMode === 'image') {
+          modelUsed = "Gemini 2.5 Flash Image";
+          const response = await genAI.models.generateContent({
+            model: "gemini-2.5-flash-image",
+            contents: [{ parts: [{ text: prompt }] }],
+            config: {
+              imageConfig: {
+                aspectRatio: aspectRatio as any,
+              }
+            }
+          });
+          
+          const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+          if (imagePart?.inlineData?.data) {
+            finalUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
+          } else {
+            throw new Error("No image data returned. Ensure Imagen API is enabled.");
+          }
+        } else if (activeMode === 'video') {
+          modelUsed = "Veo 3.1";
+          let operation = await genAI.models.generateVideos({
+            model: 'veo-3.1-generate-preview',
+            prompt: prompt,
+            config: {
+              numberOfVideos: 1,
+              resolution: resolution as any,
+              aspectRatio: aspectRatio as any
+            }
+          });
+
+          // Polling for video completion
+          while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            operation = await genAI.operations.getVideosOperation({ operation });
+          }
+
+          const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+          if (!downloadLink) throw new Error("Video synthesis failed to return a valid stream URI.");
+
+          // Fetch video using API key in header as per skill guidelines
+          const videoResponse = await fetch(downloadLink, {
+            method: 'GET',
+            headers: {
+              'x-goog-api-key': apiKey,
+            },
+          });
+
+          if (!videoResponse.ok) throw new Error("Failed to secure kinetic stream from synthesized URI.");
+          const blob = await videoResponse.blob();
+          finalUrl = URL.createObjectURL(blob);
+        }
       }
-    } else {
-      // Mock delay for Gemini image/video
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const newAsset: MediaAsset = {
+        id: `gen-${Math.random().toString(36).substr(2, 9)}`,
+        type: activeMode === 'music' ? 'audio' : activeMode,
+        source: 'generated',
+        name: `${activeMode}_generation_${prompt.substring(0, 10)}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`,
+        model: modelUsed,
+        timestamp: new Date().toISOString(),
+        metadata: { prompt },
+        url: finalUrl
+      };
+      
+      setAssets(prev => [newAsset, ...prev]);
+      setPrompt("");
+    } catch (err: any) {
+      console.error(`Generation error (${activeMode}):`, err);
+      setError(err.message || "An unexpected error occurred during synthesis.");
+    } finally {
+      setIsGenerating(false);
     }
-    
-    const newAsset: MediaAsset = {
-      id: `gen-${Math.random().toString(36).substr(2, 9)}`,
-      type: activeMode === 'music' ? 'audio' : activeMode,
-      source: 'generated',
-      name: `${activeMode}_generation_${prompt.substring(0, 10)}.${activeMode === 'music' ? 'mp3' : 'ext'}`,
-      model: activeMode === 'image' ? 'Gemini 3.1 Pro' : activeMode === 'video' ? 'Gemini 3.1 Pro' : 'ElevenLabs',
-      timestamp: new Date().toISOString(),
-      metadata: { prompt },
-      url: finalUrl
-    };
-    
-    setAssets(prev => [newAsset, ...prev]);
-    setIsGenerating(false);
-    setPrompt("");
   };
 
   const getModelBadgeColors = (type: GenerationMode) => {
@@ -111,53 +223,60 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStu
   return (
     <div className={`flex flex-col h-full ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
       {/* Studio Header */}
-      <div className={`p-6 border-b ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'} flex items-center justify-between`}>
+      <div className={`p-3 md:p-6 border-b ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4`}>
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-tight italic">Media Synthesis Studio</h2>
-          <p className="text-xs font-mono opacity-60 uppercase tracking-widest mt-1">Multi-Modal Generation Environment</p>
+          <h2 className="text-lg md:text-2xl font-black uppercase tracking-tight italic leading-none">Synthesis Studio</h2>
+          <p className="text-[8px] md:text-xs font-mono opacity-60 uppercase tracking-widest mt-1">Multi-Modal Environment</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none no-scrollbar">
           {(['image', 'video', 'music'] as GenerationMode[]).map((mode) => (
             <button
               key={mode}
               onClick={() => setActiveMode(mode)}
-              className={`px-4 py-2 border-2 text-sm font-bold uppercase transition-all flex items-center gap-2 ${
+              className={`px-3 md:px-4 py-1.5 md:py-2 border-2 text-[10px] md:text-sm font-bold uppercase transition-all flex items-center gap-2 shrink-0 ${
                 activeMode === mode 
                   ? theme === 'dark' ? 'border-white bg-white text-black' : 'border-black bg-black text-white'
                   : theme === 'dark' ? 'border-[#333] hover:border-gray-500' : 'border-gray-200 hover:border-gray-400'
               }`}
             >
-              {mode === 'image' && <ImageIcon className="w-4 h-4" />}
-              {mode === 'video' && <Video className="w-4 h-4" />}
-              {mode === 'music' && <Music className="w-4 h-4" />}
-              {mode}
+              {mode === 'image' && <ImageIcon className="w-3 h-3 md:w-4 md:h-4" />}
+              {mode === 'video' && <Video className="w-3 h-3 md:w-4 md:h-4" />}
+              {mode === 'music' && <Music className="w-3 h-3 md:w-4 md:h-4" />}
+              <span className={mode === activeMode ? 'inline' : 'hidden md:inline'}>{mode}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Left Console - Generation controls */}
-        <div className={`w-1/3 border-r ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-gray-50'} p-6 flex flex-col`}>
-          <div className="flex items-center gap-2 mb-6">
-            <Wand2 className="w-5 h-5 opacity-60" />
-            <h3 className="font-bold uppercase tracking-widest text-sm">Composer Parameters</h3>
+        <div className={`w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-gray-50'} p-4 md:p-6 flex flex-col lg:h-auto max-h-[100vh] lg:max-h-none`}>
+          <div className="flex items-center gap-2 mb-4 md:mb-6 shrink-0">
+            <Wand2 className="w-4 h-4 md:w-5 md:h-5 opacity-60" />
+            <h3 className="font-bold uppercase tracking-widest text-[10px] md:text-sm">Composer Parameters</h3>
           </div>
 
-          <div className="flex-1 space-y-6 overflow-y-auto min-h-0 pr-4 history-scrollbar">
+          <div className="flex-1 space-y-4 md:space-y-6 overflow-y-auto min-h-0 pr-1 md:pr-4 history-scrollbar">
             <div className="space-y-2">
-              <label className="text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt</label>
+              <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt</label>
               <textarea 
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
                 placeholder={`Describe the ${activeMode} you want to synthesize...`}
-                className={`w-full p-4 border resize-none h-32 font-mono text-sm focus:outline-none transition-colors ${
+                className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
                   theme === 'dark' 
                     ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
                     : 'bg-white border-gray-300 focus:border-black'
                 }`}
               />
             </div>
+
+            {error && (
+              <div className="p-4 border-2 border-red-500/20 bg-red-500/5 text-red-500 text-[10px] font-mono flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
             
             {/* Mock Advanced Settings based on mode */}
             <div className={`p-4 border ${theme === 'dark' ? 'border-[#333] bg-black/20' : 'border-gray-200 bg-white'}`}>
@@ -171,10 +290,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStu
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Aspect Ratio</label>
-                      <select className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                        <option>16:9 Landscape</option>
-                        <option>1:1 Square</option>
-                        <option>9:16 Vertical</option>
+                      <select 
+                        value={aspectRatio}
+                        onChange={e => setAspectRatio(e.target.value)}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                      >
+                        <option value="1:1">1:1 Square</option>
+                        <option value="4:3">4:3 Ratio</option>
+                        <option value="3:4">3:4 Ratio</option>
+                        <option value="16:9">16:9 Wide</option>
+                        <option value="9:16">9:16 Vertical</option>
                       </select>
                     </div>
                     <div>
@@ -191,14 +316,26 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStu
                 {activeMode === 'video' && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Motion Strength</label>
-                      <input type="range" className="w-full" />
+                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Aspect Ratio</label>
+                      <select 
+                        value={aspectRatio === '1:1' ? '16:9' : aspectRatio} // Veo prefers 16:9 or 9:16
+                        onChange={e => setAspectRatio(e.target.value)}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                      >
+                        <option value="16:9">16:9 Landscape</option>
+                        <option value="9:16">9:16 Portrait</option>
+                      </select>
                     </div>
                     <div>
-                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Duration</label>
-                      <select className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                        <option>5 Seconds</option>
-                        <option>10 Seconds</option>
+                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Resolution</label>
+                      <select 
+                        value={resolution}
+                        onChange={e => setResolution(e.target.value)}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                      >
+                        <option value="720p">720p HD</option>
+                        <option value="1080p">1080p Full HD</option>
+                        <option value="4k">4K Ultra HD</option>
                       </select>
                     </div>
                   </div>
@@ -242,12 +379,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStu
             ) : (
               <Wand2 className="w-5 h-5" />
             )}
-            {isGenerating ? 'Synthesizing...' : `Generate ${activeMode}`}
+            <div className="flex flex-col items-center">
+              <span>{isGenerating ? 'Synthesizing...' : `Generate ${activeMode}`}</span>
+              {!isGenerating && (
+                <span className="text-[10px] opacity-60 font-mono tracking-tighter">
+                  -{GENERATION_COSTS[activeMode]} CREDITS
+                </span>
+              )}
+            </div>
           </button>
         </div>
 
         {/* Right Console - Assets Grid */}
-        <div className={`flex-1 p-8 overflow-y-auto ${theme === 'dark' ? 'bg-[#111]' : 'bg-white'}`}>
+        <div className={`flex-1 p-4 md:p-8 overflow-y-auto ${theme === 'dark' ? 'bg-[#111]' : 'bg-white'}`}>
           <div className="flex items-center justify-between mb-8">
             <div className="flex flex-col">
               <h3 className="font-black uppercase tracking-widest text-lg flex items-center gap-3">

@@ -940,6 +940,20 @@ Tone: ${preferences.tone.join(", ")}`;
           const currentCredits = userDoc.data().credits || 0;
           if (currentCredits < cost) throw new Error(`Insufficient credits`);
           transaction.update(userRef, { credits: currentCredits - cost });
+          
+          // Log activity
+          const activityRef = doc(collection(db, 'users', user.uid, 'activity'));
+          transaction.set(activityRef, {
+            type: 'narrative_synthesis',
+            description: `Narrative Synthesis [${preferences.length}]`,
+            cost: cost,
+            timestamp: serverTimestamp(),
+            metadata: {
+              model: preferences.model,
+              length: preferences.length,
+              audience: preferences.targetAudience
+            }
+          });
         });
       }
 
@@ -1458,7 +1472,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className={`fixed top-0 left-0 h-full w-[310px] md:w-[380px] z-[101] shadow-2xl border-r ${
+              className={`fixed top-0 left-0 h-full w-[310px] max-w-[85vw] md:w-[380px] z-[101] shadow-2xl border-r ${
                 theme === 'dark' ? 'bg-[#111111] border-[#333] text-[#F8F8F7]' : 'bg-white border-[#141414] text-[#141414]'
               }`}
             >
@@ -1584,10 +1598,16 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         setAppMode={setAppMode}
       />
 
-      <main className={`max-w-7xl mx-auto p-6 md:p-12 ${appMode === 'media' ? 'h-[calc(100vh-80px)] p-0 md:p-0' : ''}`}>
+      <main className={`max-w-7xl mx-auto p-4 md:p-12 ${appMode === 'media' ? 'h-auto lg:h-[calc(100vh-80px)] p-0 md:p-0' : ''}`}>
         {appMode === 'media' ? (
           <div className={`h-full border-2 ${theme === 'dark' ? 'border-[#333] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'}`}>
-            <MultiModalStudio theme={theme} onAddAssetToNarrative={handleAddAssetToNarrative} />
+            <MultiModalStudio 
+              theme={theme} 
+              onAddAssetToNarrative={handleAddAssetToNarrative} 
+              credits={credits || 0}
+              userId={auth.currentUser?.uid || ''}
+              isAdmin={isAdmin}
+            />
           </div>
         ) : (
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-0 border-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] bg-white shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'} transition-all`}>

@@ -486,6 +486,7 @@ async function startServer() {
         metadata: {
           userId,
           packId,
+          packName: req.body.packName || plan.name,
           type: isSubscription ? "subscription" : "pack",
         },
       });
@@ -514,7 +515,8 @@ async function startServer() {
 
         if (pack || subscription) {
           const creditsToAdd = (pack || subscription)!.credits;
-          return res.json({ success: true, creditsToAdd, sessionId });
+          const packName = session.metadata?.packName || (pack || subscription)!.name;
+          return res.json({ success: true, creditsToAdd, sessionId, packName });
         }
       }
 

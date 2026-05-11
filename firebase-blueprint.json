@@ -85,6 +85,19 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["ownerId", "ownerRole", "name", "createdAt"]
+    },
+    "activity": {
+      "title": "Activity",
+      "description": "Credit transaction and usage history",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "cost": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["type", "description", "cost", "timestamp"]
     }
   },
   "firestore": {
@@ -111,6 +124,10 @@
     "assets/{assetId}": {
       "schema": "asset",
       "description": "User assets"
+    },
+    "users/{userId}/activity/{activityId}": {
+      "schema": "activity",
+      "description": "User credit activity records"
     }
   }
 }
