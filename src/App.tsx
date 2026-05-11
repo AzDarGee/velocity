@@ -1834,7 +1834,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           e.preventDefault();
                           const val = newAudience.trim();
                           if (!customAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
-                            setCustomAudiences([...customAudiences, val]);
+                            setCustomAudiences([val, ...customAudiences]);
                           }
                           if (!preferences.targetAudience.includes(val)) {
                             setPreferences({ ...preferences, targetAudience: [...preferences.targetAudience, val] });
@@ -1848,7 +1848,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                         if (newAudience.trim()) {
                           const val = newAudience.trim();
                           if (!customAudiences.includes(val) && !DEFAULT_AUDIENCES.includes(val)) {
-                            setCustomAudiences([...customAudiences, val]);
+                            setCustomAudiences([val, ...customAudiences]);
                           }
                           if (!preferences.targetAudience.includes(val)) {
                             setPreferences({ ...preferences, targetAudience: [...preferences.targetAudience, val] });
@@ -1866,7 +1866,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       ? 'bg-[#1A1A1A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
                       : 'bg-white/40 border-[#141414]/10 scrollbar-thumb-black/20 scrollbar-track-transparent'
                   }`}>
-                    {Array.from(new Set([...DEFAULT_AUDIENCES, ...customAudiences])).map((audience) => (
+                    {Array.from(new Set([...customAudiences, ...DEFAULT_AUDIENCES])).map((audience) => (
                       <label key={`audience-seg-${audience}`} className="flex items-center gap-3 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
@@ -1927,7 +1927,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           e.preventDefault();
                           const val = newTone.trim();
                           if (!customTones.includes(val) && !DEFAULT_TONES.includes(val)) {
-                            setCustomTones([...customTones, val]);
+                            setCustomTones([val, ...customTones]);
                           }
                           if (!preferences.tone.includes(val)) {
                             setPreferences({ ...preferences, tone: [...preferences.tone, val] });
@@ -1941,7 +1941,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                         if (newTone.trim()) {
                           const val = newTone.trim();
                           if (!customTones.includes(val) && !DEFAULT_TONES.includes(val)) {
-                            setCustomTones([...customTones, val]);
+                            setCustomTones([val, ...customTones]);
                           }
                           if (!preferences.tone.includes(val)) {
                             setPreferences({ ...preferences, tone: [...preferences.tone, val] });
@@ -1957,7 +1957,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                   <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 border p-4 max-h-48 overflow-y-auto custom-scrollbar ${
                     theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414]/10 bg-white/40'
                   }`}>
-                    {Array.from(new Set([...DEFAULT_TONES, ...customTones])).map((tone) => (
+                    {Array.from(new Set([...customTones, ...DEFAULT_TONES])).map((tone) => (
                       <label key={`tone-selector-${tone}`} className="flex items-center gap-2 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
