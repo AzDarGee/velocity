@@ -420,7 +420,7 @@ export function GenerationViewer({ content, title, theme, isAdmin, mediaFiles, o
                       <p className="text-[10px] font-mono opacity-40 p-4 text-center">No assets found for this synthesis.</p>
                     ) : (
                       mediaFiles.map((m, index) => (
-                        <div key={`asset-list-${m.id || index}-${index}`} className={`flex items-center justify-between p-2 border border-transparent hover:border-current transition-colors group/asset ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+                        <div key={`asset-list-${m.id || index}`} className={`flex items-center justify-between p-2 border border-transparent hover:border-current transition-colors group/asset ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
                           <div className="flex flex-col min-w-0 flex-1 mr-2">
                              <span className="text-[10px] font-bold truncate uppercase">{m.name}</span>
                              <span className="text-[8px] opacity-40 font-mono">{((m.size || 0) / (1024 * 1024)).toFixed(2)}MB</span>

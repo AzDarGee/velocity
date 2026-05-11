@@ -497,7 +497,7 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
           ) : activeTab === 'users' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredUsers.map((user, index) => (
-                <div key={`admin-user-card-${user.id || index}-${index}`} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
+                <div key={`admin-user-card-${user.id || index}`} className={`p-4 border flex flex-col gap-4 ${theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414] bg-[#F8F8F7]'}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-2">
@@ -692,7 +692,7 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                    if (isHardcoded || isDbAdmin) return null;
 
                    return (
-                     <div key={`auth-node-${au.uid || index}-${index}`} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
+                     <div key={`auth-node-${au.uid || index}`} className={`p-4 border flex items-center justify-between ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-white border-black/10'}`}>
                         <div className="flex flex-col">
                            <div className="flex items-center gap-3">
                               <span className="font-bold text-xs">{au.email}</span>
@@ -937,7 +937,7 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
               ) : (
                 <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-4">
                   {userAssets.map((asset, index) => (
-                    <div key={`asset-card-${asset.id || index}-${index}`} className={`p-2 border flex flex-col justify-between ${theme === 'dark' ? 'border-[#333] bg-[#111]' : 'border-black/10 bg-gray-50'}`}>
+                    <div key={`asset-card-${asset.id || index}`} className={`p-2 border flex flex-col justify-between ${theme === 'dark' ? 'border-[#333] bg-[#111]' : 'border-black/10 bg-gray-50'}`}>
                       <div>
                         <div className="h-24 bg-black/5 flex items-center justify-center mb-2 overflow-hidden">
                           {(asset.mimeType?.startsWith('image')) ? (

@@ -1454,7 +1454,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       const isGenProcessing = gen.status === 'processing' || generatingIds.has(id);
                       return (
                         <div 
-                          key={`history-gen-${id}-${index}`}
+                          key={`history-gen-${id}`}
                           onClick={() => !isGenProcessing && loadGeneration(gen)}
                           className={`p-4 border transition-all cursor-pointer group relative ${
                             isGenProcessing ? 'opacity-70 cursor-wait' : ''
@@ -1552,7 +1552,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 <AnimatePresence>
                   {mediaFiles.map((v, index) => (
                     <motion.div 
-                      key={`media-file-${v.id || index}-${index}`}
+                      key={`media-file-${v.id || index}`}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 10 }}
@@ -1776,7 +1776,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                                   label={`-- ${cat.split('. ')[1]} --`} 
                                   className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-50 text-black'}`}
                                 >
-                                  {groupedModels[cat].map(m => (
+                                  {groupedModels[cat].map((m, idx) => (
                                     <option 
                                       key={`model-opt-${m.id}`} 
                                       value={m.id} 
@@ -1878,7 +1878,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       ? 'bg-[#1A1A1A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
                       : 'bg-white/40 border-[#141414]/10 scrollbar-thumb-black/20 scrollbar-track-transparent'
                   }`}>
-                    {Array.from(new Set([...customAudiences, ...DEFAULT_AUDIENCES])).map((audience) => (
+                    {Array.from(new Set([...customAudiences, ...DEFAULT_AUDIENCES])).map((audience, idx) => (
                       <label key={`audience-seg-${audience}`} className="flex items-center gap-3 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 
@@ -1981,7 +1981,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                   <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 border p-4 max-h-48 overflow-y-auto custom-scrollbar ${
                     theme === 'dark' ? 'border-[#333] bg-[#1A1A1A]' : 'border-[#141414]/10 bg-white/40'
                   }`}>
-                    {Array.from(new Set([...customTones, ...DEFAULT_TONES])).map((tone) => (
+                    {Array.from(new Set([...customTones, ...DEFAULT_TONES])).map((tone, idx) => (
                       <label key={`tone-selector-${tone}`} className="flex items-center gap-2 cursor-pointer group/item">
                         <div className="relative flex items-center justify-center">
                           <input 

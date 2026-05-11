@@ -900,7 +900,11 @@ export function UserButton({ theme }: { theme: 'light' | 'dark' }) {
                            window.location.reload();
                         }
                      } catch (e: any) {
-                        alert(e.message || "Failed to delete account. You may need to sign in again to perform this action.");
+                        if (e.code === 'auth/requires-recent-login' || (e.message && e.message.includes('auth/requires-recent-login'))) {
+                           alert("For security reasons, you must log out and log back in before deleting your account. Please log in again to verify your identity.");
+                        } else {
+                           alert(e.message || "Failed to delete account. You may need to sign in again to perform this action.");
+                        }
                      } finally {
                         setIsDeletingAccount(false);
                      }
