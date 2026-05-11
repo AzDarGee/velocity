@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2 } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
+  onAddAssetToNarrative?: (asset: MediaAsset) => void;
 }
 
 type GenerationMode = 'image' | 'video' | 'music';
 
-interface MediaAsset {
+export interface MediaAsset {
   id: string;
   type: 'image' | 'video' | 'audio';
   source: 'uploaded' | 'generated';
@@ -19,7 +20,7 @@ interface MediaAsset {
   metadata?: any;
 }
 
-export function MultiModalStudio({ theme }: MultiModalStudioProps) {
+export function MultiModalStudio({ theme, onAddAssetToNarrative }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>('image');
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -33,26 +34,61 @@ export function MultiModalStudio({ theme }: MultiModalStudioProps) {
     }
   ]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setIsGenerating(true);
+
+    let finalUrl: string | undefined = undefined;
+
+    if (activeMode === 'music') {
+      try {
+        const apiKey = (import.meta as any).env.VITE_ELEVENLABS_API_KEY || 'sk_5bdf15ff04861db538ef1bb3d49e71f4c49269829297ff0d';
+        // Use ElevenLabs music generation endpoint
+        const response = await fetch('https://api.elevenlabs.io/v1/music', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': apiKey
+          },
+          body: JSON.stringify({
+            prompt: prompt
+          })
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          finalUrl = URL.createObjectURL(blob);
+        } else {
+          const errText = await response.text();
+          console.error("ElevenLabs API failed, using mock", errText);
+          if (response.status === 402) {
+             alert(`ElevenLabs error: ${errText}. Please note that the Music API requires a paid plan.`);
+          } else {
+             alert(`ElevenLabs error: ${errText}`);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to generate audio via ElevenLabs", err);
+      }
+    } else {
+      // Mock delay for Gemini image/video
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
     
-    // Mock generation delay
-    setTimeout(() => {
-      const newAsset: MediaAsset = {
-        id: `gen-${Math.random().toString(36).substr(2, 9)}`,
-        type: activeMode === 'music' ? 'audio' : activeMode,
-        source: 'generated',
-        name: `${activeMode}_generation_${prompt.substring(0, 10)}.ext`,
-        model: activeMode === 'image' ? 'NanoBanana Pro' : activeMode === 'video' ? 'Veo 3.1' : 'Suno',
-        timestamp: new Date().toISOString(),
-        metadata: { prompt }
-      };
-      
-      setAssets(prev => [newAsset, ...prev]);
-      setIsGenerating(false);
-      setPrompt("");
-    }, 2000);
+    const newAsset: MediaAsset = {
+      id: `gen-${Math.random().toString(36).substr(2, 9)}`,
+      type: activeMode === 'music' ? 'audio' : activeMode,
+      source: 'generated',
+      name: `${activeMode}_generation_${prompt.substring(0, 10)}.${activeMode === 'music' ? 'mp3' : 'ext'}`,
+      model: activeMode === 'image' ? 'Gemini 3.1 Pro' : activeMode === 'video' ? 'Gemini 3.1 Pro' : 'ElevenLabs',
+      timestamp: new Date().toISOString(),
+      metadata: { prompt },
+      url: finalUrl
+    };
+    
+    setAssets(prev => [newAsset, ...prev]);
+    setIsGenerating(false);
+    setPrompt("");
   };
 
   const getModelBadgeColors = (type: GenerationMode) => {
@@ -108,7 +144,7 @@ export function MultiModalStudio({ theme }: MultiModalStudioProps) {
             <h3 className="font-bold uppercase tracking-widest text-sm">Composer Parameters</h3>
           </div>
 
-          <div className="flex-1 space-y-6">
+          <div className="flex-1 space-y-6 overflow-y-auto min-h-0 pr-4 history-scrollbar">
             <div className="space-y-2">
               <label className="text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt</label>
               <textarea 
@@ -195,7 +231,7 @@ export function MultiModalStudio({ theme }: MultiModalStudioProps) {
           <button 
             onClick={handleGenerate}
             disabled={isGenerating || !prompt.trim()}
-            className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+            className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-6 flex-shrink-0 ${
               isGenerating 
                 ? 'opacity-50 cursor-not-allowed bg-gray-500 text-white' 
                 : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5`
@@ -211,86 +247,125 @@ export function MultiModalStudio({ theme }: MultiModalStudioProps) {
         </div>
 
         {/* Right Console - Assets Grid */}
-        <div className={`flex-1 p-6 overflow-y-auto ${theme === 'dark' ? 'bg-[#111]' : 'bg-white'}`}>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold uppercase tracking-widest text-sm flex items-center gap-2">
-              <Upload className="w-4 h-4 opacity-60" />
-              Asset Library
-            </h3>
-            <div className="text-xs font-mono opacity-60 uppercase">
-              {assets.length} Item(s)
+        <div className={`flex-1 p-8 overflow-y-auto ${theme === 'dark' ? 'bg-[#111]' : 'bg-white'}`}>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex flex-col">
+              <h3 className="font-black uppercase tracking-widest text-lg flex items-center gap-3">
+                <Upload className="w-5 h-5 opacity-60" />
+                Synthesis Library
+              </h3>
+              <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.2em] mt-1">Stored generations and uploads</p>
+            </div>
+            <div className="px-3 py-1 border-2 font-mono text-xs font-bold tracking-widest uppercase opacity-60">
+              {assets.length} Entry_Points
             </div>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8 pb-12">
             <AnimatePresence>
               {assets.map((asset) => (
                 <motion.div
                   key={asset.id}
-                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className={`border-2 flex flex-col transition-all overflow-hidden relative group ${
-                     theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-gray-50'
+                  whileHover={{ y: -5 }}
+                  className={`border-4 flex flex-col transition-all overflow-hidden relative group shadow-2xl h-full ${
+                     theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-white'
                   } ${getBorderColor(asset)}`}
                 >
                   {/* Decorative badge for generated content */}
                   {asset.source === 'generated' && (
-                    <div className={`absolute top-0 right-0 left-0 h-1 bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`} />
+                    <div className={`absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`} />
                   )}
 
-                  <div className="p-4 flex-1 flex items-center justify-center min-h-[160px] relative">
-                    {/* Placeholder for media content */}
-                    {asset.type === 'image' && <ImageIcon className="w-12 h-12 opacity-20" />}
-                    {asset.type === 'video' && <Video className="w-12 h-12 opacity-20" />}
-                    {asset.type === 'audio' && <Play className="w-12 h-12 opacity-20" />}
+                  <div className="relative aspect-video flex-shrink-0 flex items-center justify-center overflow-hidden bg-black/40">
+                    {/* Media Type Specific Preview */}
+                    {asset.type === 'image' && (
+                      <div className="w-full h-full flex items-center justify-center relative">
+                        <ImageIcon className="w-16 h-16 opacity-10 absolute z-0" />
+                        <div className="z-10 text-[10px] font-mono tracking-widest uppercase opacity-40">Synthesized_Visual_Data</div>
+                      </div>
+                    )}
+                    {asset.type === 'video' && (
+                      <div className="w-full h-full flex items-center justify-center relative">
+                        <Video className="w-16 h-16 opacity-10 absolute z-0" />
+                        <div className="z-10 text-[10px] font-mono tracking-widest uppercase opacity-40">Kinetic_Sequence_Buffer</div>
+                      </div>
+                    )}
+                    {asset.type === 'audio' && (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 gap-4 bg-gradient-to-br from-orange-500/5 to-transparent">
+                        <Music className="w-12 h-12 opacity-20" />
+                        {asset.url && (
+                          <audio src={asset.url} controls className="w-full max-w-[240px] h-8 grayscale opacity-60 hover:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    )}
                     
-                    {/* Hover Actions overlay */}
-                    <div className={`absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity backdrop-blur-sm`}>
-                       <button className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-md">
-                         <Play className="w-4 h-4" />
+                    {/* Hover Overlay */}
+                    <div className={`absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-4 transition-all duration-300 backdrop-blur-md`}>
+                       <button className="flex flex-col items-center gap-2 p-3 hover:text-white transition-colors">
+                         <div className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all">
+                           <Play className="w-5 h-5" />
+                         </div>
+                         <span className="text-[10px] font-mono uppercase tracking-widest">Observe</span>
                        </button>
-                       <button className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-md">
-                         <Download className="w-4 h-4" />
+                       <button className="flex flex-col items-center gap-2 p-3 hover:text-white transition-colors">
+                         <div className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all">
+                           <Download className="w-5 h-5" />
+                         </div>
+                         <span className="text-[10px] font-mono uppercase tracking-widest">Extract</span>
                        </button>
                     </div>
                   </div>
 
-                  <div className={`p-4 border-t ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
-                    <div className="flex justify-between items-start mb-2">
-                       <span className="font-bold text-sm truncate pr-2" title={asset.name}>{asset.name}</span>
+                  <div className={`p-6 flex-1 flex flex-col border-t ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                       <div className="flex flex-col min-w-0 pr-4">
+                         <span className="font-black text-sm truncate uppercase tracking-tight" title={asset.name}>{asset.name}</span>
+                         <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest mt-1">
+                           {new Date(asset.timestamp).toLocaleDateString()} // {new Date(asset.timestamp).toLocaleTimeString()}
+                         </span>
+                       </div>
                        
-                       {/* Distinguish Uploaded vs Generated */}
                        {asset.source === 'uploaded' ? (
-                         <span className="px-2 py-0.5 text-[9px] uppercase font-mono font-bold tracking-widest border border-current rounded-sm opacity-60">
-                           User_Upload
-                         </span>
+                         <div className="px-2 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border-2 border-current rounded-none opacity-40 flex-shrink-0">
+                           USR_RAW
+                         </div>
                        ) : (
-                         <span className={`px-2 py-0.5 text-[9px] uppercase font-mono font-bold tracking-widest rounded-sm bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                         <div className={`px-2 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest rounded-none bg-gradient-to-r flex-shrink-0 ${getModelBadgeColors(asset.type as GenerationMode)}`}>
                            {asset.model}
-                         </span>
+                         </div>
                        )}
-                    </div>
-                    
-                    <div className="text-[10px] font-mono opacity-50 mb-3 block">
-                       {new Date(asset.timestamp).toLocaleTimeString()}
                     </div>
 
                     {asset.source === 'generated' && asset.metadata && (
-                       <div className={`p-2 text-xs font-mono italic ${theme === 'dark' ? 'bg-black/30' : 'bg-black/5'} border-l-2 ${getBorderColor(asset).split(' ')[0]} line-clamp-2`} title={asset.metadata.prompt}>
+                       <div className={`p-4 text-[11px] font-mono italic leading-relaxed mb-6 ${theme === 'dark' ? 'bg-black/40 text-gray-400' : 'bg-gray-50 text-gray-600'} border-l-4 ${getBorderColor(asset).split(' ')[0]} line-clamp-3 relative`} title={asset.metadata.prompt}>
+                         <Sparkles className="w-3 h-3 absolute top-2 right-2 opacity-20" />
                          "{asset.metadata.prompt}"
                        </div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 mt-4 pt-3 border-t border-current/10">
-                       {asset.source === 'generated' ? (
-                         <>
-                           <button className="flex-1 py-1 text-[10px] uppercase font-mono font-bold hover:bg-black/5 dark:hover:bg-white/5 transition-colors">Remix</button>
-                           <button className="flex-1 py-1 text-[10px] uppercase font-mono font-bold hover:bg-black/5 dark:hover:bg-white/5 transition-colors">Use as Ref</button>
-                         </>
-                       ) : (
-                         <button className="w-full py-1 text-[10px] uppercase font-mono font-bold hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-red-500 hover:text-red-600">Remove</button>
+                    <div className="mt-auto flex flex-col gap-3 pt-6 border-t border-current/5">
+                       {asset.source === 'generated' && (
+                         <button 
+                            onClick={() => onAddAssetToNarrative?.(asset)}
+                            className={`w-full py-3 text-[10px] uppercase font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+                              theme === 'dark' ? 'bg-white text-black hover:bg-gray-200 shadow-lg' : 'bg-black text-white hover:bg-gray-800'
+                            }`}
+                         >
+                           <BookOpen className="w-4 h-4" />
+                           Add to Narrative Context
+                         </button>
                        )}
+                       <div className="flex gap-2">
+                          <button className={`flex-1 py-2 text-[9px] uppercase font-mono font-bold border ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-300 hover:border-black'} transition-colors`}>
+                            {asset.source === 'generated' ? 'Remix Logic' : 'Reference'}
+                          </button>
+                          <button className={`flex-1 py-1 text-[9px] uppercase font-mono font-bold transition-all text-red-500 hover:text-red-400 flex items-center justify-center gap-1`}>
+                            <Trash2 className="w-3 h-3" />
+                            Purge
+                          </button>
+                       </div>
                     </div>
                   </div>
                 </motion.div>

@@ -98,6 +98,7 @@ interface MediaFile {
   type?: 'video' | 'audio' | 'image';
   extractedText?: string;
   storageUrl?: string;
+  source?: 'user' | 'ai';
 }
 
 interface AttachedFile {
@@ -110,13 +111,14 @@ interface AttachedFile {
   uri?: string;
   mimeType?: string;
   extractedText?: string;
+  source?: 'user' | 'ai';
 }
 
 import { AdminDashboard } from "./components/AdminDashboard";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Header } from "./components/layout/Header";
 import { GenerationViewer } from "./components/GenerationViewer";
-import { MultiModalStudio } from "./components/MultiModalStudio";
+import { MultiModalStudio, type MediaAsset as StudioMediaAsset } from "./components/MultiModalStudio";
 import { RotatingQuotes } from './components/ui/RotatingQuotes';
 
 const getOpenRouterCategory = (m: any) => {
@@ -136,6 +138,8 @@ const getOpenRouterCategory = (m: any) => {
 // Sub-component for individual media assets to keep main logic cleaner
 function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', media: any, alt?: string, isAdmin: boolean }) {
   const displayUrl = media.previewUrl || media.storageUrl || media.uri;
+  const isAI = media.source === 'ai';
+
   if (!displayUrl) return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Unplayable: Missing URL</div>;
 
   const type = media.mimeType || media.file?.type || media.type || '';
@@ -149,11 +153,11 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
             src={displayUrl} 
             alt={alt || name} 
             referrerPolicy="no-referrer"
-            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
+            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02] ${isAI ? 'ring-4 ring-indigo-500/30' : ''}`} 
           />
           <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
-          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-            Visual_Asset_Ingested
+          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${isAI ? 'bg-indigo-600 text-white' : (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white')}`}>
+            {isAI ? 'AI_Synthesized' : 'Visual_Asset_Ingested'}
           </div>
         </div>
         <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">
@@ -166,11 +170,10 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
   if (type.includes('video')) {
     return (
       <div className="my-14 space-y-4">
-        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
+        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] ${isAI ? 'ring-4 ring-teal-500/30' : ''}`}>
           <video src={displayUrl} controls className="w-full aspect-video" />
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 bg-red-600">
-            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span className="text-[8px] font-mono font-bold text-white uppercase tracking-tighter">Live_Context</span>
+          <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${isAI ? 'bg-teal-600' : 'bg-red-600'} text-white`}>
+            {isAI ? 'AI_Generated_Sequence' : 'Live_Context'}
           </div>
           <a 
             href={displayUrl} 
@@ -184,7 +187,7 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
         </div>
         <div className="flex items-center justify-center gap-4">
            <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
-           <p className="text-[10px] font-mono font-bold opacity-30 uppercase tracking-[0.3em]">Temporal_Data_Source: {name}</p>
+           <p className="text-[10px] font-mono font-bold opacity-30 uppercase tracking-[0.3em]">{isAI ? 'Synthesized' : 'Source'}_Data: {name}</p>
            <div className={`h-[1px] flex-1 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`} />
         </div>
       </div>
@@ -193,15 +196,15 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
 
   if (type.includes('audio')) {
     return (
-      <div className={`my-12 p-8 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
+      <div className={`my-12 p-8 border-2 ${isAI ? (theme === 'dark' ? 'bg-orange-950/20 border-orange-500/50' : 'bg-orange-50 border-orange-500/50') : (theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black')} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
         <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-6">
-            <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-              <FileAudio className="w-6 h-6" />
+            <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${isAI ? 'bg-orange-600' : (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white')}`}>
+              <FileAudio className="w-6 h-6 text-white" />
             </div>
             <div>
-              <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
+              <span className={`block text-[10px] font-mono uppercase tracking-widest mb-1.5 ${isAI ? 'text-orange-600' : 'opacity-40'}`}>{isAI ? 'AI_Synthesized_Aural' : 'Narrative_Audio_Asset'}</span>
               <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
             </div>
           </div>
@@ -235,6 +238,45 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
     </div>
   );
 }
+
+// Utility to convert blob/url to Gemini parts
+const prepareGeminiParts = async (mediaFiles: any[]) => {
+  const parts = await Promise.all(mediaFiles.map(async (v) => {
+    if (v.extractedText) return null;
+    const uri = v.uri || v.storageUrl;
+    if (!uri) return null;
+
+    if (uri.startsWith('blob:')) {
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        return {
+          inlineData: {
+            mimeType: v.mimeType || blob.type || "application/octet-stream",
+            data: base64
+          }
+        };
+      } catch (e) {
+        console.error("Failed to read blob for Gemini", e);
+        return null;
+      }
+    }
+
+    return {
+      fileData: {
+        fileUri: uri,
+        mimeType: v.mimeType || "application/octet-stream"
+      }
+    };
+  }));
+  return parts.filter(p => p !== null);
+};
 
 export default function App() {
   const [appMode, setAppMode] = useState<'narrative' | 'media'>('narrative');
@@ -763,16 +805,7 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
           setPreferences(prev => ({ ...prev, specificFocus: data.text.trim() }));
         }
       } else {
-        const fileParts = readyVideos.map(v => {
-          if (v.extractedText) return null; // already included in fullPromptText
-          if (!v.uri) return null;
-          return {
-            fileData: {
-              fileUri: v.uri,
-              mimeType: v.mimeType || "application/octet-stream"
-            }
-          };
-        }).filter(p => p !== null);
+        const fileParts = await prepareGeminiParts(readyVideos);
 
         const result = await ai.models.generateContent({
           model: preferences.model,
@@ -840,16 +873,7 @@ Tone: ${preferences.tone.join(", ")}`;
           setPreferences(prev => ({ ...prev, systemPrompt: data.text.trim() }));
         }
       } else {
-        const fileParts = readyVideos.map(v => {
-          if (v.extractedText) return null;
-          if (!v.uri) return null;
-          return {
-            fileData: {
-              fileUri: v.uri,
-              mimeType: v.mimeType || "application/octet-stream"
-            }
-          };
-        }).filter(p => p !== null);
+        const fileParts = await prepareGeminiParts(readyVideos);
 
         const result = await ai.models.generateContent({
           model: preferences.model,
@@ -988,7 +1012,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         if (!response.ok) throw new Error(data.error || "Generation Failed");
         generatedContent = data.text;
       } else {
-        const fileParts = readyVideos.map(v => v.uri ? { fileData: { fileUri: v.uri, mimeType: v.mimeType || "application/octet-stream" } } : null).filter(p => p !== null);
+        const fileParts = await prepareGeminiParts(readyVideos);
         const prompt = `${preferences.systemPrompt}\nTransform provided media into a high-quality, professional blog post.
 
 CRITICAL ARCHITECTURE REQUIREMENTS:
@@ -1331,6 +1355,25 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     });
   }, [history, historySortBy]);
 
+  const handleAddAssetToNarrative = (asset: StudioMediaAsset) => {
+    const newMediaFile: MediaFile = {
+      id: `syn-${asset.id}`,
+      name: asset.name,
+      status: 'ACTIVE',
+      type: asset.type,
+      uri: asset.url,
+      previewUrl: asset.url,
+      mimeType: asset.type === 'image' ? 'image/png' : asset.type === 'video' ? 'video/mp4' : 'audio/mpeg',
+      source: 'ai',
+      progress: 100
+    };
+    setMediaFiles(prev => {
+      if (prev.find(f => f.id === newMediaFile.id)) return prev;
+      return [...prev, newMediaFile];
+    });
+    setAppMode('narrative');
+  };
+
   return (
     <AuthGuard theme={theme}>
       {showOnboarding && <OnboardingWizard theme={theme} onComplete={handleOnboardingComplete} />}
@@ -1544,7 +1587,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       <main className={`max-w-7xl mx-auto p-6 md:p-12 ${appMode === 'media' ? 'h-[calc(100vh-80px)] p-0 md:p-0' : ''}`}>
         {appMode === 'media' ? (
           <div className={`h-full border-2 ${theme === 'dark' ? 'border-[#333] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'}`}>
-            <MultiModalStudio theme={theme} />
+            <MultiModalStudio theme={theme} onAddAssetToNarrative={handleAddAssetToNarrative} />
           </div>
         ) : (
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-0 border-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] bg-white shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'} transition-all`}>
@@ -1605,6 +1648,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                               <span className="text-[8px] opacity-40 font-mono">{( (v.size || 0) / (1024 * 1024)).toFixed(2)}MB</span>
                               {v.status === 'ACTIVE' && (
                                 <span className="text-[8px] text-green-600 font-mono tracking-tighter bg-green-500/10 px-1">SYNCED</span>
+                              )}
+                              {v.source === 'ai' && (
+                                <span className={`text-[8px] font-mono tracking-tighter px-1 ${theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-indigo-100 text-indigo-700 border border-indigo-200'}`}>AI_GEN</span>
                               )}
                             </div>
                           </div>

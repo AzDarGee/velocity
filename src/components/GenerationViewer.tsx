@@ -23,6 +23,7 @@ interface MediaFile {
   file?: File;
   uri?: string;
   extractedText?: string;
+  source?: 'user' | 'ai';
 }
 
 interface GenerationViewerProps {
@@ -67,6 +68,7 @@ const QUILL_FORMATS = [
 // Sub-component for individual media assets inside GenerationViewer
 function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | 'dark', media: MediaFile, alt?: string, onDownloadAsset?: (file: MediaFile) => void }) {
   const displayUrl = media.previewUrl || media.storageUrl || media.uri;
+  const isAI = media.source === 'ai';
   if (!displayUrl) return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Unplayable: Missing URL</div>;
 
   const type = media.mimeType || media.type || '';
@@ -79,11 +81,11 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
           <img 
             src={displayUrl} 
             alt={alt || name} 
-            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02]`} 
+            className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02] ${isAI ? 'ring-4 ring-indigo-500/30' : ''}`} 
           />
           <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] opacity-20" />
-          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-            Visual_Asset_Ingested
+          <div className={`absolute top-0 left-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${isAI ? 'bg-indigo-600 text-white' : (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white')}`}>
+            {isAI ? 'AI_Synthesized' : 'Visual_Asset_Ingested'}
           </div>
         </div>
         <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— {alt || name}</p>
@@ -94,10 +96,10 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
   if (type.includes('video')) {
     return (
       <div className="my-10 space-y-4">
-        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)]`}>
+        <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] ${isAI ? 'ring-4 ring-teal-500/30' : ''}`}>
           <video src={displayUrl} controls className="w-full aspect-video" crossOrigin="anonymous" />
-          <div className={`absolute top-0 right-0 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-            Motion_Data_Stream
+          <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${isAI ? 'bg-teal-600' : 'bg-red-600'} text-white`}>
+            {isAI ? 'AI_Synthesized_Sequence' : 'Motion_Data_Stream'}
           </div>
           <button 
             onClick={() => onDownloadAsset?.(media)}
@@ -106,21 +108,21 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
             <Download className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— Video Extraction: {alt || name}</p>
+        <p className="text-[10px] font-mono opacity-40 uppercase text-center italic tracking-widest">— {isAI ? 'Synthesized' : 'Video Extraction'}: {alt || name}</p>
       </div>
     );
   }
 
   if (type.includes('audio')) {
     return (
-      <div className={`my-8 p-6 border-2 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black'} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
+      <div className={`my-8 p-6 border-2 ${isAI ? (theme === 'dark' ? 'bg-orange-950/20 border-orange-500/50' : 'bg-orange-50 border-orange-500/50') : (theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-black')} rounded-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)] relative overflow-hidden group`}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-6">
-            <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'}`}>
-              <FileAudio className="w-6 h-6" />
+            <div className={`w-12 h-12 flex items-center justify-center transition-transform group-hover:rotate-12 ${isAI ? 'bg-orange-600' : (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white')}`}>
+              <FileAudio className="w-6 h-6 text-white" />
             </div>
             <div>
-              <span className="block text-[10px] font-mono opacity-40 uppercase tracking-widest mb-1.5">Narrative_Audio_Asset</span>
+              <span className={`block text-[10px] font-mono uppercase tracking-widest mb-1.5 ${isAI ? 'text-orange-600' : 'opacity-40'}`}>{isAI ? 'AI_Synthesized_Aural' : 'Narrative_Audio_Asset'}</span>
               <span className="block text-sm font-bold uppercase tracking-tight">{name}</span>
             </div>
           </div>
