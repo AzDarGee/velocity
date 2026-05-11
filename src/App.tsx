@@ -232,7 +232,7 @@ export default function App() {
     targetAudience: [],
     tone: [],
     length: "Medium (approx. 600 words)",
-    specificFocus: "Unique narrative stories.",
+    specificFocus: "",
     model: "gemini-3-flash-preview",
     systemPrompt: "",
   });
@@ -1835,7 +1835,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
 
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-1">
-                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Voice_Tones</label>
+                    <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Voice_Tones [{preferences.tone.length}]</label>
                     <div className="text-[8px] font-mono opacity-40 uppercase">Multi_Selection_Active</div>
                   </div>
                   <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 border p-4 max-h-48 overflow-y-auto custom-scrollbar ${
@@ -2002,6 +2002,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
                       disabled={!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || isGeneratingFocus}
                       rows={4}
+                      placeholder="Enter a strategic focus for the blog... *"
                       className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
                         theme === 'dark' 
                           ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
@@ -2106,9 +2107,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 
                 <button 
                   onClick={handleGenerate}
-                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || preferences.specificFocus.trim() === "" || !preferences.length || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
+                  disabled={isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || !preferences.model || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || preferences.specificFocus.trim() === "" || !preferences.length || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)}
                   className={`w-full py-5 border-2 font-bold text-sm uppercase tracking-[0.2em] transition-all relative overflow-hidden group
-                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || preferences.specificFocus.trim() === "" || !preferences.length || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
+                    ${isProcessing || mediaFiles.length === 0 || !mediaFiles.every(v => v.status === 'ACTIVE') || !preferences.model || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || preferences.systemPrompt.trim() === "" || preferences.specificFocus.trim() === "" || !preferences.length || (auth.currentUser && !auth.currentUser.emailVerified && !isAdmin)
                       ? 'bg-transparent text-[#8E9299] border-[#141414] opacity-50 cursor-not-allowed' 
                       : (theme === 'dark' 
                           ? 'bg-white text-black hover:bg-[#F8F8F7] border-[#F8F8F7] shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none' 
