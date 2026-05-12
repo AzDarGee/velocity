@@ -363,6 +363,12 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           await uploadBytes(storageRef, finalBlob, { contentType: finalBlob.type });
           storageUrl = await getDownloadURL(storageRef);
           
+          // Add size to metadata
+          newAsset.metadata = {
+            ...newAsset.metadata,
+            fileSize: finalBlob.size
+          };
+          
           // Revoke the local object URL to prevent memory leaks now that we have it requested
           if (finalUrl.startsWith('blob:')) {
              URL.revokeObjectURL(finalUrl);
@@ -431,20 +437,22 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const storageRef = ref(storage, path);
       
       // Upload using base64 string
-      await uploadString(storageRef, imagePart.inlineData.data, 'base64', {
+      const uploadResult = await uploadString(storageRef, imagePart.inlineData.data, 'base64', {
         contentType: 'image/png'
       });
       
       const imageUrl = await getDownloadURL(storageRef);
+      const coverSize = uploadResult.metadata.size;
       
       // userId is required here; hopefully it's available in the component scope
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
       
       await updateDoc(assetRef, {
-        'metadata.coverUrl': imageUrl
+        'metadata.coverUrl': imageUrl,
+        'metadata.coverSize': coverSize
       });
       // Update local assets state
-      setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, coverUrl: imageUrl}} : a));
+      setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, coverUrl: imageUrl, coverSize}} : a));
 
       // Notify completion
       setError("Cover art generated!");
@@ -599,6 +607,15 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     if (asset.type === 'video') return 'border-teal-500 shadow-[0_0_15px_-3px_rgba(20,184,166,0.3)]';
     if (asset.type === 'audio') return 'border-orange-500 shadow-[0_0_15px_-3px_rgba(249,115,22,0.3)]';
     return '';
+  };
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   };
 
   return (
@@ -1406,13 +1423,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 </div>
 
                 {/* Prompt Section */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                    <div className="flex items-center gap-2">
                      <div className="h-[1px] flex-1 bg-current/10" />
-                     <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">Genetic Prompt</span>
+                     <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">
+                       {viewingAssetDetails.type === 'audio' ? 'COMPOSITION SOURCE' : 'GENETIC PROMPT'}
+                     </span>
                      <div className="h-[1px] flex-1 bg-current/10" />
                    </div>
-                   <div className={`p-4 border font-mono text-[11px] leading-relaxed italic ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/80' : 'bg-black/5 border-black/10 text-black/80'}`}>
+                   <div className={`p-6 border text-center transition-all ${
+                     viewingAssetDetails.type === 'audio' 
+                       ? 'font-serif text-base md:text-lg leading-relaxed italic whitespace-pre-wrap' 
+                       : 'font-mono text-[11px] leading-relaxed italic whitespace-pre-wrap'
+                     } ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/90' : 'bg-black/5 border-black/10 text-black/90'}`}>
                       {viewingAssetDetails.metadata?.prompt || 'No prompt recorded.'}
                    </div>
                 </div>
@@ -1422,6 +1445,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   {[
                     { label: 'Artifact ID', value: viewingAssetDetails.metadata?.task_id || viewingAssetDetails.id },
                     { label: 'Model Core', value: viewingAssetDetails.metadata?.model_name || 'Suno v3.5' },
+                    { label: 'Main Asset Size', value: viewingAssetDetails.metadata?.fileSize ? formatBytes(viewingAssetDetails.metadata.fileSize) : 'N/A' },
+                    { label: 'Cover Size', value: viewingAssetDetails.metadata?.coverSize ? formatBytes(viewingAssetDetails.metadata.coverSize) : 'N/A' },
                     { label: 'Synthesis Status', value: 'Complete' },
                     { label: 'Temporal Signature', value: new Date(viewingAssetDetails.timestamp).toLocaleString() }
                   ].map((spec, i) => (
@@ -1434,15 +1459,17 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
                 {/* Lyrics Section if available */}
                 {viewingAssetDetails.metadata?.lyrics && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center gap-2">
                        <div className="h-[1px] flex-1 bg-current/10" />
-                       <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">Transcribed Script</span>
+                       <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">TRANSCRIBED SCRIPT</span>
                        <div className="h-[1px] flex-1 bg-current/10" />
                     </div>
-                    <pre className={`p-4 border font-mono text-[10px] max-h-40 overflow-y-auto whitespace-pre-wrap ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
-                       {viewingAssetDetails.metadata.lyrics}
-                    </pre>
+                    <div className={`p-6 border text-center whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar italic ${
+                      theme === 'dark' ? 'bg-white/5 border-white/10 text-white/80' : 'bg-black/5 border-black/10 text-black/80'
+                    }`}>
+                       <p className="text-sm md:text-base leading-loose">{viewingAssetDetails.metadata.lyrics}</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1497,8 +1524,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         <div className="w-12 shrink-0 font-mono text-[10px] opacity-30 pt-1">
                           {(segment.start_time / 1000).toFixed(1)}s
                         </div>
-                        <div className={`p-4 border-l-2 transition-colors ${theme === 'dark' ? 'border-white/10 group-hover:border-indigo-500 bg-white/5' : 'border-black/10 group-hover:border-indigo-500 bg-black/5'}`}>
-                           <p className="text-sm md:text-base font-medium leading-relaxed italic">
+                        <div className={`p-4 md:p-6 border-l-4 transition-colors ${theme === 'dark' ? 'border-white/5 group-hover:border-indigo-500 bg-white/5' : 'border-black/5 group-hover:border-indigo-500 bg-black/5'} flex-1`}>
+                           <p className="text-base md:text-xl font-serif leading-loose italic tracking-tight text-current/90">
                              {segment.text}
                            </p>
                         </div>
