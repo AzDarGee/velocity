@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -29,6 +29,15 @@ export interface MediaAsset {
   metadata?: any;
 }
 
+const DEFAULT_STYLES = [
+  "Pop", "Rock", "Hip Hop", "R&B", "Country", 
+  "Jazz", "Classical", "Electronic", "Dance", "Folk",
+  "Acoustic", "Blues", "Soul", "Funk", "Disco",
+  "Reggae", "Latin", "Metal", "Punk", "Indie Rock",
+  "Alternative", "Synthwave", "Ambient", "Cinematic", "Lo-Fi",
+  "Trap", "EDM", "House", "Techno", "K-Pop"
+];
+
 export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>('image');
   const [prompt, setPrompt] = useState("");
@@ -39,7 +48,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [sunoCustomMode, setSunoCustomMode] = useState(false);
   const [sunoInstrumental, setSunoInstrumental] = useState(false);
   const [sunoModel, setSunoModel] = useState("V4_5ALL");
-  const [sunoStyle, setSunoStyle] = useState("");
+  const [sunoStyles, setSunoStyles] = useState<string[]>([]);
+  const [customStyles, setCustomStyles] = useState<string[]>([]);
+  const [newStyle, setNewStyle] = useState("");
   const [sunoTitle, setSunoTitle] = useState("");
   const [sunoPersonaId, setSunoPersonaId] = useState("");
   const [sunoPersonaModel, setSunoPersonaModel] = useState("");
@@ -121,7 +132,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           instrumental: sunoInstrumental,
           model: sunoModel,
           title: sunoTitle || "Generated Track",
-          style: sunoStyle || (sunoInstrumental ? "Instrumental" : ""),
+          style: sunoStyles.join(", ") || (sunoInstrumental ? "Instrumental" : ""),
           callBackUrl: window.location.origin + "/api/suno-callback",
           wait_audio: true 
         };
@@ -480,14 +491,99 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Style / Genre</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Synthwave, chill, instrumental"
-                            value={sunoStyle}
-                            onChange={e => setSunoStyle(e.target.value)}
-                            className={`w-full p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'}`}
-                          />
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="text-[10px] uppercase font-mono opacity-60 tracking-wider">Style / Genre [{sunoStyles.length}]</label>
+                            {sunoStyles.length > 0 && (
+                              <button 
+                                onClick={() => setSunoStyles([])}
+                                className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                              >
+                                De-select All
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex gap-2 mb-2">
+                            <input 
+                              type="text"
+                              value={newStyle}
+                              onChange={(e) => setNewStyle(e.target.value)}
+                              placeholder="Add custom style (comma-separated)..."
+                              className={`flex-1 p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'}`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && newStyle.trim()) {
+                                  e.preventDefault();
+                                  const vals = newStyle.split(',').map(v => v.trim()).filter(Boolean);
+                                  let addedStyles = [...customStyles];
+                                  let selectedStyles = [...sunoStyles];
+                                  vals.forEach(val => {
+                                    if (!addedStyles.includes(val) && !DEFAULT_STYLES.includes(val)) {
+                                      addedStyles = [val, ...addedStyles];
+                                    }
+                                    if (!selectedStyles.includes(val)) {
+                                      selectedStyles = [...selectedStyles, val];
+                                    }
+                                  });
+                                  setCustomStyles(addedStyles);
+                                  setSunoStyles(selectedStyles);
+                                  setNewStyle("");
+                                }
+                              }}
+                            />
+                            <button 
+                              onClick={() => {
+                                if (newStyle.trim()) {
+                                  const vals = newStyle.split(',').map(v => v.trim()).filter(Boolean);
+                                  let addedStyles = [...customStyles];
+                                  let selectedStyles = [...sunoStyles];
+                                  vals.forEach(val => {
+                                    if (!addedStyles.includes(val) && !DEFAULT_STYLES.includes(val)) {
+                                      addedStyles = [val, ...addedStyles];
+                                    }
+                                    if (!selectedStyles.includes(val)) {
+                                      selectedStyles = [...selectedStyles, val];
+                                    }
+                                  });
+                                  setCustomStyles(addedStyles);
+                                  setSunoStyles(selectedStyles);
+                                  setNewStyle("");
+                                }
+                              }}
+                              className={`px-1 py-2.5 border text-[11px] font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-white hover:bg-white hover:text-black' : 'bg-white border-gray-300 text-black hover:bg-black hover:text-white'}`}
+                            >
+                              Add
+                            </button>
+                          </div>
+                          <div className={`w-full border max-h-40 overflow-y-auto p-4 space-y-3 scrollbar-thin ${
+                            theme === 'dark' 
+                              ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
+                              : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
+                          }`}>
+                            {Array.from(new Set([...customStyles, ...DEFAULT_STYLES])).map((style, idx) => (
+                              <label key={`style-seg-${style}`} className="flex items-center gap-3 cursor-pointer group/item">
+                                <div className="relative flex items-center justify-center">
+                                  <input 
+                                    type="checkbox"
+                                    checked={sunoStyles.includes(style)}
+                                    onChange={(e) => {
+                                      const newStyleList = e.target.checked 
+                                        ? [...sunoStyles, style]
+                                        : sunoStyles.filter(a => a !== style);
+                                      setSunoStyles(newStyleList);
+                                    }}
+                                    className={`peer appearance-none w-4 h-4 border transition-colors ${
+                                      theme === 'dark' 
+                                        ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white' 
+                                        : 'border-gray-300 bg-white checked:bg-black checked:border-black'
+                                    }`}
+                                  />
+                                  <Check className={`w-2.5 h-2.5 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
+                                </div>
+                                <span className={`text-[11px] font-mono transition-colors ${sunoStyles.includes(style) ? 'font-bold' : 'opacity-60 group-hover/item:opacity-100'}`}>
+                                  {style}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
