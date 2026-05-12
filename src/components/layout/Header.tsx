@@ -54,10 +54,10 @@ export function Header({
 
         {/* Mode Hub - More responsive layout */}
         <div className="flex items-center">
-          <div className={`flex rounded-none overflow-hidden border-2 ${theme === 'dark' ? 'border-[#333] bg-black' : 'border-[#141414] bg-white'} font-mono text-[9px] md:text-[11px] uppercase font-black`}>
+          <div className={`flex rounded-none overflow-hidden border-2 ${theme === 'dark' ? 'border-[#333] bg-black' : 'border-[#141414] bg-white'} font-mono text-[8px] md:text-[10px] lg:text-[11px] uppercase font-black`}>
             <button 
               onClick={() => setAppMode('narrative')}
-              className={`px-2.5 md:px-6 py-2 transition-all flex items-center gap-2 ${appMode === 'narrative' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-40 hover:opacity-100'}`}
+              className={`px-2 py-1 md:py-2 md:px-4 lg:px-6 transition-all flex items-center gap-1.5 md:gap-2 ${appMode === 'narrative' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-40 hover:opacity-100'}`}
             >
               <Activity className="w-3 h-3 md:w-4 md:h-4" />
               <span className="hidden sm:inline tracking-widest">Narrative</span>
@@ -66,7 +66,7 @@ export function Header({
             <button 
               onClick={() => setAppMode('media')}
               disabled={!isAdmin && userPlan !== 'media'}
-              className={`px-2.5 md:px-6 py-2 border-l-2 ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} transition-all flex items-center gap-2 ${appMode === 'media' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-40 hover:opacity-100'} ${!isAdmin && userPlan !== 'media' ? 'opacity-20 cursor-not-allowed hover:bg-transparent hover:opacity-20 hover:text-inherit' : ''}`}
+              className={`px-2 py-1 md:py-2 md:px-4 lg:px-6 border-l-2 ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} transition-all flex items-center gap-1.5 md:gap-2 ${appMode === 'media' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-40 hover:opacity-100'} ${!isAdmin && userPlan !== 'media' ? 'opacity-20 cursor-not-allowed hover:bg-transparent hover:opacity-20 hover:text-inherit' : ''}`}
             >
               <Shield className="w-3 h-3 md:w-4 md:h-4" />
               <span className="hidden sm:inline tracking-widest">Media Studio</span>
