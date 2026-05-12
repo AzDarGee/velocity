@@ -121,6 +121,8 @@ const SUBSCRIPTION_PLANS = {
   "tier-pro-yr": { credits: 6000, priceInCents: 42000, name: "Pro Content Tier", interval: "year" as const },
   "tier-unlimited-mo": { credits: 1000, priceInCents: 7500, name: "Unlimited Content Tier", interval: "month" as const },
   "tier-unlimited-yr": { credits: 12000, priceInCents: 80000, name: "Unlimited Content Tier", interval: "year" as const },
+  "sub-media-mo": { credits: 1000, priceInCents: 9900, name: "Media Studio Tier", interval: "month" as const },
+  "sub-media-yr": { credits: 13200, priceInCents: 90000, name: "Media Studio Tier", interval: "year" as const },
 };
 
 async function startServer() {

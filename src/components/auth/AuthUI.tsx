@@ -391,7 +391,7 @@ export function UserButton({
   const [showProfile, setShowProfile] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
   
-  const [topUpMode, setTopUpMode] = useState<'packs' | 'subs' | 'tier'>('packs');
+  const [topUpMode, setTopUpMode] = useState<'packs' | 'subs' | 'tier' | 'media'>('packs');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -1162,6 +1162,16 @@ export function UserButton({
                 >
                   Usage_Tiers
                 </button>
+                <button
+                  onClick={() => setTopUpMode('media')}
+                  className={`flex-1 min-w-[100px] py-2.5 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
+                    topUpMode === 'media' 
+                      ? (theme === 'dark' ? 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]' : 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]') 
+                      : 'opacity-50 hover:opacity-100 hover:bg-current/5'
+                  }`}
+                >
+                  Media_Studio
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
@@ -1252,6 +1262,44 @@ export function UserButton({
                         <>
                           <CreditCard className="w-3 h-3" />
                           Activate_Recurring_Protocol
+                        </>
+                      )}
+                    </div>
+                  </button>
+                )) : topUpMode === 'media' ? [
+                  { id: 'sub-media-mo', name: 'Media', credits: 1000, price: '$99', interval: 'mo' },
+                  { id: 'sub-media-yr', name: 'Media', credits: 1100, price: '$900', interval: 'yr' }
+                ].map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => handleBuy(plan.id)}
+                    disabled={isBuying !== null}
+                    className={`p-4 md:p-6 border-2 flex flex-col items-start gap-3 md:gap-4 transition-all relative group
+                      ${theme === 'dark' 
+                        ? 'border-[#333] bg-[#141414] hover:border-white shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
+                        : 'border-black bg-white hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}
+                      active:shadow-none active:translate-x-[2px] active:translate-y-[2px] overflow-hidden`}
+                  >
+                    <div className="flex items-start justify-between w-full">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-mono tracking-widest opacity-40">{plan.name}_Studio</span>
+                        <div className="text-2xl font-bold font-mono">{plan.credits} <span className="text-xs italic opacity-60">CRD / {plan.interval === 'mo' ? 'MO' : 'YR'}</span></div>
+                      </div>
+                      <div className={`text-xl font-bold font-mono ${theme === 'dark' ? 'text-yellow-500' : 'text-yellow-600'}`}>
+                        {plan.price}<span className="text-[10px] uppercase opacity-40">/{plan.interval}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60">
+                      {isBuying === plan.id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Initializing_Subscription
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-3 h-3" />
+                          Activate_Media_Protocol
                         </>
                       )}
                     </div>
