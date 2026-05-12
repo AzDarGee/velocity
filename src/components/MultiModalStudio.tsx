@@ -427,144 +427,179 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 )}
                 
                 {activeMode === 'music' && (
-                  <div className="flex flex-col gap-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="sunoCustomMode" 
-                          checked={sunoCustomMode}
-                          onChange={e => setSunoCustomMode(e.target.checked)}
-                          className="w-4 h-4"
-                        />
-                        <label htmlFor="sunoCustomMode" className="text-[10px] uppercase font-mono opacity-80 cursor-pointer">Custom Mode</label>
+                  <div className="flex flex-col gap-8 mt-2">
+                    {/* Primary Controls */}
+                    <div className={`p-5 border-2 transition-colors ${theme === 'dark' ? 'bg-[#141414] border-[#333]' : 'bg-gray-50/50 border-gray-200'}`}>
+                      <div className="flex flex-col gap-5 mb-5">
+                        <div>
+                          <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Model</label>
+                          <select 
+                            value={sunoModel}
+                            onChange={e => setSunoModel(e.target.value)}
+                            className={`w-full p-2.5 border text-[11px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-[#F8F8F7]' : 'bg-white border-gray-300 text-black'}`}
+                          >
+                            <option value="V5_5">V5.5 Customized</option>
+                            <option value="V5">V5 Latest</option>
+                            <option value="V4_5ALL">V4.5 ALL</option>
+                            <option value="V4_5PLUS">V4.5 PLUS</option>
+                            <option value="V4_5">V4.5</option>
+                            <option value="V4">V4 Improved</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-6">
+                          <label className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                              type="checkbox" 
+                              checked={sunoCustomMode}
+                              onChange={e => setSunoCustomMode(e.target.checked)}
+                              className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''}`}
+                            />
+                            <span className="text-[11px] font-bold uppercase tracking-widest group-hover:opacity-100 opacity-80 transition-opacity">Custom Mode</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                              type="checkbox" 
+                              checked={sunoInstrumental}
+                              onChange={e => setSunoInstrumental(e.target.checked)}
+                              className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''}`}
+                            />
+                            <span className="text-[11px] font-bold uppercase tracking-widest group-hover:opacity-100 opacity-80 transition-opacity">Instrumental</span>
+                          </label>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="sunoInstrumental" 
-                          checked={sunoInstrumental}
-                          onChange={e => setSunoInstrumental(e.target.checked)}
-                          className="w-4 h-4"
-                        />
-                        <label htmlFor="sunoInstrumental" className="text-[10px] uppercase font-mono opacity-80 cursor-pointer">Instrumental</label>
+
+                      <div className="grid grid-cols-1 gap-5 pt-5 border-t border-current/10">
+                        <div>
+                          <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Song Title</label>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Neon Horizon"
+                            value={sunoTitle}
+                            onChange={e => setSunoTitle(e.target.value)}
+                            className={`w-full p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Style / Genre</label>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Synthwave, chill, instrumental"
+                            value={sunoStyle}
+                            onChange={e => setSunoStyle(e.target.value)}
+                            className={`w-full p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'}`}
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Model</label>
-                        <select 
-                          value={sunoModel}
-                          onChange={e => setSunoModel(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        >
-                          <option value="V4_5ALL">V4.5 ALL</option>
-                          <option value="V4_5PLUS">V4.5 PLUS</option>
-                          <option value="V4_5">V4.5</option>
-                          <option value="V4">V4 Improved</option>
-                          <option value="V5">V5 Latest</option>
-                          <option value="V5_5">V5.5 Customized</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Title</label>
-                        <input 
-                          type="text" 
-                          placeholder="Song Title"
-                          value={sunoTitle}
-                          onChange={e => setSunoTitle(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Style/Genre</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Classical"
-                          value={sunoStyle}
-                          onChange={e => setSunoStyle(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Vocal Gender</label>
-                        <select 
-                          value={sunoVocalGender}
-                          onChange={e => setSunoVocalGender(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        >
-                          <option value="">Any</option>
-                          <option value="m">Male</option>
-                          <option value="f">Female</option>
-                        </select>
+                    {/* Secondary Controls */}
+                    <div className="flex flex-col gap-8">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-current/10">
+                          <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Vocals & Modifiers</span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                          <div>
+                            <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Vocal Gender</label>
+                            <select 
+                              value={sunoVocalGender}
+                              onChange={e => setSunoVocalGender(e.target.value)}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                            >
+                              <option value="">Any</option>
+                              <option value="m">Male</option>
+                              <option value="f">Female</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Negative Tags</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. Heavy Metal"
+                              value={sunoNegativeTags}
+                              onChange={e => setSunoNegativeTags(e.target.value)}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none focus:border-current ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] placeholder-[#555]' : 'bg-gray-50 border-gray-200 placeholder-gray-400'}`}
+                            />
+                          </div>
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Negative Tags</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Heavy Metal"
-                          value={sunoNegativeTags}
-                          onChange={e => setSunoNegativeTags(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        />
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-current/10">
+                          <span className={`text-[10px] font-bold uppercase tracking-widest ${!sunoCustomMode ? 'opacity-30' : 'opacity-50'}`}>
+                            Persona {sunoCustomMode ? '' : '(Custom Mode Only)'}
+                          </span>
+                        </div>
+                        <div className={`grid grid-cols-1 gap-4 transition-opacity ${!sunoCustomMode ? 'opacity-40' : 'opacity-100'}`}>
+                          <div>
+                            <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Persona ID</label>
+                            <input 
+                              type="text" 
+                              disabled={!sunoCustomMode}
+                              placeholder="e.g. persona_123"
+                              value={sunoPersonaId}
+                              onChange={e => setSunoPersonaId(e.target.value)}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none focus:border-current ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] placeholder-[#555]' : 'bg-gray-50 border-gray-200 placeholder-gray-400'} ${!sunoCustomMode ? 'cursor-not-allowed' : ''}`}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Persona Model</label>
+                            <select 
+                              disabled={!sunoCustomMode}
+                              value={sunoPersonaModel}
+                              onChange={e => setSunoPersonaModel(e.target.value)}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${!sunoCustomMode ? 'cursor-not-allowed' : ''}`}
+                            >
+                              <option value="">Default</option>
+                              <option value="style_persona">Style</option>
+                              {(sunoModel === 'V5' || sunoModel === 'V5_5') && (
+                                <option value="voice_persona">Voice</option>
+                              )}
+                            </select>
+                          </div>
+                        </div>
                       </div>
-                      <div className="col-span-1 md:col-span-3 grid grid-cols-3 gap-4">
-                        <div>
-                          <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block flex justify-between">
-                            <span>Style Wt.</span>
-                            <span>{sunoStyleWeight.toFixed(2)}</span>
+                    </div>
+
+                    {/* Weights & Constraints */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 pb-2 border-b border-current/10">
+                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Parameters & Weights</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-6">
+                        <div className={`p-4 border ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
+                          <label className="flex items-center justify-between text-[9px] uppercase font-mono mb-3 tracking-wider">
+                            <span className="opacity-70">Style Weight</span>
+                            <span className="font-bold opacity-100">{sunoStyleWeight.toFixed(2)}</span>
                           </label>
                           <input 
                             type="range" min="0" max="1" step="0.05"
                             value={sunoStyleWeight} onChange={e => setSunoStyleWeight(parseFloat(e.target.value))}
-                            className="w-full"
+                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full cursor-pointer`}
                           />
                         </div>
-                        <div>
-                          <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block flex justify-between">
-                            <span>Weirdness</span>
-                            <span>{sunoWeirdnessConstraint.toFixed(2)}</span>
+                        <div className={`p-4 border ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
+                          <label className="flex items-center justify-between text-[9px] uppercase font-mono mb-3 tracking-wider">
+                            <span className="opacity-70">Weirdness</span>
+                            <span className="font-bold opacity-100">{sunoWeirdnessConstraint.toFixed(2)}</span>
                           </label>
                           <input 
                             type="range" min="0" max="1" step="0.05"
                             value={sunoWeirdnessConstraint} onChange={e => setSunoWeirdnessConstraint(parseFloat(e.target.value))}
-                            className="w-full"
+                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full cursor-pointer`}
                           />
                         </div>
-                        <div>
-                          <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block flex justify-between">
-                            <span>Audio Wt.</span>
-                            <span>{sunoAudioWeight.toFixed(2)}</span>
+                        <div className={`p-4 border ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
+                          <label className="flex items-center justify-between text-[9px] uppercase font-mono mb-3 tracking-wider">
+                            <span className="opacity-70">Audio Weight</span>
+                            <span className="font-bold opacity-100">{sunoAudioWeight.toFixed(2)}</span>
                           </label>
                           <input 
                             type="range" min="0" max="1" step="0.05"
                             value={sunoAudioWeight} onChange={e => setSunoAudioWeight(parseFloat(e.target.value))}
-                            className="w-full"
+                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full cursor-pointer`}
                           />
                         </div>
-                      </div>
-
-                      <div className="col-span-2">
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Persona ID</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. persona_123"
-                          value={sunoPersonaId}
-                          onChange={e => setSunoPersonaId(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Persona Model</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. style_persona"
-                          value={sunoPersonaModel}
-                          onChange={e => setSunoPersonaModel(e.target.value)}
-                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
-                        />
                       </div>
                     </div>
                   </div>
@@ -598,9 +633,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           </button>
         </div>
 
-        {/* Right Console - Assets Grid */}
-        <div className={`flex-1 p-4 md:p-8 overflow-y-auto ${theme === 'dark' ? 'bg-[#111]' : 'bg-white'}`}>
-          <div className="flex items-center justify-between mb-8">
+        {/* Right Console - Assets File Manager */}
+        <div className={`flex-1 flex flex-col overflow-hidden border-l border-t lg:border-t-0 ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-white'}`}>
+          <div className={`p-4 md:p-6 lg:p-8 flex items-center justify-between border-b ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
             <div className="flex flex-col">
               <h3 className="font-black uppercase tracking-widest text-lg flex items-center gap-3">
                 <Upload className="w-5 h-5 opacity-60" />
@@ -613,129 +648,132 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             </div>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8 pb-12">
-            <AnimatePresence>
-              {assets.map((asset) => (
-                <motion.div
-                  key={asset.id}
-                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  whileHover={{ y: -5 }}
-                  className={`border-4 flex flex-col transition-all overflow-hidden relative group shadow-2xl h-full ${
-                     theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-white'
-                  } ${getBorderColor(asset)}`}
-                >
-                  {/* Decorative badge for generated content */}
-                  {asset.source === 'generated' && (
-                    <div className={`absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`} />
-                  )}
-
-                  <div className="relative aspect-video flex-shrink-0 flex items-center justify-center overflow-hidden bg-black/40">
-                    {/* Media Type Specific Preview */}
-                    {asset.type === 'image' && (
-                      <div className="w-full h-full flex items-center justify-center relative">
-                        <ImageIcon className="w-16 h-16 opacity-10 absolute z-0" />
-                        <div className="z-10 text-[10px] font-mono tracking-widest uppercase opacity-40">Synthesized_Visual_Data</div>
-                      </div>
-                    )}
-                    {asset.type === 'video' && (
-                      <div className="w-full h-full flex items-center justify-center relative">
-                        <Video className="w-16 h-16 opacity-10 absolute z-0" />
-                        <div className="z-10 text-[10px] font-mono tracking-widest uppercase opacity-40">Kinetic_Sequence_Buffer</div>
-                      </div>
-                    )}
-                    {asset.type === 'audio' && (
-                      <div className="w-full h-full flex flex-col items-center justify-center p-6 gap-4 bg-gradient-to-br from-orange-500/5 to-transparent relative">
-                        {asset.metadata?.imageUrl && (
-                          <div className="absolute inset-0 z-0 opacity-40">
-                             <img src={asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="Cover art" className="w-full h-full object-cover mix-blend-overlay" />
-                          </div>
-                        )}
-                        <Music className="w-12 h-12 opacity-20 z-10" />
-                        {asset.url && (
-                          <audio src={asset.url} controls className="w-full max-w-[240px] h-8 grayscale opacity-60 hover:opacity-100 transition-opacity z-10 mix-blend-luminosity" />
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Hover Overlay */}
-                    <div className={`absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-4 transition-all duration-300 backdrop-blur-md`}>
-                       <button className="flex flex-col items-center gap-2 p-3 hover:text-white transition-colors">
-                         <div className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all">
-                           <Play className="w-5 h-5" />
-                         </div>
-                         <span className="text-[10px] font-mono uppercase tracking-widest">Observe</span>
-                       </button>
-                       <button className="flex flex-col items-center gap-2 p-3 hover:text-white transition-colors">
-                         <div className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all">
-                           <Download className="w-5 h-5" />
-                         </div>
-                         <span className="text-[10px] font-mono uppercase tracking-widest">Extract</span>
-                       </button>
-                    </div>
-                  </div>
-
-                  <div className={`p-6 flex-1 flex flex-col border-t ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
-                    <div className="flex justify-between items-start mb-4">
-                       <div className="flex flex-col min-w-0 pr-4">
-                         <span className="font-black text-sm truncate uppercase tracking-tight" title={asset.name}>{asset.name}</span>
-                         <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest mt-1">
-                           {new Date(asset.timestamp).toLocaleDateString()} // {new Date(asset.timestamp).toLocaleTimeString()}
-                         </span>
-                       </div>
-                       
-                       {asset.source === 'uploaded' ? (
-                         <div className="px-2 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border-2 border-current rounded-none opacity-40 flex-shrink-0">
-                           USR_RAW
-                         </div>
-                       ) : (
-                         <div className={`px-2 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest rounded-none bg-gradient-to-r flex-shrink-0 ${getModelBadgeColors(asset.type as GenerationMode)}`}>
-                           {asset.model}
-                         </div>
-                       )}
-                    </div>
-
-                    {asset.source === 'generated' && asset.metadata && (
-                       <div className={`p-4 text-[11px] font-mono italic leading-relaxed mb-6 ${theme === 'dark' ? 'bg-black/40 text-gray-400' : 'bg-gray-50 text-gray-600'} border-l-4 ${getBorderColor(asset).split(' ')[0]} relative`} title={asset.metadata.prompt}>
-                         <Sparkles className="w-3 h-3 absolute top-2 right-2 opacity-20" />
-                         <div className="line-clamp-3">"{asset.metadata.prompt}"</div>
-                         {((asset.type === 'audio' && (asset.metadata.title || asset.metadata.tags)) || asset.metadata.generationTimeMs) && (
-                            <div className="mt-3 overflow-hidden text-[9px] not-italic opacity-70 flex flex-col gap-1 border-t border-current/10 pt-2">
-                               {asset.metadata.generationTimeMs && <div><span className="font-bold">Gen. Time:</span> {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s</div>}
-                               {asset.type === 'audio' && asset.metadata.title && <div className="truncate"><span className="font-bold">Title:</span> {asset.metadata.title}</div>}
-                               {asset.type === 'audio' && asset.metadata.tags && <div className="truncate"><span className="font-bold">Tags:</span> {asset.metadata.tags}</div>}
-                               {asset.type === 'audio' && asset.metadata.duration && <div><span className="font-bold">Duration:</span> {asset.metadata.duration}s</div>}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+            <div className={`overflow-x-auto border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
+              <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead className={`border-b-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
+                  <tr className="text-[9px] uppercase font-mono tracking-widest opacity-60">
+                    <th className="py-4 px-4 font-normal">Asset</th>
+                    <th className="py-4 px-4 font-normal">Type & Source</th>
+                    <th className="py-4 px-4 font-normal">Details & Metadata</th>
+                    <th className="py-4 px-4 font-normal text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <AnimatePresence>
+                    {assets.map((asset) => (
+                      <motion.tr
+                        key={asset.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className={`group border-b last:border-b-0 transition-colors ${
+                          theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
+                        }`}
+                      >
+                        {/* Name and Preview */}
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 ${getBorderColor(asset).split(' ')[0]}`}>
+                              {asset.metadata?.imageUrl && asset.type === 'audio' && (
+                                <img src={asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
+                              )}
+                              {asset.type === 'image' && <ImageIcon className="w-4 h-4 opacity-50 relative z-10" />}
+                              {asset.type === 'video' && <Video className="w-4 h-4 opacity-50 relative z-10" />}
+                              {asset.type === 'audio' && <Music className="w-4 h-4 opacity-50 relative z-10" />}
                             </div>
-                         )}
-                       </div>
-                    )}
+                            <div className="flex flex-col min-w-0">
+                               <span className="font-bold text-sm uppercase tracking-tight truncate max-w-[200px] mb-1" title={asset.name}>{asset.name}</span>
+                               <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest">
+                                 {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                               </span>
+                            </div>
+                          </div>
+                        </td>
 
-                    <div className="mt-auto flex flex-col gap-3 pt-6 border-t border-current/5">
-                       {asset.source === 'generated' && (
-                         <button 
-                            onClick={() => onAddAssetToNarrative?.(asset)}
-                            className={`w-full py-3 text-[10px] uppercase font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
-                              theme === 'dark' ? 'bg-white text-black hover:bg-gray-200 shadow-lg' : 'bg-black text-white hover:bg-gray-800'
-                            }`}
-                         >
-                           <BookOpen className="w-4 h-4" />
-                           Add to Narrative Context
-                         </button>
-                       )}
-                       <div className="flex gap-2">
-                          <button className={`flex-1 py-2 text-[9px] uppercase font-mono font-bold border ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-300 hover:border-black'} transition-colors`}>
-                            {asset.source === 'generated' ? 'Remix Logic' : 'Reference'}
-                          </button>
-                          <button className={`flex-1 py-1 text-[9px] uppercase font-mono font-bold transition-all text-red-500 hover:text-red-400 flex items-center justify-center gap-1`}>
-                            <Trash2 className="w-3 h-3" />
-                            Purge
-                          </button>
-                       </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                        {/* Type and Source */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <div className="flex flex-col items-start gap-2">
+                             <div className={`px-2 py-1 text-[8px] uppercase font-mono font-black tracking-widest border ${getBorderColor(asset).split(' ')[0]}`}>
+                               {asset.type}
+                             </div>
+                             {asset.source === 'uploaded' ? (
+                               <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                 USR_RAW
+                               </div>
+                             ) : (
+                               <div className="flex flex-col">
+                                 <div className={`text-[10px] uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                   {asset.model}
+                                 </div>
+                                 {asset.metadata?.generationTimeMs && (
+                                   <div className="text-[8px] font-mono opacity-40 mt-0.5">
+                                     GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                   </div>
+                                 )}
+                               </div>
+                             )}
+                          </div>
+                        </td>
+
+                        {/* Details and Metadata */}
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col items-start justify-center max-w-[300px]">
+                            {asset.type === 'audio' && asset.url && (
+                              <div className="mb-2 w-full">
+                                <audio src={asset.url} controls className="w-full max-w-[200px] h-7 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
+                              </div>
+                            )}
+                            {asset.source === 'generated' && asset.metadata ? (
+                              <div className="flex flex-col gap-1 w-full relative">
+                                <span className={`text-[11px] font-mono italic leading-relaxed line-clamp-2 pr-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} title={asset.metadata.prompt}>
+                                  "{asset.metadata.prompt}"
+                                </span>
+                                {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
+                                  <div className="flex flex-wrap gap-2 text-[9px] font-mono uppercase tracking-widest opacity-50 mt-1">
+                                     {asset.metadata.title && <span>{asset.metadata.title}</span>}
+                                     {asset.metadata.duration && <span>• {asset.metadata.duration}s</span>}
+                                     {asset.metadata.tags && <span className="truncate max-w-[150px]">• {asset.metadata.tags}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest">No Context Data</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          <div className={`flex items-center justify-end gap-2 transition-opacity ${asset.url ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                            {asset.source === 'generated' && (
+                              <button 
+                                onClick={() => onAddAssetToNarrative?.(asset)}
+                                className={`p-2 rounded-none border-2 transition-colors group-hover:border-current flex items-center gap-2 ${
+                                  theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black hover:border-white' : 'border-gray-200 hover:bg-black hover:text-white hover:border-black'
+                                }`}
+                                title="Add to Narrative Context"
+                              >
+                                <BookOpen className="w-3 h-3" />
+                                <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">Insert</span>
+                              </button>
+                            )}
+                            <button className={`p-2 rounded-none border-2 transition-colors ${
+                              theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                            }`} title="View / Extract">
+                              <Download className="w-3 h-3" />
+                            </button>
+                            <button className="p-2 rounded-none border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
