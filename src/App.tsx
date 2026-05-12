@@ -753,7 +753,7 @@ export default function App() {
     if (length.includes("Short")) return 5;
     if (length.includes("Medium")) return 10;
     if (length.includes("Long-form")) return 15;
-    if (length.includes("SuperLong")) return 20;
+    if (length.includes("Extra Long")) return 20;
     return 10; // Default
   };
 
@@ -1587,7 +1587,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
           </>
         )}
       </AnimatePresence>
-      <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#0A0A0A] text-[#F8F8F7]' : 'bg-[#E4E3E0] text-[#141414]'} font-sans selection:bg-black selection:text-white transition-colors duration-300 pb-20`}>
+      <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#0A0A0A] text-[#F8F8F7] selection:bg-white selection:text-black' : 'bg-[#E4E3E0] text-[#141414] selection:bg-black selection:text-white'} font-sans transition-colors duration-300 pb-20`}>
       <Header 
         theme={theme}
         setTheme={setTheme}
@@ -2169,13 +2169,13 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       <option>Short (approx. 300 words)</option>
                       <option>Medium (approx. 600 words)</option>
                       <option>Long-form (approx. 1000+ words)</option>
-                      <option>SuperLong (approx. 2000+ words)</option>
+                      <option>Extra Long (approx. 2000+ words)</option>
                     </select>
                     <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
                       {preferences.length.includes("Short") && "→ Extraction priority: Executive summaries & core soundbites."}
                       {preferences.length.includes("Medium") && "→ Extraction priority: Balanced narrative & supporting evidence."}
                       {preferences.length.includes("Long") && "→ Extraction priority: Deep-dive analysis & comprehensive context."}
-                      {preferences.length.includes("SuperLong") && "→ Extraction priority: Ultimate resource creation & whitepaper depth."}
+                      {preferences.length.includes("Extra Long") && "→ Extraction priority: Ultimate resource creation & whitepaper depth."}
                     </p>
                   </div>
 
@@ -2440,7 +2440,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                </div>
             </div>
             
-            <div className={`flex-1 overflow-y-auto relative p-12 md:p-16 m-4 border selection:bg-yellow-200 transition-colors ${
+            <div className={`flex-1 overflow-y-auto relative p-12 md:p-16 m-4 border ${theme === 'dark' ? 'selection:bg-yellow-600/40 selection:text-white' : 'selection:bg-yellow-200'} transition-colors ${
               theme === 'dark' ? 'bg-[#141414] border-[#333]' : 'bg-white border-[#141414]'
             }`}>
               <AnimatePresence mode="wait">
@@ -2746,7 +2746,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                        
                        <div className="space-y-8">
                           {previewMedia.extractedText ? (
-                            <div className="text-base leading-[1.8] text-black/90 font-serif whitespace-pre-wrap selection:bg-yellow-200">
+                            <div className={`text-base leading-[1.8] ${theme === 'dark' ? 'text-[#F8F8F7]/90 selection:bg-yellow-600/40 selection:text-white' : 'text-black/90 selection:bg-yellow-200'} font-serif whitespace-pre-wrap`}>
                               {previewMedia.extractedText.length > 5000 
                                 ? previewMedia.extractedText.substring(0, 5000) + '\n\n[... Remaining content truncated for terminal preview ...]' 
                                 : previewMedia.extractedText}

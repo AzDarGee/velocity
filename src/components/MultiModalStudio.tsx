@@ -36,6 +36,18 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [resolution, setResolution] = useState<string>("1080p");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sunoCustomMode, setSunoCustomMode] = useState(false);
+  const [sunoInstrumental, setSunoInstrumental] = useState(false);
+  const [sunoModel, setSunoModel] = useState("V4_5ALL");
+  const [sunoStyle, setSunoStyle] = useState("");
+  const [sunoTitle, setSunoTitle] = useState("");
+  const [sunoPersonaId, setSunoPersonaId] = useState("");
+  const [sunoPersonaModel, setSunoPersonaModel] = useState("");
+  const [sunoNegativeTags, setSunoNegativeTags] = useState("");
+  const [sunoVocalGender, setSunoVocalGender] = useState("");
+  const [sunoStyleWeight, setSunoStyleWeight] = useState<number>(0.65);
+  const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(0.65);
+  const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
   const [assets, setAssets] = useState<MediaAsset[]>([
     {
       id: 'mock-1',
@@ -58,8 +70,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
     setIsGenerating(true);
 
+    const startTime = Date.now();
+
     let finalUrl: string | undefined = undefined;
     let modelUsed = "";
+    let finalMetadata: any = { prompt };
 
     try {
       if (!isAdmin) {
@@ -95,24 +110,91 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       }
 
       if (activeMode === 'music') {
-        const apiKey = (import.meta as any).env.VITE_ELEVENLABS_API_KEY || 'sk_5bdf15ff04861db538ef1bb3d49e71f4c49269829297ff0d';
-        modelUsed = "ElevenLabs";
-        const response = await fetch('https://api.elevenlabs.io/v1/music', {
+        const apiKey = (import.meta as any).env.VITE_SUNO_API_KEY;
+        if (!apiKey) {
+          throw new Error('VITE_SUNO_API_KEY environment variable is required to generate music with Suno AI.');
+        }
+        modelUsed = "Suno AI";
+        const payload: any = {
+          prompt: prompt,
+          customMode: sunoCustomMode,
+          instrumental: sunoInstrumental,
+          model: sunoModel,
+          title: sunoTitle || "Generated Track",
+          style: sunoStyle || (sunoInstrumental ? "Instrumental" : ""),
+          callBackUrl: window.location.origin + "/api/suno-callback",
+          wait_audio: true 
+        };
+
+        if (sunoPersonaId) payload.personaId = sunoPersonaId;
+        if (sunoPersonaModel) payload.personaModel = sunoPersonaModel;
+        if (sunoNegativeTags) payload.negativeTags = sunoNegativeTags;
+        if (sunoVocalGender) payload.vocalGender = sunoVocalGender;
+        if (sunoStyleWeight !== 0.65) payload.styleWeight = sunoStyleWeight;
+        if (sunoWeirdnessConstraint !== 0.65) payload.weirdnessConstraint = sunoWeirdnessConstraint;
+        if (sunoAudioWeight !== 0.65) payload.audioWeight = sunoAudioWeight;
+
+        const response = await fetch('https://api.sunoapi.org/api/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'xi-api-key': apiKey
+            'Authorization': `Bearer ${apiKey}`
           },
-          body: JSON.stringify({ prompt: prompt })
+          body: JSON.stringify(payload)
         });
 
-        if (response.ok) {
-          const blob = await response.blob();
-          finalUrl = URL.createObjectURL(blob);
-        } else {
+        if (!response.ok) {
           const errText = await response.text();
-          throw new Error(`ElevenLabs Music Generation failed: ${errText}`);
+          throw new Error(`Suno AI Music Generation failed: ${errText}`);
         }
+
+        const jsonRes = await response.json();
+        
+        if (jsonRes.code && jsonRes.code !== 200) {
+           throw new Error(`Suno AI Music Generation failed: ${jsonRes.msg || JSON.stringify(jsonRes)}`);
+        }
+
+        const taskId = jsonRes?.data?.taskId || jsonRes?.taskId || (Array.isArray(jsonRes.data) && jsonRes.data[0]?.task_id) || jsonRes?.data?.task_id;
+        if (!taskId) {
+            throw new Error("Could not find taskId in Suno AI response: " + JSON.stringify(jsonRes));
+        }
+
+        let sunoItem = null;
+        let attempts = 0;
+        while(attempts < 120) { // 2 minutes max
+           await new Promise(r => setTimeout(r, 2000));
+           const statusRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+               headers: {
+                  'Authorization': `Bearer ${apiKey}`
+               }
+           });
+           if (!statusRes.ok) continue;
+           const statusData = await statusRes.json();
+           const status = statusData?.data?.status;
+           if (status === 'SUCCESS') {
+               const items = statusData?.data?.response?.sunoData;
+               if (items && items.length > 0) {
+                   sunoItem = items[0];
+                   break;
+               }
+           } else if (status && (status.includes('FAIL') || status.includes('ERROR') || status.includes('EXCEPTION'))) {
+               throw new Error(`Suno AI generation failed with status: ${status}. Message: ${statusData?.data?.errorMessage || 'Unknown error'}`);
+           }
+           attempts++;
+        }
+
+        if (!sunoItem || (!sunoItem.audioUrl && !sunoItem.streamAudioUrl && !sunoItem.audio_url)) {
+             throw new Error("Timeout or could not find audio metadata in Suno AI task results.");
+        }
+
+        const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url;
+        
+        finalMetadata = { prompt, ...sunoItem };
+
+        const audioRes = await fetch(audioUrl);
+        if (!audioRes.ok) throw new Error("Failed to download generated audio from Suno URL");
+        const blob = await audioRes.blob();
+        finalUrl = URL.createObjectURL(blob);
       } else if (activeMode === 'image' || activeMode === 'video') {
         const { GoogleGenAI } = await import("@google/genai");
         
@@ -182,6 +264,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         }
       }
       
+      const endTime = Date.now();
+      finalMetadata.generationTimeMs = endTime - startTime;
+
       const newAsset: MediaAsset = {
         id: `gen-${Math.random().toString(36).substr(2, 9)}`,
         type: activeMode === 'music' ? 'audio' : activeMode,
@@ -189,7 +274,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         name: `${activeMode}_generation_${prompt.substring(0, 10)}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`,
         model: modelUsed,
         timestamp: new Date().toISOString(),
-        metadata: { prompt },
+        metadata: finalMetadata,
         url: finalUrl
       };
       
@@ -342,22 +427,145 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 )}
                 
                 {activeMode === 'music' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Genre</label>
-                      <select className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                        <option>Synthwave</option>
-                        <option>Cinematic Orchestral</option>
-                        <option>Lo-Fi Chill</option>
-                      </select>
+                  <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="sunoCustomMode" 
+                          checked={sunoCustomMode}
+                          onChange={e => setSunoCustomMode(e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <label htmlFor="sunoCustomMode" className="text-[10px] uppercase font-mono opacity-80 cursor-pointer">Custom Mode</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="sunoInstrumental" 
+                          checked={sunoInstrumental}
+                          onChange={e => setSunoInstrumental(e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <label htmlFor="sunoInstrumental" className="text-[10px] uppercase font-mono opacity-80 cursor-pointer">Instrumental</label>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Vocals</label>
-                      <select className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                        <option>Instrumental</option>
-                        <option>Female Vocals</option>
-                        <option>Male Vocals</option>
-                      </select>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Model</label>
+                        <select 
+                          value={sunoModel}
+                          onChange={e => setSunoModel(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        >
+                          <option value="V4_5ALL">V4.5 ALL</option>
+                          <option value="V4_5PLUS">V4.5 PLUS</option>
+                          <option value="V4_5">V4.5</option>
+                          <option value="V4">V4 Improved</option>
+                          <option value="V5">V5 Latest</option>
+                          <option value="V5_5">V5.5 Customized</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Title</label>
+                        <input 
+                          type="text" 
+                          placeholder="Song Title"
+                          value={sunoTitle}
+                          onChange={e => setSunoTitle(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Style/Genre</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Classical"
+                          value={sunoStyle}
+                          onChange={e => setSunoStyle(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Vocal Gender</label>
+                        <select 
+                          value={sunoVocalGender}
+                          onChange={e => setSunoVocalGender(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        >
+                          <option value="">Any</option>
+                          <option value="m">Male</option>
+                          <option value="f">Female</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Negative Tags</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Heavy Metal"
+                          value={sunoNegativeTags}
+                          onChange={e => setSunoNegativeTags(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        />
+                      </div>
+                      <div className="col-span-1 md:col-span-3 grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block flex justify-between">
+                            <span>Style Wt.</span>
+                            <span>{sunoStyleWeight.toFixed(2)}</span>
+                          </label>
+                          <input 
+                            type="range" min="0" max="1" step="0.05"
+                            value={sunoStyleWeight} onChange={e => setSunoStyleWeight(parseFloat(e.target.value))}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block flex justify-between">
+                            <span>Weirdness</span>
+                            <span>{sunoWeirdnessConstraint.toFixed(2)}</span>
+                          </label>
+                          <input 
+                            type="range" min="0" max="1" step="0.05"
+                            value={sunoWeirdnessConstraint} onChange={e => setSunoWeirdnessConstraint(parseFloat(e.target.value))}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block flex justify-between">
+                            <span>Audio Wt.</span>
+                            <span>{sunoAudioWeight.toFixed(2)}</span>
+                          </label>
+                          <input 
+                            type="range" min="0" max="1" step="0.05"
+                            value={sunoAudioWeight} onChange={e => setSunoAudioWeight(parseFloat(e.target.value))}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Persona ID</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. persona_123"
+                          value={sunoPersonaId}
+                          onChange={e => setSunoPersonaId(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Persona Model</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. style_persona"
+                          value={sunoPersonaModel}
+                          onChange={e => setSunoPersonaModel(e.target.value)}
+                          className={`w-full p-2 border text-[10px] font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -437,10 +645,15 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       </div>
                     )}
                     {asset.type === 'audio' && (
-                      <div className="w-full h-full flex flex-col items-center justify-center p-6 gap-4 bg-gradient-to-br from-orange-500/5 to-transparent">
-                        <Music className="w-12 h-12 opacity-20" />
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 gap-4 bg-gradient-to-br from-orange-500/5 to-transparent relative">
+                        {asset.metadata?.imageUrl && (
+                          <div className="absolute inset-0 z-0 opacity-40">
+                             <img src={asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="Cover art" className="w-full h-full object-cover mix-blend-overlay" />
+                          </div>
+                        )}
+                        <Music className="w-12 h-12 opacity-20 z-10" />
                         {asset.url && (
-                          <audio src={asset.url} controls className="w-full max-w-[240px] h-8 grayscale opacity-60 hover:opacity-100 transition-opacity" />
+                          <audio src={asset.url} controls className="w-full max-w-[240px] h-8 grayscale opacity-60 hover:opacity-100 transition-opacity z-10 mix-blend-luminosity" />
                         )}
                       </div>
                     )}
@@ -483,9 +696,17 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     </div>
 
                     {asset.source === 'generated' && asset.metadata && (
-                       <div className={`p-4 text-[11px] font-mono italic leading-relaxed mb-6 ${theme === 'dark' ? 'bg-black/40 text-gray-400' : 'bg-gray-50 text-gray-600'} border-l-4 ${getBorderColor(asset).split(' ')[0]} line-clamp-3 relative`} title={asset.metadata.prompt}>
+                       <div className={`p-4 text-[11px] font-mono italic leading-relaxed mb-6 ${theme === 'dark' ? 'bg-black/40 text-gray-400' : 'bg-gray-50 text-gray-600'} border-l-4 ${getBorderColor(asset).split(' ')[0]} relative`} title={asset.metadata.prompt}>
                          <Sparkles className="w-3 h-3 absolute top-2 right-2 opacity-20" />
-                         "{asset.metadata.prompt}"
+                         <div className="line-clamp-3">"{asset.metadata.prompt}"</div>
+                         {((asset.type === 'audio' && (asset.metadata.title || asset.metadata.tags)) || asset.metadata.generationTimeMs) && (
+                            <div className="mt-3 overflow-hidden text-[9px] not-italic opacity-70 flex flex-col gap-1 border-t border-current/10 pt-2">
+                               {asset.metadata.generationTimeMs && <div><span className="font-bold">Gen. Time:</span> {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s</div>}
+                               {asset.type === 'audio' && asset.metadata.title && <div className="truncate"><span className="font-bold">Title:</span> {asset.metadata.title}</div>}
+                               {asset.type === 'audio' && asset.metadata.tags && <div className="truncate"><span className="font-bold">Tags:</span> {asset.metadata.tags}</div>}
+                               {asset.type === 'audio' && asset.metadata.duration && <div><span className="font-bold">Duration:</span> {asset.metadata.duration}s</div>}
+                            </div>
+                         )}
                        </div>
                     )}
 
