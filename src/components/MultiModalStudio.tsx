@@ -61,7 +61,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [coverGeneratingAssets, setCoverGeneratingAssets] = useState<Set<string>>(new Set());
+  const [lyricsLoadingAssets, setLyricsLoadingAssets] = useState<Set<string>>(new Set());
   const [viewingCover, setViewingCover] = useState<MediaAsset | null>(null);
+  const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
+  const [viewingLyrics, setViewingLyrics] = useState<MediaAsset | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -391,10 +394,72 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     setError(null);
 
     try {
-      const apiKey = (import.meta as any).env.VITE_SUNO_API_KEY;
-      if (!apiKey) throw new Error('VITE_SUNO_API_KEY is required for cover generation');
+      const prompt = `Generate a high quality, square cover art for a song. Song metadata: ${asset.metadata?.prompt || asset.name}. Lyrics: ${asset.metadata?.lyrics || 'No lyrics provided'}`;
+      
+      const response = await fetch('/api/generate-cover', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt })
+      });
 
-      const response = await fetch('https://api.sunoapi.org/api/v1/suno/cover/generate', {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Cover generation failed: ${response.statusText}`);
+      }
+      
+      const { imageUrl } = await response.json();
+      
+      // Update Firestore
+      const { db } = await import('../lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      // userId is required here; hopefully it's available in the component scope
+      const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+      
+      await updateDoc(assetRef, {
+        'metadata.coverUrl': imageUrl
+      });
+      // Update local assets state
+      setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, coverUrl: imageUrl}} : a));
+
+      // Notify completion
+      setError("Cover art generated!");
+      setTimeout(() => setError(null), 3000);
+
+    } catch (err: any) {
+      console.error("Cover generation error:", err);
+      setError(err.message || "Failed to generate cover.");
+    } finally {
+      setCoverGeneratingAssets(prev => {
+        const next = new Set(prev);
+        next.delete(asset.id);
+        return next;
+      });
+    }
+  };
+
+  const handleFetchTimestampedLyrics = async (asset: MediaAsset) => {
+    if (asset.type !== 'audio' || !asset.metadata?.task_id) return;
+    
+    // Use asset.metadata.id as audioId (Suno's clip ID)
+    const audioId = asset.metadata.id;
+    if (!audioId) return;
+
+    // If we already have them, just show them
+    if (asset.metadata?.timestampedLyrics) {
+      setViewingLyrics(asset);
+      return;
+    }
+
+    setLyricsLoadingAssets(prev => new Set(prev).add(asset.id));
+    setError(null);
+
+    try {
+      const apiKey = (import.meta as any).env.VITE_SUNO_API_KEY;
+      if (!apiKey) throw new Error('VITE_SUNO_API_KEY is required for lyrics');
+
+      const response = await fetch('https://api.sunoapi.org/api/v1/generate/get-timestamped-lyrics', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -402,46 +467,18 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         },
         body: JSON.stringify({
           taskId: asset.metadata.task_id,
-          callBackUrl: window.location.origin + "/api/suno-callback"
+          audioId: audioId
         })
       });
 
-      if (!response.ok) throw new Error(`Cover generation request failed: ${await response.text()}`);
+      if (!response.ok) throw new Error(`Lyric fetch failed: ${await response.text()}`);
       
       const jsonRes = await response.json();
-      if (jsonRes.code && jsonRes.code !== 200) throw new Error(jsonRes.msg || "Cover generation failed");
+      const lyricsData = jsonRes?.data?.response || jsonRes?.data || jsonRes;
 
-      const coverTaskId = jsonRes?.data?.taskId || jsonRes?.taskId;
-      if (!coverTaskId) throw new Error("No cover task ID returned");
-
-      // Poll for cover
-      let coverData = null;
-      let attempts = 0;
-      while (attempts < 60) {
-        await new Promise(r => setTimeout(r, 3000));
-        const statusRes = await fetch(`https://api.sunoapi.org/api/v1/suno/cover/record-info?taskId=${coverTaskId}`, {
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        
-        if (statusRes.ok) {
-          const statusJson = await statusRes.json();
-          const status = statusJson?.data?.status || statusJson?.status;
-          
-          if (status === 'SUCCESS' || status === 'COMPLETED') {
-            coverData = statusJson?.data?.response || statusJson?.data;
-            if (coverData?.imageUrl || coverData?.url) break;
-          } else if (status && (status.includes('FAIL') || status.includes('ERROR'))) {
-             throw new Error(`Cover generation failed: ${statusJson?.data?.errorMessage || "Unknown error"}`);
-          }
-        }
-        attempts++;
+      if (!lyricsData || (!lyricsData.lyrics && !lyricsData.segments)) {
+         throw new Error("No timestamped lyrics found for this track - it might be an instrumental.");
       }
-
-      if (!coverData || (!coverData.imageUrl && !coverData.url)) {
-        throw new Error("Timeout waiting for cover generation");
-      }
-
-      const coverUrl = coverData.imageUrl || coverData.url;
 
       // Update Firestore
       const { db } = await import('../lib/firebase');
@@ -449,15 +486,22 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
       
       await updateDoc(assetRef, {
-        'metadata.coverUrl': coverUrl,
-        'metadata.coverMetadata': coverData
+        'metadata.timestampedLyrics': lyricsData
+      });
+
+      setViewingLyrics({
+        ...asset,
+        metadata: {
+          ...asset.metadata,
+          timestampedLyrics: lyricsData
+        }
       });
 
     } catch (err: any) {
-      console.error("Cover generation error:", err);
-      setError(err.message || "Failed to generate cover.");
+      console.error("Lyrics fetch error:", err);
+      setError(err.message || "Failed to retrieve temporal lyrics.");
     } finally {
-      setCoverGeneratingAssets(prev => {
+      setLyricsLoadingAssets(prev => {
         const next = new Set(prev);
         next.delete(asset.id);
         return next;
@@ -1023,7 +1067,14 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         {/* Type and Source */}
                         <td className="py-4 px-4 whitespace-nowrap">
                           <div className="flex flex-col items-start gap-2">
-                             <div className={`px-2 py-1 text-[8px] uppercase font-mono font-black tracking-widest border ${getBorderColor(asset).split(' ')[0]}`}>
+                             <div 
+                               onClick={() => {
+                                 if (asset.type === 'audio') {
+                                   setViewingAssetDetails(asset);
+                                 }
+                               }}
+                               className={`px-2 py-1 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} ${asset.type === 'audio' ? 'cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95' : ''}`}
+                             >
                                {asset.type}
                              </div>
                              {asset.source === 'uploaded' ? (
@@ -1075,12 +1126,12 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         {/* Actions */}
                         <td className="py-4 px-4 text-right whitespace-nowrap">
                           <div className={`flex items-center justify-end gap-2 transition-opacity ${asset.url ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                            {asset.type === 'audio' && asset.source === 'generated' && !asset.metadata?.coverUrl && (
+                             {asset.type === 'audio' && asset.source === 'generated' && !asset.metadata?.coverUrl && (
                                <button 
                                  onClick={() => handleGenerateCover(asset)}
                                  disabled={coverGeneratingAssets.has(asset.id)}
                                  className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
-                                   theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-500 hover:text-black' : 'border-amber-500/30 text-amber-600 hover:bg-amber-500 hover:text-white'
+                                   theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
                                  } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                                  title="Generate Song Cover"
                                >
@@ -1091,6 +1142,25 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                  )}
                                  <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">
                                    {coverGeneratingAssets.has(asset.id) ? 'Painting...' : 'Cover'}
+                                 </span>
+                               </button>
+                            )}
+                            {asset.type === 'audio' && asset.source === 'generated' && (
+                               <button 
+                                 onClick={() => handleFetchTimestampedLyrics(asset)}
+                                 disabled={lyricsLoadingAssets.has(asset.id)}
+                                 className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
+                                   theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
+                                 } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                 title="View Temporal Lyrics"
+                               >
+                                 {lyricsLoadingAssets.has(asset.id) ? (
+                                   <RefreshCw className="w-3 h-3 animate-spin" />
+                                 ) : (
+                                   <Wand2 className="w-3 h-3" />
+                                 )}
+                                 <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">
+                                   {lyricsLoadingAssets.has(asset.id) ? 'Decoding...' : 'Lyrics'}
                                  </span>
                                </button>
                             )}
@@ -1149,7 +1219,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className={`w-full max-w-lg border-4 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl overflow-hidden`}
+              className={`w-full max-w-[400px] max-h-[90vh] overflow-hidden border-4 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
               onClick={e => e.stopPropagation()}
             >
               <div className="relative aspect-square w-full">
@@ -1166,43 +1236,43 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-6 md:p-8 space-y-4">
+              <div className="p-5 md:p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl md:text-2xl font-black uppercase italic leading-none">{viewingCover.metadata.title || viewingCover.name}</h3>
-                    <p className="text-[10px] md:text-xs font-mono opacity-50 uppercase tracking-[0.2em] mt-2">Music Cover Artifact</p>
+                    <h3 className="text-lg md:text-xl font-black uppercase italic leading-none">{viewingCover.metadata.title || viewingCover.name}</h3>
+                    <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.2em] mt-2">Music Cover Artifact</p>
                   </div>
-                  < Music className="w-6 h-6 opacity-40 shrink-0" />
+                  < Music className="w-5 h-5 opacity-40 shrink-0" />
                 </div>
                 
-                <div className="p-4 border border-current/10 bg-current/5 space-y-3">
+                <div className="p-3 border border-current/10 bg-current/5 space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <span className="text-[10px] uppercase font-mono opacity-40 block mb-1">Source Token</span>
-                      <p className="text-[11px] font-mono font-bold truncate">{viewingCover.metadata.task_id || viewingCover.id}</p>
+                      <span className="text-[9px] uppercase font-mono opacity-40 block mb-1">Source Token</span>
+                      <p className="text-[10px] font-mono font-bold truncate">{viewingCover.metadata.task_id || viewingCover.id}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-mono opacity-40 block mb-1">Generated</span>
-                      <p className="text-[11px] font-mono font-bold">{new Date(viewingCover.timestamp).toLocaleDateString()}</p>
+                      <span className="text-[9px] uppercase font-mono opacity-40 block mb-1">Generated</span>
+                      <p className="text-[10px] font-mono font-bold">{new Date(viewingCover.timestamp).toLocaleDateString()}</p>
                     </div>
                   </div>
                   {viewingCover.metadata.tags && (
                     <div>
-                      <span className="text-[10px] uppercase font-mono opacity-40 block mb-1">Atmosphere</span>
-                      <p className="text-[11px] font-mono line-clamp-2">{viewingCover.metadata.tags}</p>
+                      <span className="text-[9px] uppercase font-mono opacity-40 block mb-1">Atmosphere</span>
+                      <p className="text-[10px] font-mono line-clamp-2">{viewingCover.metadata.tags}</p>
                     </div>
                   )}
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                   {viewingCover.url && (
                     <button 
                       onClick={() => window.open(viewingCover.url, '_blank')}
-                      className={`flex-1 p-3 font-bold uppercase tracking-widest text-[10px] md:text-xs flex items-center justify-center gap-2 border-2 ${
+                      className={`flex-1 p-2.5 font-bold uppercase tracking-widest text-[9px] md:text-[10px] flex items-center justify-center gap-2 border-2 ${
                         theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
                       } hover:opacity-90 transition-all`}
                     >
-                      <Download className="w-4 h-4" /> Download Song
+                      <Download className="w-3.5 h-3.5" /> Download
                     </button>
                   )}
                   <button 
@@ -1213,13 +1283,193 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         link.target = '_blank';
                         link.click();
                     }}
-                    className={`flex-1 p-3 font-bold uppercase tracking-widest text-[10px] md:text-xs flex items-center justify-center gap-2 border-2 ${
+                    className={`flex-1 p-2.5 font-bold uppercase tracking-widest text-[9px] md:text-[10px] flex items-center justify-center gap-2 border-2 ${
                       theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
                     } transition-all`}
                   >
-                    Save Artwork
+                    Save Art
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Asset Details Modal */}
+      <AnimatePresence>
+        {viewingAssetDetails && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setViewingAssetDetails(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-[500px] max-h-[85vh] overflow-hidden border-4 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl flex flex-col`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-current/10">
+                <div className="flex items-center gap-3">
+                  <Music className="w-5 h-5 text-indigo-500" />
+                  <h3 className="text-sm font-black uppercase tracking-widest italic">{viewingAssetDetails.name}</h3>
+                </div>
+                <button onClick={() => setViewingAssetDetails(null)} className="p-1 hover:opacity-50 transition-opacity">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                {/* Visual Header */}
+                <div className="flex gap-4 items-start">
+                  <div className={`w-24 h-24 shrink-0 border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} relative overflow-hidden bg-black/5`}>
+                    {(viewingAssetDetails.metadata?.coverUrl || viewingAssetDetails.metadata?.imageUrl) ? (
+                      <img 
+                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl} 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        alt=""
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Music className="w-8 h-8 opacity-20" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1 min-w-0">
+                    <p className="text-[10px] uppercase font-mono opacity-40">Composition Details</p>
+                    <h4 className="text-lg font-bold truncate leading-tight uppercase italic">{viewingAssetDetails.metadata?.title || 'Untitled Work'}</h4>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                       {viewingAssetDetails.metadata?.tags?.split(' ').slice(0, 5).map((tag: string, i: number) => (
+                         <span key={i} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-500 text-[8px] font-mono uppercase tracking-tighter border border-indigo-500/20">
+                            {tag}
+                         </span>
+                       ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Prompt Section */}
+                <div className="space-y-2">
+                   <div className="flex items-center gap-2">
+                     <div className="h-[1px] flex-1 bg-current/10" />
+                     <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">Genetic Prompt</span>
+                     <div className="h-[1px] flex-1 bg-current/10" />
+                   </div>
+                   <div className={`p-4 border font-mono text-[11px] leading-relaxed italic ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/80' : 'bg-black/5 border-black/10 text-black/80'}`}>
+                      {viewingAssetDetails.metadata?.prompt || 'No prompt recorded.'}
+                   </div>
+                </div>
+
+                {/* Technical Specs */}
+                <div className="grid grid-cols-2 gap-px bg-current/10 border border-current/10 overflow-hidden">
+                  {[
+                    { label: 'Artifact ID', value: viewingAssetDetails.metadata?.task_id || viewingAssetDetails.id },
+                    { label: 'Model Core', value: viewingAssetDetails.metadata?.model_name || 'Suno v3.5' },
+                    { label: 'Synthesis Status', value: 'Complete' },
+                    { label: 'Temporal Signature', value: new Date(viewingAssetDetails.timestamp).toLocaleString() }
+                  ].map((spec, i) => (
+                    <div key={i} className={`p-3 ${theme === 'dark' ? 'bg-[#0A0A0A]' : 'bg-white'}`}>
+                      <span className="text-[9px] uppercase font-mono opacity-40 block mb-0.5">{spec.label}</span>
+                      <p className="text-[10px] font-mono font-bold truncate tracking-tight">{spec.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Lyrics Section if available */}
+                {viewingAssetDetails.metadata?.lyrics && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                       <div className="h-[1px] flex-1 bg-current/10" />
+                       <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">Transcribed Script</span>
+                       <div className="h-[1px] flex-1 bg-current/10" />
+                    </div>
+                    <pre className={`p-4 border font-mono text-[10px] max-h-40 overflow-y-auto whitespace-pre-wrap ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
+                       {viewingAssetDetails.metadata.lyrics}
+                    </pre>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-current/10 bg-current/5">
+                <button 
+                  onClick={() => setViewingAssetDetails(null)}
+                  className={`w-full p-2.5 font-bold uppercase tracking-widest text-[10px] border-2 ${
+                    theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
+                  } hover:opacity-90 transition-all`}
+                >
+                  Close Artifact Details
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Lyrics Modal */}
+      <AnimatePresence>
+        {viewingLyrics && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setViewingLyrics(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-lg max-h-[80vh] flex flex-col border-4 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl overflow-hidden`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-current/10 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em]">{viewingLyrics.name} // Temporal Lyrics</h3>
+                </div>
+                <button onClick={() => setViewingLyrics(null)} className="p-1 hover:opacity-50 transition-opacity">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scrollbar">
+                {viewingLyrics.metadata?.timestampedLyrics?.segments ? (
+                  <div className="space-y-6">
+                    {viewingLyrics.metadata.timestampedLyrics.segments.map((segment: any, idx: number) => (
+                      <div key={idx} className="group flex gap-4">
+                        <div className="w-12 shrink-0 font-mono text-[10px] opacity-30 pt-1">
+                          {(segment.start_time / 1000).toFixed(1)}s
+                        </div>
+                        <div className={`p-4 border-l-2 transition-colors ${theme === 'dark' ? 'border-white/10 group-hover:border-indigo-500 bg-white/5' : 'border-black/10 group-hover:border-indigo-500 bg-black/5'}`}>
+                           <p className="text-sm md:text-base font-medium leading-relaxed italic">
+                             {segment.text}
+                           </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-20 px-10 space-y-4">
+                    <Music className="w-12 h-12 opacity-10 mx-auto" />
+                    <p className="text-xs font-mono uppercase opacity-40">Synthetic transcription yielded no segments. This track may be purely sonic.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-current/10 bg-current/5">
+                <button 
+                  onClick={() => setViewingLyrics(null)}
+                  className={`w-full p-3 font-bold uppercase tracking-widest text-xs border-2 ${
+                    theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
+                  } hover:opacity-90 transition-all`}
+                >
+                  Return to Studio
+                </button>
               </div>
             </motion.div>
           </motion.div>
