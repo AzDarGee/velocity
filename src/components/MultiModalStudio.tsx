@@ -196,40 +196,56 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
            throw new Error(`Suno AI Music Generation failed: ${jsonRes.msg || JSON.stringify(jsonRes)}`);
         }
 
-        const taskId = jsonRes?.data?.taskId || jsonRes?.taskId || (Array.isArray(jsonRes.data) && jsonRes.data[0]?.task_id) || jsonRes?.data?.task_id;
-        if (!taskId) {
-            throw new Error("Could not find taskId in Suno AI response: " + JSON.stringify(jsonRes));
-        }
-
         let sunoItem = null;
-        let attempts = 0;
-        while(attempts < 120) { // 2 minutes max
-           await new Promise(r => setTimeout(r, 2000));
-           const statusRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
-               headers: {
-                  'Authorization': `Bearer ${apiKey}`
-               }
-           });
-           if (!statusRes.ok) continue;
-           const statusData = await statusRes.json();
-           const status = statusData?.data?.status;
-           if (status === 'SUCCESS') {
-               const items = statusData?.data?.response?.sunoData;
-               if (items && items.length > 0) {
-                   sunoItem = items[0];
-                   break;
-               }
-           } else if (status && (status.includes('FAIL') || status.includes('ERROR') || status.includes('EXCEPTION'))) {
-               throw new Error(`Suno AI generation failed with status: ${status}. Message: ${statusData?.data?.errorMessage || 'Unknown error'}`);
-           }
-           attempts++;
+        
+        // Check if initial response already contains audio data (since wait_audio: true was used)
+        const initialItems = jsonRes?.data?.response?.sunoData || jsonRes?.data?.sunoData || jsonRes?.sunoData || (Array.isArray(jsonRes.data) ? jsonRes.data : null);
+        if (Array.isArray(initialItems) && initialItems.length > 0) {
+            const potentialItem = initialItems[0];
+            if (potentialItem.audioUrl || potentialItem.streamAudioUrl || potentialItem.audio_url || potentialItem.url) {
+                sunoItem = potentialItem;
+            }
         }
 
-        if (!sunoItem || (!sunoItem.audioUrl && !sunoItem.streamAudioUrl && !sunoItem.audio_url)) {
+        const taskId = jsonRes?.data?.taskId || jsonRes?.taskId || (Array.isArray(jsonRes.data) && jsonRes.data[0]?.task_id) || jsonRes?.data?.task_id || jsonRes?.data?.id || jsonRes?.id;
+
+        if (!sunoItem && taskId) {
+            let attempts = 0;
+            while(attempts < 180) { // 6 minutes max (Suno can sometimes be slow for high quality)
+               await new Promise(r => setTimeout(r, 2000));
+               const statusRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+                   headers: {
+                      'Authorization': `Bearer ${apiKey}`
+                   }
+               });
+               if (!statusRes.ok) {
+                   attempts++;
+                   continue;
+               }
+               const statusData = await statusRes.json();
+               const status = statusData?.data?.status || statusData?.status;
+               
+               if (status === 'SUCCESS' || status === 'COMPLETED') {
+                   const items = statusData?.data?.response?.sunoData || statusData?.data?.sunoData || statusData?.sunoData || (Array.isArray(statusData.data) ? statusData.data : null);
+                   if (Array.isArray(items) && items.length > 0) {
+                       sunoItem = items[0];
+                       // Ensure it has an audio URL before stopping
+                       if (sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url) {
+                           break;
+                       }
+                   }
+               } else if (status && (status.includes('FAIL') || status.includes('ERROR') || status.includes('EXCEPTION'))) {
+                   throw new Error(`Suno AI generation failed with status: ${status}. Message: ${statusData?.data?.errorMessage || statusData?.message || 'Unknown error'}`);
+               }
+               attempts++;
+            }
+        }
+
+        if (!sunoItem || (!sunoItem.audioUrl && !sunoItem.streamAudioUrl && !sunoItem.audio_url && !sunoItem.url)) {
              throw new Error("Timeout or could not find audio metadata in Suno AI task results.");
         }
 
-        const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url;
+        const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url;
         
         finalMetadata = { prompt, ...sunoItem };
 
@@ -311,8 +327,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
       let assetName = `${activeMode}_generation_${prompt.substring(0, 10).replace(/[^a-zA-Z0-9_\-]/g, "")}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`;
       if (activeMode === 'music') {
-        const titleToUse = finalMetadata.title || sunoTitle;
-        if (titleToUse) {
+        const titleToUse = sunoTitle || finalMetadata.title;
+        if (titleToUse && titleToUse !== 'Generated Track') {
            assetName = `${titleToUse.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, "_")}.mp3`;
         }
       }
@@ -448,12 +464,13 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               <textarea 
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
+                disabled={isGenerating}
                 placeholder={`Describe the ${activeMode} you want to synthesize...`}
                 className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
                   theme === 'dark' 
                     ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
                     : 'bg-white border-gray-300 focus:border-black'
-                }`}
+                } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
             </div>
 
@@ -479,7 +496,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       <select 
                         value={aspectRatio}
                         onChange={e => setAspectRatio(e.target.value)}
-                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        disabled={isGenerating}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <option value="1:1">1:1 Square</option>
                         <option value="4:3">4:3 Ratio</option>
@@ -490,7 +508,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     </div>
                     <div>
                       <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Style</label>
-                      <select className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
+                      <select 
+                        disabled={isGenerating}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
                         <option>Photorealistic</option>
                         <option>Cinematic</option>
                         <option>Digital Art</option>
@@ -506,7 +527,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       <select 
                         value={aspectRatio === '1:1' ? '16:9' : aspectRatio} // Veo prefers 16:9 or 9:16
                         onChange={e => setAspectRatio(e.target.value)}
-                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        disabled={isGenerating}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <option value="16:9">16:9 Landscape</option>
                         <option value="9:16">9:16 Portrait</option>
@@ -517,7 +539,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       <select 
                         value={resolution}
                         onChange={e => setResolution(e.target.value)}
-                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                        disabled={isGenerating}
+                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <option value="720p">720p HD</option>
                         <option value="1080p">1080p Full HD</option>
@@ -537,7 +560,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           <select 
                             value={sunoModel}
                             onChange={e => setSunoModel(e.target.value)}
-                            className={`w-full p-2.5 border text-[11px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-[#F8F8F7]' : 'bg-white border-gray-300 text-black'}`}
+                            disabled={isGenerating}
+                            className={`w-full p-2.5 border text-[11px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-[#F8F8F7]' : 'bg-white border-gray-300 text-black'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <option value="V5_5">V5.5 Customized</option>
                             <option value="V5">V5 Latest</option>
@@ -548,21 +572,23 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           </select>
                         </div>
                         <div className="flex flex-wrap items-center gap-6">
-                          <label className="flex items-center gap-2 cursor-pointer group">
+                          <label className={`flex items-center gap-2 group ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                             <input 
                               type="checkbox" 
                               checked={sunoCustomMode}
                               onChange={e => setSunoCustomMode(e.target.checked)}
-                              className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''}`}
+                              disabled={isGenerating}
+                              className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''} ${isGenerating ? 'cursor-not-allowed' : ''}`}
                             />
                             <span className="text-[11px] font-bold uppercase tracking-widest group-hover:opacity-100 opacity-80 transition-opacity">Custom Mode</span>
                           </label>
-                          <label className="flex items-center gap-2 cursor-pointer group">
+                          <label className={`flex items-center gap-2 group ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                             <input 
                               type="checkbox" 
                               checked={sunoInstrumental}
                               onChange={e => setSunoInstrumental(e.target.checked)}
-                              className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''}`}
+                              disabled={isGenerating}
+                              className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''} ${isGenerating ? 'cursor-not-allowed' : ''}`}
                             />
                             <span className="text-[11px] font-bold uppercase tracking-widest group-hover:opacity-100 opacity-80 transition-opacity">Instrumental</span>
                           </label>
@@ -577,7 +603,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             placeholder="e.g. Neon Horizon"
                             value={sunoTitle}
                             onChange={e => setSunoTitle(e.target.value)}
-                            className={`w-full p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'}`}
+                            disabled={isGenerating}
+                            className={`w-full p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                           />
                         </div>
                         <div>
@@ -592,15 +619,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                               </button>
                             )}
                           </div>
-                          <div className="flex gap-2 mb-2">
+                          <div className={`flex gap-2 mb-2 ${isGenerating ? 'opacity-50' : ''}`}>
                             <input 
                               type="text"
                               value={newStyle}
                               onChange={(e) => setNewStyle(e.target.value)}
+                              disabled={isGenerating}
                               placeholder="Add custom style (comma-separated)..."
-                              className={`flex-1 p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'}`}
+                              className={`flex-1 p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'} ${isGenerating ? 'cursor-not-allowed' : ''}`}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter' && newStyle.trim()) {
+                                if (e.key === 'Enter' && newStyle.trim() && !isGenerating) {
                                   e.preventDefault();
                                   const vals = newStyle.split(',').map(v => v.trim()).filter(Boolean);
                                   let addedStyles = [...customStyles];
@@ -638,7 +666,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                   setNewStyle("");
                                 }
                               }}
-                              className={`px-1 py-2.5 border text-[11px] font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-white hover:bg-white hover:text-black' : 'bg-white border-gray-300 text-black hover:bg-black hover:text-white'}`}
+                              disabled={isGenerating || !newStyle.trim()}
+                              className={`px-1 py-2.5 border text-[11px] font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-white hover:bg-white hover:text-black' : 'bg-white border-gray-300 text-black hover:bg-black hover:text-white'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                               Add
                             </button>
@@ -649,12 +678,14 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                               : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
                           }`}>
                             {Array.from(new Set([...customStyles, ...DEFAULT_STYLES])).map((style, idx) => (
-                              <label key={`style-seg-${style}`} className="flex items-center gap-3 cursor-pointer group/item">
+                              <label key={`style-seg-${style}`} className={`flex items-center gap-3 group/item ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                 <div className="relative flex items-center justify-center">
                                   <input 
                                     type="checkbox"
                                     checked={sunoStyles.includes(style)}
+                                    disabled={isGenerating}
                                     onChange={(e) => {
+                                      if (isGenerating) return;
                                       const newStyleList = e.target.checked 
                                         ? [...sunoStyles, style]
                                         : sunoStyles.filter(a => a !== style);
@@ -664,7 +695,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                       theme === 'dark' 
                                         ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white' 
                                         : 'border-gray-300 bg-white checked:bg-black checked:border-black'
-                                    }`}
+                                    } ${isGenerating ? 'cursor-not-allowed' : ''}`}
                                   />
                                   <Check className={`w-2.5 h-2.5 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
                                 </div>
@@ -690,7 +721,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             <select 
                               value={sunoVocalGender}
                               onChange={e => setSunoVocalGender(e.target.value)}
-                              className={`w-full p-2 border text-[10px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}
+                              disabled={isGenerating}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                               <option value="">Any</option>
                               <option value="m">Male</option>
@@ -704,7 +736,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                               placeholder="e.g. Heavy Metal"
                               value={sunoNegativeTags}
                               onChange={e => setSunoNegativeTags(e.target.value)}
-                              className={`w-full p-2 border text-[10px] font-mono outline-none focus:border-current ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] placeholder-[#555]' : 'bg-gray-50 border-gray-200 placeholder-gray-400'}`}
+                              disabled={isGenerating}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none focus:border-current ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] placeholder-[#555]' : 'bg-gray-50 border-gray-200 placeholder-gray-400'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                             />
                           </div>
                         </div>
@@ -721,20 +754,20 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Persona ID</label>
                             <input 
                               type="text" 
-                              disabled={!sunoCustomMode}
+                              disabled={isGenerating || !sunoCustomMode}
                               placeholder="e.g. persona_123"
                               value={sunoPersonaId}
                               onChange={e => setSunoPersonaId(e.target.value)}
-                              className={`w-full p-2 border text-[10px] font-mono outline-none focus:border-current ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] placeholder-[#555]' : 'bg-gray-50 border-gray-200 placeholder-gray-400'} ${!sunoCustomMode ? 'cursor-not-allowed' : ''}`}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none focus:border-current ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] placeholder-[#555]' : 'bg-gray-50 border-gray-200 placeholder-gray-400'} ${(!sunoCustomMode || isGenerating) ? 'cursor-not-allowed opacity-50' : ''}`}
                             />
                           </div>
                           <div>
                             <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Persona Model</label>
                             <select 
-                              disabled={!sunoCustomMode}
+                              disabled={isGenerating || !sunoCustomMode}
                               value={sunoPersonaModel}
                               onChange={e => setSunoPersonaModel(e.target.value)}
-                              className={`w-full p-2 border text-[10px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${!sunoCustomMode ? 'cursor-not-allowed' : ''}`}
+                              className={`w-full p-2 border text-[10px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${(!sunoCustomMode || isGenerating) ? 'cursor-not-allowed opacity-50' : ''}`}
                             >
                               <option value="">Default</option>
                               <option value="style_persona">Style</option>
@@ -761,7 +794,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           <input 
                             type="range" min="0" max="1" step="0.05"
                             value={sunoStyleWeight} onChange={e => setSunoStyleWeight(parseFloat(e.target.value))}
-                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full cursor-pointer`}
+                            disabled={isGenerating}
+                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full ${isGenerating ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                           />
                         </div>
                         <div className={`p-4 border ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
@@ -772,7 +806,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           <input 
                             type="range" min="0" max="1" step="0.05"
                             value={sunoWeirdnessConstraint} onChange={e => setSunoWeirdnessConstraint(parseFloat(e.target.value))}
-                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full cursor-pointer`}
+                            disabled={isGenerating}
+                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full ${isGenerating ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                           />
                         </div>
                         <div className={`p-4 border ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
@@ -783,7 +818,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           <input 
                             type="range" min="0" max="1" step="0.05"
                             value={sunoAudioWeight} onChange={e => setSunoAudioWeight(parseFloat(e.target.value))}
-                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full cursor-pointer`}
+                            disabled={isGenerating}
+                            className={`w-full h-1 bg-current/20 appearance-none rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-current [&::-webkit-slider-thumb]:rounded-full ${isGenerating ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                           />
                         </div>
                       </div>
