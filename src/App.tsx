@@ -243,37 +243,45 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
 const prepareGeminiParts = async (mediaFiles: any[]) => {
   const parts = await Promise.all(mediaFiles.map(async (v) => {
     if (v.extractedText) return null;
-    const uri = v.uri || v.storageUrl;
+    const uri = v.uri || v.storageUrl || v.previewUrl;
     if (!uri) return null;
 
-    if (uri.startsWith('blob:')) {
-      try {
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        return {
-          inlineData: {
-            mimeType: v.mimeType || blob.type || "application/octet-stream",
-            data: base64
-          }
-        };
-      } catch (e) {
-        console.error("Failed to read blob for Gemini", e);
-        return null;
-      }
+    // If it's already a Gemini URI, use it directly
+    if (uri.startsWith('https://generativelanguage.googleapis.com/')) {
+      return {
+        fileData: {
+          fileUri: uri,
+          mimeType: v.mimeType || "application/octet-stream"
+        }
+      };
     }
 
-    return {
-      fileData: {
-        fileUri: uri,
-        mimeType: v.mimeType || "application/octet-stream"
-      }
-    };
+    // Otherwise (blob, firebase storage, external, or synthesis blob), convert to inlineData (Base64)
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      return {
+        inlineData: {
+          mimeType: v.mimeType || blob.type || "application/octet-stream",
+          data: base64
+        }
+      };
+    } catch (e) {
+      console.error("Failed to read media for Gemini (falling back to fileUri)", e);
+      // Fallback to fileUri just in case, though it might fail if not correct API
+      return {
+        fileData: {
+          fileUri: uri,
+          mimeType: v.mimeType || "application/octet-stream"
+        }
+      };
+    }
   }));
   return parts.filter(p => p !== null);
 };
@@ -1371,23 +1379,71 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     });
   }, [history, historySortBy]);
 
-  const handleAddAssetToNarrative = (asset: StudioMediaAsset) => {
+  const handleAddAssetToNarrative = async (asset: StudioMediaAsset) => {
+    const user = auth.currentUser;
+    if (!user) {
+      setError("Authentication required to link assets.");
+      return;
+    }
+
+    // Prefill the state immediately for UI responsiveness
+    const assetUrl = asset.url || "";
+    const mimeType = asset.type === 'image' ? 'image/png' : asset.type === 'video' ? 'video/mp4' : 'audio/mpeg';
+
     const newMediaFile: MediaFile = {
       id: `syn-${asset.id}`,
       name: asset.name,
-      status: 'ACTIVE',
+      status: 'PROCESSING', // Mark as processing while we sync to database
       type: asset.type,
-      uri: asset.url,
-      previewUrl: asset.url,
-      mimeType: asset.type === 'image' ? 'image/png' : asset.type === 'video' ? 'video/mp4' : 'audio/mpeg',
+      uri: assetUrl,
+      previewUrl: assetUrl,
+      storageUrl: assetUrl,
+      mimeType: mimeType,
       source: 'ai',
-      progress: 100
+      progress: 50
     };
+
     setMediaFiles(prev => {
       if (prev.find(f => f.id === newMediaFile.id)) return prev;
       return [...prev, newMediaFile];
     });
+
     setAppMode('narrative');
+
+    try {
+      // Sync to 'files' collection so it can be referenced by generations
+      const fileRef = doc(db, "files", asset.id);
+      const fileSnap = await getDoc(fileRef);
+      
+      if (!fileSnap.exists()) {
+        const fileDoc = {
+          userId: user.uid,
+          name: asset.name,
+          type: mimeType,
+          size: 0, // placeholder
+          storageUrl: assetUrl,
+          createdAt: serverTimestamp(),
+          uri: assetUrl,
+          mimeType: mimeType,
+          source: 'ai'
+        };
+        await setDoc(fileRef, fileDoc);
+      }
+
+      // Update state with the firestoreId
+      setMediaFiles(prev => prev.map(f => f.id === `syn-${asset.id}` ? { 
+        ...f, 
+        status: 'ACTIVE', 
+        firestoreId: asset.id,
+        progress: 100 
+      } : f));
+
+    } catch (err) {
+      console.error("Failed to link synthesis asset to narrative database:", err);
+      handleFirestoreError(err, OperationType.WRITE, `files/${asset.id}`);
+      setMediaFiles(prev => prev.map(f => f.id === `syn-${asset.id}` ? { ...f, status: 'FAILED' } : f));
+      setError("System failure: Narrative synchronization protocol breached.");
+    }
   };
 
   return (

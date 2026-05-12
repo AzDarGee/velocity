@@ -60,6 +60,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(0.65);
   const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [coverGeneratingAssets, setCoverGeneratingAssets] = useState<Set<string>>(new Set());
+  const [viewingCover, setViewingCover] = useState<MediaAsset | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -379,6 +381,87 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       setError(err.message || "An unexpected error occurred during synthesis.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateCover = async (asset: MediaAsset) => {
+    if (asset.type !== 'audio' || !asset.metadata?.task_id) return;
+    
+    setCoverGeneratingAssets(prev => new Set(prev).add(asset.id));
+    setError(null);
+
+    try {
+      const apiKey = (import.meta as any).env.VITE_SUNO_API_KEY;
+      if (!apiKey) throw new Error('VITE_SUNO_API_KEY is required for cover generation');
+
+      const response = await fetch('https://api.sunoapi.org/api/v1/suno/cover/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          taskId: asset.metadata.task_id,
+          callBackUrl: window.location.origin + "/api/suno-callback"
+        })
+      });
+
+      if (!response.ok) throw new Error(`Cover generation request failed: ${await response.text()}`);
+      
+      const jsonRes = await response.json();
+      if (jsonRes.code && jsonRes.code !== 200) throw new Error(jsonRes.msg || "Cover generation failed");
+
+      const coverTaskId = jsonRes?.data?.taskId || jsonRes?.taskId;
+      if (!coverTaskId) throw new Error("No cover task ID returned");
+
+      // Poll for cover
+      let coverData = null;
+      let attempts = 0;
+      while (attempts < 60) {
+        await new Promise(r => setTimeout(r, 3000));
+        const statusRes = await fetch(`https://api.sunoapi.org/api/v1/suno/cover/record-info?taskId=${coverTaskId}`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        
+        if (statusRes.ok) {
+          const statusJson = await statusRes.json();
+          const status = statusJson?.data?.status || statusJson?.status;
+          
+          if (status === 'SUCCESS' || status === 'COMPLETED') {
+            coverData = statusJson?.data?.response || statusJson?.data;
+            if (coverData?.imageUrl || coverData?.url) break;
+          } else if (status && (status.includes('FAIL') || status.includes('ERROR'))) {
+             throw new Error(`Cover generation failed: ${statusJson?.data?.errorMessage || "Unknown error"}`);
+          }
+        }
+        attempts++;
+      }
+
+      if (!coverData || (!coverData.imageUrl && !coverData.url)) {
+        throw new Error("Timeout waiting for cover generation");
+      }
+
+      const coverUrl = coverData.imageUrl || coverData.url;
+
+      // Update Firestore
+      const { db } = await import('../lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+      
+      await updateDoc(assetRef, {
+        'metadata.coverUrl': coverUrl,
+        'metadata.coverMetadata': coverData
+      });
+
+    } catch (err: any) {
+      console.error("Cover generation error:", err);
+      setError(err.message || "Failed to generate cover.");
+    } finally {
+      setCoverGeneratingAssets(prev => {
+        const next = new Set(prev);
+        next.delete(asset.id);
+        return next;
+      });
     }
   };
 
@@ -907,13 +990,26 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         {/* Name and Preview */}
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 ${getBorderColor(asset).split(' ')[0]}`}>
-                              {asset.metadata?.imageUrl && asset.type === 'audio' && (
-                                <img src={asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
+                            <div 
+                              onClick={() => {
+                                if (asset.type === 'audio' && (asset.metadata?.coverUrl || asset.metadata?.imageUrl)) {
+                                  setViewingCover(asset);
+                                }
+                              }}
+                              className={`w-12 h-12 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform ${asset.metadata?.coverUrl || asset.metadata?.imageUrl ? 'cursor-pointer hover:scale-105 active:scale-95' : ''} ${getBorderColor(asset).split(' ')[0]}`}
+                            >
+                              {(asset.metadata?.coverUrl || asset.metadata?.imageUrl) && asset.type === 'audio' ? (
+                                <img src={asset.metadata.coverUrl || asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              ) : (
+                                <>
+                                  {asset.metadata?.imageUrl && asset.type === 'audio' && (
+                                    <img src={asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
+                                  )}
+                                  {asset.type === 'image' && <ImageIcon className="w-4 h-4 opacity-50 relative z-10" />}
+                                  {asset.type === 'video' && <Video className="w-4 h-4 opacity-50 relative z-10" />}
+                                  {asset.type === 'audio' && <Music className="w-4 h-4 opacity-50 relative z-10" />}
+                                </>
                               )}
-                              {asset.type === 'image' && <ImageIcon className="w-4 h-4 opacity-50 relative z-10" />}
-                              {asset.type === 'video' && <Video className="w-4 h-4 opacity-50 relative z-10" />}
-                              {asset.type === 'audio' && <Music className="w-4 h-4 opacity-50 relative z-10" />}
                             </div>
                             <div className="flex flex-col min-w-0">
                                <span className="font-bold text-sm uppercase tracking-tight truncate max-w-[200px] mb-1" title={asset.name}>{asset.name}</span>
@@ -979,6 +1075,25 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         {/* Actions */}
                         <td className="py-4 px-4 text-right whitespace-nowrap">
                           <div className={`flex items-center justify-end gap-2 transition-opacity ${asset.url ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                            {asset.type === 'audio' && asset.source === 'generated' && !asset.metadata?.coverUrl && (
+                               <button 
+                                 onClick={() => handleGenerateCover(asset)}
+                                 disabled={coverGeneratingAssets.has(asset.id)}
+                                 className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
+                                   theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-500 hover:text-black' : 'border-amber-500/30 text-amber-600 hover:bg-amber-500 hover:text-white'
+                                 } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                 title="Generate Song Cover"
+                               >
+                                 {coverGeneratingAssets.has(asset.id) ? (
+                                   <RefreshCw className="w-3 h-3 animate-spin" />
+                                 ) : (
+                                   <Sparkles className="w-3 h-3" />
+                                 )}
+                                 <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">
+                                   {coverGeneratingAssets.has(asset.id) ? 'Painting...' : 'Cover'}
+                                 </span>
+                               </button>
+                            )}
                             {asset.source === 'generated' && (
                               <button 
                                 onClick={() => onAddAssetToNarrative?.(asset)}
@@ -1019,6 +1134,97 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           </div>
         </div>
       </div>
+
+      {/* Cover Details Modal */}
+      <AnimatePresence>
+        {viewingCover && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setViewingCover(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-lg border-4 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl overflow-hidden`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="relative aspect-square w-full">
+                <img 
+                  src={viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl} 
+                  alt={viewingCover.name}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+                <button 
+                  onClick={() => setViewingCover(null)}
+                  className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 md:p-8 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl md:text-2xl font-black uppercase italic leading-none">{viewingCover.metadata.title || viewingCover.name}</h3>
+                    <p className="text-[10px] md:text-xs font-mono opacity-50 uppercase tracking-[0.2em] mt-2">Music Cover Artifact</p>
+                  </div>
+                  < Music className="w-6 h-6 opacity-40 shrink-0" />
+                </div>
+                
+                <div className="p-4 border border-current/10 bg-current/5 space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono opacity-40 block mb-1">Source Token</span>
+                      <p className="text-[11px] font-mono font-bold truncate">{viewingCover.metadata.task_id || viewingCover.id}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-mono opacity-40 block mb-1">Generated</span>
+                      <p className="text-[11px] font-mono font-bold">{new Date(viewingCover.timestamp).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  {viewingCover.metadata.tags && (
+                    <div>
+                      <span className="text-[10px] uppercase font-mono opacity-40 block mb-1">Atmosphere</span>
+                      <p className="text-[11px] font-mono line-clamp-2">{viewingCover.metadata.tags}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  {viewingCover.url && (
+                    <button 
+                      onClick={() => window.open(viewingCover.url, '_blank')}
+                      className={`flex-1 p-3 font-bold uppercase tracking-widest text-[10px] md:text-xs flex items-center justify-center gap-2 border-2 ${
+                        theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
+                      } hover:opacity-90 transition-all`}
+                    >
+                      <Download className="w-4 h-4" /> Download Song
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl;
+                        link.download = `cover_${viewingCover.name}.png`;
+                        link.target = '_blank';
+                        link.click();
+                    }}
+                    className={`flex-1 p-3 font-bold uppercase tracking-widest text-[10px] md:text-xs flex items-center justify-center gap-2 border-2 ${
+                      theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                    } transition-all`}
+                  >
+                    Save Artwork
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

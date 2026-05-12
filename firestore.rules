@@ -73,11 +73,13 @@ service cloud.firestore {
              data.userId == request.auth.uid &&
              data.name is string && data.name.size() <= 256 &&
              data.type is string &&
+             (data.get('size', 0) is int) &&
              (data.get('data', '') is string && data.get('data', '').size() <= 1048576) &&
              (data.get('storageUrl', '') is string && data.get('storageUrl', '').size() <= 2048) &&
              (data.get('uri', '') is string && data.get('uri', '').size() <= 1024) &&
              (data.get('mimeType', '') is string && data.get('mimeType', '').size() <= 256) &&
              (data.get('extractedText', '') is string && data.get('extractedText', '').size() <= 2097152) &&
+             (data.get('source', '') is string && data.get('source', '').size() <= 64) &&
              data.createdAt is timestamp;
     }
 
@@ -180,8 +182,9 @@ service cloud.firestore {
 
     match /files/{fileId} {
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin() || (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid));
       allow create: if isSignedIn() && isValidFile(incoming()) && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isValidFile(incoming()) && resource.data.userId == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
