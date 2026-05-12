@@ -16,6 +16,7 @@ interface UserData {
   email: string;
   displayName?: string;
   credits: number;
+  plan?: string;
   createdAt?: any;
   assetsCount?: number;
 }
@@ -218,6 +219,23 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
     } catch (error) {
       console.error("Error updating credits:", error);
       alert("Failed to update user credits.");
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleMediaPlan = async (userId: string, currentPlan?: string) => {
+    setIsSaving(true);
+    try {
+      const newPlan = currentPlan === 'media' ? null : 'media';
+      await updateDoc(doc(db, 'users', userId), {
+        plan: newPlan
+      });
+      setUsers(users.map(u => u.id === userId ? { ...u, plan: newPlan || undefined } : u));
+    } catch (error) {
+      console.error("Error toggling media plan:", error);
+      alert("Failed to update user plan.");
       handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
     } finally {
       setIsSaving(false);
@@ -629,6 +647,28 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           ) : null}
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className={`p-3 border flex flex-col gap-2 ${theme === 'dark' ? 'border-[#444] bg-[#111111]' : 'border-black/10 bg-white'}`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-mono uppercase tracking-widest opacity-60">Media Studio</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-mono font-bold ${user.plan === 'media' ? 'text-green-500' : 'text-gray-500'}`}>
+                            {user.plan === 'media' ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                          <button 
+                            onClick={() => handleToggleMediaPlan(user.id, user.plan)}
+                            disabled={isSaving}
+                            className={`text-[10px] font-mono uppercase tracking-widest border px-2 py-1 transition-colors ${
+                               user.plan === 'media' 
+                                 ? (theme === 'dark' ? 'border-red-500/50 text-red-500 hover:bg-red-500/20' : 'border-red-600/50 text-red-600 hover:bg-red-50')
+                                 : (theme === 'dark' ? 'border-[#555] hover:bg-[#333]' : 'border-gray-300 hover:bg-gray-100')
+                            }`}
+                          >
+                            {user.plan === 'media' ? 'Revoke' : 'Grant'}
+                          </button>
                         </div>
                     </div>
                   </div>

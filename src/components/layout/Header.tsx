@@ -7,6 +7,7 @@ interface HeaderProps {
   setIsHistoryOpen: (open: boolean) => void;
   setIsAdminModalOpen: (open: boolean) => void;
   isAdmin: boolean;
+  userPlan?: string | null;
   mediaFilesCount: number;
   handleNewPost: () => void;
   appMode: 'narrative' | 'media';
@@ -19,6 +20,7 @@ export function Header({
   setIsHistoryOpen,
   setIsAdminModalOpen,
   isAdmin,
+  userPlan,
   mediaFilesCount,
   handleNewPost,
   appMode,
@@ -63,7 +65,8 @@ export function Header({
             </button>
             <button 
               onClick={() => setAppMode('media')}
-              className={`px-2.5 md:px-6 py-2 border-l-2 ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} transition-all flex items-center gap-2 ${appMode === 'media' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-40 hover:opacity-100'}`}
+              disabled={!isAdmin && userPlan !== 'media'}
+              className={`px-2.5 md:px-6 py-2 border-l-2 ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'} transition-all flex items-center gap-2 ${appMode === 'media' ? (theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white') : 'opacity-40 hover:opacity-100'} ${!isAdmin && userPlan !== 'media' ? 'opacity-20 cursor-not-allowed hover:bg-transparent hover:opacity-20 hover:text-inherit' : ''}`}
             >
               <Shield className="w-3 h-3 md:w-4 md:h-4" />
               <span className="hidden sm:inline tracking-widest">Media Studio</span>

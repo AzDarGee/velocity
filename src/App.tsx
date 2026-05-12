@@ -319,6 +319,7 @@ export default function App() {
   const [isGeneratingSystemPrompt, setIsGeneratingSystemPrompt] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userPlan, setUserPlan] = useState<string | null>(null);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
@@ -444,6 +445,7 @@ export default function App() {
           if (snapshot.exists()) {
             const data = snapshot.data();
             setCredits(data.credits || 0);
+            setUserPlan(data.plan || null);
             if (data.hasSeenOnboarding === false) {
               setShowOnboarding(true);
             }
@@ -1592,6 +1594,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         setIsHistoryOpen={setIsHistoryOpen}
         setIsAdminModalOpen={setIsAdminModalOpen}
         isAdmin={isAdmin}
+        userPlan={userPlan}
         mediaFilesCount={mediaFiles.length}
         handleNewPost={handleNewPost}
         appMode={appMode}

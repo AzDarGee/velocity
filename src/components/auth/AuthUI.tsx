@@ -385,6 +385,7 @@ export function UserButton({
 }: UserButtonProps) {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(isAdminProp || false);
+  const [userPlan, setUserPlan] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const [isBuying, setIsBuying] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -527,6 +528,7 @@ export function UserButton({
     const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (doc) => {
       if (doc.exists()) {
         setCredits(doc.data().credits || 0);
+        setUserPlan(doc.data().plan || null);
       }
     }, (err) => {
       handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
@@ -746,10 +748,11 @@ export function UserButton({
             console.error("Sign out error:", error);
           }
         }}
-        className={`p-2 border hidden lg:block ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'} transition-all`}
+        className={`px-4 py-2 border flex items-center gap-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-black hover:bg-black hover:text-white'} transition-all`}
         title="Terminate_Session"
       >
         <LogOut className="w-4 h-4" />
+        <span className="hidden md:inline text-xs font-mono uppercase tracking-widest">Logout</span>
       </button>
 
       <AnimatePresence>
@@ -1164,11 +1167,12 @@ export function UserButton({
                 </button>
                 <button
                   onClick={() => setTopUpMode('media')}
+                  disabled={!isAdmin && userPlan !== 'media'}
                   className={`flex-1 min-w-[100px] py-2.5 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
                     topUpMode === 'media' 
                       ? (theme === 'dark' ? 'bg-white text-black shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]' : 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]') 
-                      : 'opacity-50 hover:opacity-100 hover:bg-current/5'
-                  }`}
+                      : 'opacity-50 hover:opacity-100 hover:bg-current/5'}
+                    ${!isAdmin && userPlan !== 'media' ? 'opacity-20 cursor-not-allowed' : ''}`}
                 >
                   Media_Studio
                 </button>
