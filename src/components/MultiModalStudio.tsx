@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check } from 'lucide-react';
 
@@ -59,15 +59,46 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [sunoStyleWeight, setSunoStyleWeight] = useState<number>(0.65);
   const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(0.65);
   const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
-  const [assets, setAssets] = useState<MediaAsset[]>([
-    {
-      id: 'mock-1',
-      type: 'image',
-      source: 'uploaded',
-      name: 'reference_logo.png',
-      timestamp: new Date().toISOString()
-    }
-  ]);
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
+
+  useEffect(() => {
+    if (!userId) return;
+    
+    let isMounted = true;
+    let unsubscribe: (() => void) | undefined;
+    
+    const fetchAssets = async () => {
+      try {
+        const { db, handleFirestoreError, OperationType } = await import('../lib/firebase');
+        const { collection, query, orderBy, onSnapshot } = await import('firebase/firestore');
+        const assetsRef = collection(db, 'users', userId, 'media_assets');
+        const q = query(assetsRef, orderBy('timestamp', 'desc'));
+        
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          if (!isMounted) return;
+          const loaded: MediaAsset[] = [];
+          snapshot.forEach(doc => {
+            loaded.push(doc.data() as MediaAsset);
+          });
+          setAssets(loaded);
+        }, (error) => {
+           // Provide a fallback silent error handle if permission initially denied, 
+           // though we should throw to the ErrorBoundary if intended. For assets we might just log and fail silently.
+           console.error("Firestore Error in Assets:", error);
+           // handleFirestoreError(error, OperationType.LIST, `users/${userId}/media_assets`);
+        });
+      } catch (err) {
+        console.error("Failed to set up assets listener:", err);
+      }
+    };
+    
+    fetchAssets();
+    
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [userId]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -282,20 +313,71 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         id: `gen-${Math.random().toString(36).substr(2, 9)}`,
         type: activeMode === 'music' ? 'audio' : activeMode,
         source: 'generated',
-        name: `${activeMode}_generation_${prompt.substring(0, 10)}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`,
+        name: `${activeMode}_generation_${prompt.substring(0, 10).replace(/[^a-zA-Z0-9_\-]/g, "")}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`,
         model: modelUsed,
         timestamp: new Date().toISOString(),
         metadata: finalMetadata,
         url: finalUrl
       };
       
-      setAssets(prev => [newAsset, ...prev]);
+      let storageUrl = finalUrl;
+      const { db, storage } = await import('../lib/firebase');
+      const { doc, setDoc } = await import('firebase/firestore');
+      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      
+      try {
+        if (finalUrl) {
+          const fetchRes = await fetch(finalUrl);
+          const finalBlob = await fetchRes.blob();
+          const storageRef = ref(storage, `uploads/generated/${userId}/${newAsset.id}_${newAsset.name}`);
+          
+          await uploadBytes(storageRef, finalBlob, { contentType: finalBlob.type });
+          storageUrl = await getDownloadURL(storageRef);
+          
+          // Revoke the local object URL to prevent memory leaks now that we have it requested
+          if (finalUrl.startsWith('blob:')) {
+             URL.revokeObjectURL(finalUrl);
+          }
+        }
+        
+        newAsset.url = storageUrl;
+
+        const assetRef = doc(db, 'users', userId, 'media_assets', newAsset.id);
+        const assetData = { ...newAsset, userId };
+        await setDoc(assetRef, assetData);
+      } catch (err) {
+        console.error("Failed to save asset to database:", err);
+      }
+      
       setPrompt("");
     } catch (err: any) {
       console.error(`Generation error (${activeMode}):`, err);
       setError(err.message || "An unexpected error occurred during synthesis.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleDeleteAsset = async (asset: MediaAsset) => {
+    if (!userId) return;
+    try {
+      const { db, storage } = await import('../lib/firebase');
+      const { doc, deleteDoc } = await import('firebase/firestore');
+      const { ref, deleteObject } = await import('firebase/storage');
+      
+      const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+      await deleteDoc(assetRef);
+      
+      if (asset.source === 'generated') {
+        try {
+          const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
+          await deleteObject(storageRef);
+        } catch (storageErr) {
+          console.error("Failed to delete from storage. Might have already been removed.", storageErr);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete asset:", err);
     }
   };
 
@@ -854,12 +936,20 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                 <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">Insert</span>
                               </button>
                             )}
-                            <button className={`p-2 rounded-none border-2 transition-colors ${
+                            <button 
+                              onClick={() => {
+                                if (asset.url) {
+                                  window.open(asset.url, '_blank');
+                                }
+                              }}
+                              className={`p-2 rounded-none border-2 transition-colors ${
                               theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
-                            }`} title="View / Extract">
+                            }`} title="Download / Open">
                               <Download className="w-3 h-3" />
                             </button>
-                            <button className="p-2 rounded-none border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
+                            <button 
+                              onClick={() => handleDeleteAsset(asset)}
+                              className="p-2 rounded-none border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>

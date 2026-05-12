@@ -100,6 +100,20 @@ service cloud.firestore {
              (data.get('metadata', {}) is map);
     }
 
+    // Media Asset
+    function isValidMediaAsset(data) {
+      return data.keys().hasAll(['id', 'userId', 'type', 'source', 'name', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.id is string && data.id.size() <= 128 &&
+             data.type in ['image', 'video', 'audio'] &&
+             data.source in ['uploaded', 'generated'] &&
+             data.name is string && data.name.size() <= 256 &&
+             data.timestamp is string &&
+             (data.get('url', '') is string && data.get('url', '').size() <= 2048) &&
+             (data.get('model', '') is string && data.get('model', '').size() <= 128) &&
+             (data.get('metadata', {}) is map);
+    }
+
     match /admins/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
@@ -140,6 +154,13 @@ service cloud.firestore {
         allow list: if isOwner(userId) || isAdmin();
         allow get: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidActivity(incoming()) && incoming().timestamp == request.time;
+        allow delete: if isAdmin() || isOwner(userId);
+      }
+      // Media assets
+      match /media_assets/{assetId} {
+        allow list: if isOwner(userId) || isAdmin();
+        allow get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidMediaAsset(incoming());
         allow delete: if isAdmin() || isOwner(userId);
       }
     }

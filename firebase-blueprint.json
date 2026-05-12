@@ -98,12 +98,33 @@
         "metadata": { "type": "object" }
       },
       "required": ["type", "description", "cost", "timestamp"]
+    },
+    "media_asset": {
+      "title": "Media Asset",
+      "description": "Generated or uploaded media files tied to a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["image", "video", "audio"] },
+        "source": { "type": "string", "enum": ["uploaded", "generated"] },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "model": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "userId", "type", "source", "name", "timestamp"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "user",
       "description": "Individual user profiles"
+    },
+    "users/{userId}/media_assets/{assetId}": {
+      "schema": "media_asset",
+      "description": "User generated or uploaded media assets stored within Synthesis Studio"
     },
     "users/{userId}/private/keys": {
       "schema": "userKeys",
