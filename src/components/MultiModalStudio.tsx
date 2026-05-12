@@ -41,7 +41,7 @@ const DEFAULT_STYLES = [
 export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>('image');
   const [prompt, setPrompt] = useState("");
-  const [aspectRatio, setAspectRatio] = useState<string>("1:1");
+  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
   const [resolution, setResolution] = useState<string>("1080p");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,7 +252,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
         const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url;
         
-        finalMetadata = { prompt, ...sunoItem };
+        finalMetadata = { prompt, task_id: taskId, ...sunoItem };
 
         const audioRes = await fetch(audioUrl);
         if (!audioRes.ok) throw new Error("Failed to download generated audio from Suno URL");
@@ -388,32 +388,55 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   };
 
   const handleGenerateCover = async (asset: MediaAsset) => {
-    if (asset.type !== 'audio' || !asset.metadata?.task_id) return;
+    console.log("handleGenerateCover clicked for:", asset.id, "Metadata:", asset.metadata);
+    if (asset.type !== 'audio' || (!asset.metadata?.task_id && !asset.metadata?.taskId)) {
+      console.log("handleGenerateCover skipped: audio check or task_id missing", asset.type, asset.metadata);
+      return;
+    }
     
     setCoverGeneratingAssets(prev => new Set(prev).add(asset.id));
     setError(null);
 
     try {
-      const prompt = `Generate a high quality, square cover art for a song. Song metadata: ${asset.metadata?.prompt || asset.name}. Lyrics: ${asset.metadata?.lyrics || 'No lyrics provided'}`;
+      const prompt = `Generate a high quality, square cover art for a song. There should be no text on the image. Song metadata: ${asset.metadata?.prompt || asset.name}. Lyrics: ${asset.metadata?.lyrics || 'No lyrics provided'}`;
       
-      const response = await fetch('/api/generate-cover', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt })
+      const { GoogleGenAI } = await import("@google/genai");
+      const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
+      if (!apiKey) throw new Error("Gemini API Key is required.");
+      
+      const genAI = new GoogleGenAI({ apiKey });
+      
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1",
+          }
+        }
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Cover generation failed: ${response.statusText}`);
+      
+      const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+      
+      if (!imagePart?.inlineData?.data) {
+        throw new Error("No image data returned. Ensure the model supports image generation.");
       }
       
-      const { imageUrl } = await response.json();
-      
-      // Update Firestore
-      const { db } = await import('../lib/firebase');
+      // Upload raw image to Storage
+      const { db, storage } = await import('../lib/firebase');
+      const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
       const { doc, updateDoc } = await import('firebase/firestore');
+
+      const path = `uploads/generated/${userId}/${asset.id}_cover.png`;
+      const storageRef = ref(storage, path);
+      
+      // Upload using base64 string
+      await uploadString(storageRef, imagePart.inlineData.data, 'base64', {
+        contentType: 'image/png'
+      });
+      
+      const imageUrl = await getDownloadURL(storageRef);
+      
       // userId is required here; hopefully it's available in the component scope
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
       
@@ -440,11 +463,21 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   };
 
   const handleFetchTimestampedLyrics = async (asset: MediaAsset) => {
-    if (asset.type !== 'audio' || !asset.metadata?.task_id) return;
+    console.log("handleFetchTimestampedLyrics clicked for:", asset.id, "Metadata:", asset.metadata);
     
-    // Use asset.metadata.id as audioId (Suno's clip ID)
-    const audioId = asset.metadata.id;
-    if (!audioId) return;
+    // The asset metadata is where the task_id and id should be
+    const taskId = asset.metadata?.task_id || asset.metadata?.taskId;
+    const audioId = asset.metadata?.id || asset.metadata?.audioId;
+    
+    if (asset.type !== 'audio' || !taskId) {
+       console.log("handleFetchTimestampedLyrics skipped: audio check or task_id missing", asset.type, taskId, asset.metadata);
+       return;
+    }
+    
+    if (!audioId) {
+      console.log("handleFetchTimestampedLyrics skipped: audioId missing", asset.metadata);
+      return;
+    }
 
     // If we already have them, just show them
     if (asset.metadata?.timestampedLyrics) {
@@ -466,7 +499,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          taskId: asset.metadata.task_id,
+          taskId: taskId,
           audioId: audioId
         })
       });
@@ -477,7 +510,18 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const lyricsData = jsonRes?.data?.response || jsonRes?.data || jsonRes;
 
       if (!lyricsData || (!lyricsData.lyrics && !lyricsData.segments)) {
-         throw new Error("No timestamped lyrics found for this track - it might be an instrumental.");
+         setError("No lyrics found for this track - it might be an instrumental.");
+         setTimeout(() => setError(null), 3000);
+         
+         const { db } = await import('../lib/firebase');
+         const { doc, updateDoc } = await import('firebase/firestore');
+         const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+         await updateDoc(assetRef, {
+           'metadata.timestampedLyrics': 'Instrumental / No Lyrics'
+         });
+         setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, timestampedLyrics: 'Instrumental / No Lyrics'}} : a));
+         
+         return;
       }
 
       // Update Firestore
@@ -524,7 +568,15 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
           await deleteObject(storageRef);
         } catch (storageErr) {
-          console.error("Failed to delete from storage. Might have already been removed.", storageErr);
+          console.error("Failed to delete main asset from storage.", storageErr);
+        }
+        if (asset.metadata?.coverUrl || asset.type === 'audio') {
+          try {
+            const coverRef = ref(storage, `uploads/generated/${userId}/${asset.id}_cover.png`);
+            await deleteObject(coverRef);
+          } catch (storageErr) {
+            console.error("Failed to delete cover art from storage.", storageErr);
+          }
         }
       }
     } catch (err) {
@@ -1126,9 +1178,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         {/* Actions */}
                         <td className="py-4 px-4 text-right whitespace-nowrap">
                           <div className={`flex items-center justify-end gap-2 transition-opacity ${asset.url ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                             {asset.type === 'audio' && asset.source === 'generated' && !asset.metadata?.coverUrl && (
+                             {asset.type === 'audio' && asset.source === 'generated' && (
                                <button 
-                                 onClick={() => handleGenerateCover(asset)}
+                                 onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
                                  disabled={coverGeneratingAssets.has(asset.id)}
                                  className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
                                    theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
@@ -1147,7 +1199,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             )}
                             {asset.type === 'audio' && asset.source === 'generated' && (
                                <button 
-                                 onClick={() => handleFetchTimestampedLyrics(asset)}
+                                 onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
                                  disabled={lyricsLoadingAssets.has(asset.id)}
                                  className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
                                    theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'

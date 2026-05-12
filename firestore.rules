@@ -163,6 +163,9 @@ service cloud.firestore {
         allow list: if isOwner(userId) || isAdmin();
         allow get: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidMediaAsset(incoming());
+        allow update: if isOwner(userId) && isValidMediaAsset(incoming()) && 
+                      incoming().userId == existing().userId &&
+                      incoming().id == existing().id;
         allow delete: if isAdmin() || isOwner(userId);
       }
     }

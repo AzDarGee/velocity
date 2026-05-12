@@ -647,38 +647,6 @@ async function startServer() {
     }
   });
 
-  // API Route: Generate Cover Art
-  app.post("/api/generate-cover", async (req, res) => {
-    try {
-      const { prompt } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API Key is required.");
-      
-      const genAI = new GoogleGenAI({ apiKey });
-      
-      // Using user requested model Gemini 3.1 Pro
-      const response = await genAI.models.generateContent({
-        model: "gemini-3.1-pro",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1",
-          }
-        }
-      });
-      
-      const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
-      if (imagePart?.inlineData?.data) {
-        res.json({ imageUrl: `data:image/png;base64,${imagePart.inlineData.data}` });
-      } else {
-        throw new Error("No image data returned. Ensure the model supports image generation.");
-      }
-    } catch (error: any) {
-      console.error("Generate Cover Error:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // Vite integration
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
