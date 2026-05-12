@@ -1413,20 +1413,22 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     try {
       // Sync to 'files' collection so it can be referenced by generations
       const fileRef = doc(db, "files", asset.id);
+      const fileSnap = await getDoc(fileRef);
       
-      const fileDoc = {
-        userId: user.uid,
-        name: asset.name,
-        type: mimeType,
-        size: asset.metadata?.fileSize || 0, // placeholder or actual size
-        storageUrl: assetUrl,
-        createdAt: serverTimestamp(),
-        uri: assetUrl,
-        mimeType: mimeType,
-        source: 'ai'
-      };
-      
-      await setDoc(fileRef, fileDoc, { merge: true });
+      if (!fileSnap.exists()) {
+        const fileDoc = {
+          userId: user.uid,
+          name: asset.name,
+          type: mimeType,
+          size: 0, // placeholder
+          storageUrl: assetUrl,
+          createdAt: serverTimestamp(),
+          uri: assetUrl,
+          mimeType: mimeType,
+          source: 'ai'
+        };
+        await setDoc(fileRef, fileDoc);
+      }
 
       // Update state with the firestoreId
       setMediaFiles(prev => prev.map(f => f.id === `syn-${asset.id}` ? { 
@@ -1438,7 +1440,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
 
     } catch (err) {
       console.error("Failed to link synthesis asset to narrative database:", err);
-      // Removed handleFirestoreError bubble to allow graceful UI fail without crashing the whole screen
+      handleFirestoreError(err, OperationType.WRITE, `files/${asset.id}`);
       setMediaFiles(prev => prev.map(f => f.id === `syn-${asset.id}` ? { ...f, status: 'FAILED' } : f));
       setError("System failure: Narrative synchronization protocol breached.");
     }
@@ -2148,6 +2150,68 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 </div>
 
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-30' : 'opacity-60'}`}>System_Prompt *</label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateSystemPrompt}
+                      disabled={isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                      className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
+                        theme === 'dark'
+                          ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
+                          : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
+                       } ${(!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {isGeneratingSystemPrompt ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3 h-3" />
+                          Auto-Generate
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <textarea 
+                      value={preferences.systemPrompt}
+                      onChange={(e) => setPreferences({ ...preferences, systemPrompt: e.target.value })}
+                      disabled={!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                      rows={6}
+                      placeholder="Enter a custom system prompt to guide the AI's behavior, style, and persona... *"
+                      className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
+                        theme === 'dark' 
+                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
+                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
+                      } ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingSystemPrompt ? 'text-transparent selection:text-transparent' : ''}`}
+                    />
+                    
+                    <AnimatePresence>
+                      {isGeneratingSystemPrompt && (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
+                            theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
+                          }`}
+                        >
+                          <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  {(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) && (
+                    <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
+                        Awaiting_Uplink: Media, target audience, and tones required to auto-generate system prompt.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                     <label className="text-[10px] uppercase font-mono font-bold tracking-widest opacity-60">Target_Length</label>
                     <select 
                       value={preferences.length}
@@ -2234,68 +2298,6 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                             ? "Awaiting_Tone: Select voice tones to enable narrative generation." 
                             : "Awaiting_Uplink: Media context required to initialize strategic focus.")
                       }
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-30' : 'opacity-60'}`}>Master_Prompt *</label>
-                    <button
-                      type="button"
-                      onClick={handleGenerateSystemPrompt}
-                      disabled={isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
-                      className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
-                        theme === 'dark'
-                          ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
-                          : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                       } ${(!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {isGeneratingSystemPrompt ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="w-3 h-3" />
-                          Auto-Generate
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <textarea 
-                      value={preferences.systemPrompt}
-                      onChange={(e) => setPreferences({ ...preferences, systemPrompt: e.target.value })}
-                      disabled={!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
-                      rows={6}
-                      placeholder="Enter a custom master prompt to guide the AI's behavior, style, and persona... *"
-                      className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
-                        theme === 'dark' 
-                          ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
-                          : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                      } ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingSystemPrompt ? 'text-transparent selection:text-transparent' : ''}`}
-                    />
-                    
-                    <AnimatePresence>
-                      {isGeneratingSystemPrompt && (
-                        <motion.div 
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
-                            theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
-                          }`}
-                        >
-                          <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  {(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) && (
-                    <p className="text-[10px] font-mono text-orange-500 opacity-80 uppercase leading-tight">
-                        Awaiting_Uplink: Media, target audience, and tones required to auto-generate master prompt.
                     </p>
                   )}
                 </div>

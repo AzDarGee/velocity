@@ -59,6 +59,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [sunoStyleWeight, setSunoStyleWeight] = useState<number>(0.65);
   const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(0.65);
   const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
+  const [isAutoPrompting, setIsAutoPrompting] = useState(false);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [coverGeneratingAssets, setCoverGeneratingAssets] = useState<Set<string>>(new Set());
   const [lyricsLoadingAssets, setLyricsLoadingAssets] = useState<Set<string>>(new Set());
@@ -104,6 +105,42 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       if (unsubscribe) unsubscribe();
     };
   }, [userId]);
+
+  const handleAutoPrompt = async () => {
+    if (isAutoPrompting || isGenerating) return;
+    setIsAutoPrompting(true);
+    setError(null);
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
+      if (!apiKey) throw new Error("Gemini API Key is required for auto-prompting.");
+      
+      const genAI = new GoogleGenAI({ apiKey });
+      
+      let systemPrompt = "You are a creative prompt engineer. ";
+      if (activeMode === 'image') systemPrompt += "Generate a highly detailed and descriptive prompt for an image generation model. Focus on composition, lighting, subject matter, style, and mood.";
+      else if (activeMode === 'video') systemPrompt += "Generate a highly detailed, cinematic prompt for a video generation model (like Veo). Describe the scene, the motion, the camera movement, the lighting, and the overall atmosphere.";
+      else if (activeMode === 'music') {
+        if (sunoCustomMode) systemPrompt += "Generate creative lyrics with musical direction tags (like [Verse], [Chorus]) for a custom music generation model.";
+        else systemPrompt += "Generate a creative and evocative prompt for a music generation model. Describe the genre, instrumentation, tempo, mood, and any lyrical themes.";
+      }
+      
+      systemPrompt += ` Only return the prompt text, nothing else. If the user already provided some text, enhance and expand upon it: "${prompt || 'Surprise me'}"`;
+
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+      });
+      
+      const newPrompt = response.text?.trim() || "";
+      if (newPrompt) setPrompt(newPrompt);
+    } catch (err: any) {
+      console.error("Auto prompt error:", err);
+      setError(err.message || "Failed to generate prompt.");
+    } finally {
+      setIsAutoPrompting(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -256,7 +293,41 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
         const audioRes = await fetch(audioUrl);
         if (!audioRes.ok) throw new Error("Failed to download generated audio from Suno URL");
-        const blob = await audioRes.blob();
+        let blob = await audioRes.blob();
+
+        try {
+            const imageUrl = sunoItem.image_large_url || sunoItem.image_url || sunoItem.imageUrl || sunoItem.imageLargeUrl;
+            if (imageUrl) {
+                const imageRes = await fetch(imageUrl, {
+                    // Important for remote images that might not have CORS explicitly set for JS but wait, it's suno
+                });
+                if (imageRes.ok) {
+                    const imageBuffer = await imageRes.arrayBuffer();
+                    const audioBuffer = await blob.arrayBuffer();
+                    
+                    const ID3WriterModule = await import('browser-id3-writer');
+                    const ID3Writer = ID3WriterModule.default || (ID3WriterModule as any);
+                    const titleToUse = sunoTitle || sunoItem.title || "Generated Track";
+                    
+                    const writer = new (ID3Writer as any)(audioBuffer);
+                    writer.setFrame('TIT2', titleToUse)
+                          .setFrame('TPE1', ['Media Studio AI'])
+                          .setFrame('APIC', {
+                              type: 3,
+                              data: imageBuffer,
+                              description: 'Front cover'
+                          });
+                    writer.addTag();
+                    const taggedBuffer = writer.arrayBuffer;
+                    blob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
+                    
+                    finalMetadata.coverUrl = imageUrl;
+                }
+            }
+        } catch (id3Err) {
+            console.error("Failed to write ID3 metadata:", id3Err);
+        }
+
         finalUrl = URL.createObjectURL(blob);
       } else if (activeMode === 'image' || activeMode === 'video') {
         const { GoogleGenAI } = await import("@google/genai");
@@ -363,10 +434,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           await uploadBytes(storageRef, finalBlob, { contentType: finalBlob.type });
           storageUrl = await getDownloadURL(storageRef);
           
-          // Add size to metadata
+      // Add size to metadata
           newAsset.metadata = {
             ...newAsset.metadata,
-            fileSize: finalBlob.size
+            fileSize: finalBlob.size,
+            imageUrl: storageUrl // Ensure imageUrl is added for image mode
           };
           
           // Revoke the local object URL to prevent memory leaks now that we have it requested
@@ -446,16 +518,69 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       
       // userId is required here; hopefully it's available in the component scope
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+
+      // Now attach cover to the actual MP3 file using browser-id3-writer
+      if (asset.url) {
+        try {
+            const { getBytes, uploadBytes } = await import('firebase/storage');
+            
+            // asset.url is the download URL which can be parsed by `ref` directly
+            const audioStorageRef = ref(storage, asset.url);
+            const audioBuffer = await getBytes(audioStorageRef);
+                
+            // Convert base64 to ArrayBuffer for ID3Writer
+            const binaryString = window.atob(imagePart.inlineData.data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const imageBuffer = bytes.buffer;
+
+            const ID3WriterModule = await import('browser-id3-writer');
+            const ID3Writer = ID3WriterModule.default || (ID3WriterModule as any);
+            const titleToUse = asset.metadata?.title || asset.name.replace('.mp3', '') || "Generated Track";
+            
+            const writer = new (ID3Writer as any)(audioBuffer);
+            writer.setFrame('TIT2', titleToUse)
+                  .setFrame('TPE1', ['Media Studio AI'])
+                  .setFrame('APIC', {
+                      type: 3,
+                      data: imageBuffer,
+                      description: 'Front cover'
+                  });
+            writer.addTag();
+            const taggedBuffer = writer.arrayBuffer;
+            const taggedBlob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
+
+            await uploadBytes(audioStorageRef, taggedBlob, { contentType: 'audio/mpeg' });
+            // Note: The URL might not change visually but it's safe to keep using the existing one.
+        } catch (id3Err) {
+            console.error("Failed to write ID3 metadata for updated cover:", id3Err);
+        }
+      }
+
+      try {
+        await updateDoc(assetRef, {
+          userId: userId,
+          'metadata.coverUrl': imageUrl,
+          'metadata.coverSize': coverSize
+        });
+      } catch (updateErr) {
+        // Log this specifically to separate from storage errors
+        console.error("Firestore updateDoc error:", updateErr);
+        const { handleFirestoreError, OperationType } = await import('../lib/firebase');
+        if (handleFirestoreError) {
+           handleFirestoreError(updateErr, OperationType.UPDATE, assetRef.path);
+        }
+        throw updateErr;
+      }
       
-      await updateDoc(assetRef, {
-        'metadata.coverUrl': imageUrl,
-        'metadata.coverSize': coverSize
-      });
       // Update local assets state
       setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, coverUrl: imageUrl, coverSize}} : a));
 
       // Notify completion
-      setError("Cover art generated!");
+      setError("Cover art generated and attached to track!");
       setTimeout(() => setError(null), 3000);
 
     } catch (err: any) {
@@ -525,6 +650,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
          const { doc, updateDoc } = await import('firebase/firestore');
          const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
          await updateDoc(assetRef, {
+           userId: userId,
            'metadata.timestampedLyrics': 'Instrumental / No Lyrics'
          });
          setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, timestampedLyrics: 'Instrumental / No Lyrics'}} : a));
@@ -538,6 +664,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
       
       await updateDoc(assetRef, {
+        userId: userId,
         'metadata.timestampedLyrics': lyricsData
       });
 
@@ -655,21 +782,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           </div>
 
           <div className="flex-1 space-y-4 md:space-y-6 overflow-y-auto min-h-0 pr-1 md:pr-4 history-scrollbar">
-            <div className="space-y-2">
-              <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt</label>
-              <textarea 
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                disabled={isGenerating}
-                placeholder={`Describe the ${activeMode} you want to synthesize...`}
-                className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
-                  theme === 'dark' 
-                    ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
-                    : 'bg-white border-gray-300 focus:border-black'
-                } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
-              />
-            </div>
-
             {error && (
               <div className="p-4 border-2 border-red-500/20 bg-red-500/5 text-red-500 text-[10px] font-mono flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1026,6 +1138,33 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             </div>
           </div>
           
+          <div className="mt-4 pt-4 border-t border-current/10 shrink-0">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt</label>
+                <button
+                  onClick={handleAutoPrompt}
+                  disabled={isAutoPrompting || isGenerating}
+                  className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-white hover:text-black' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'} ${(isAutoPrompting || isGenerating) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isAutoPrompting ? <RefreshCw className="w-3 h-3 animate-spin shrink-0" /> : <Sparkles className="w-3 h-3 shrink-0" />}
+                  Auto-Generate
+                </button>
+              </div>
+              <textarea 
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                disabled={isGenerating || isAutoPrompting}
+                placeholder={`Describe the ${activeMode} you want to synthesize...`}
+                className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
+                  theme === 'dark' 
+                    ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
+                    : 'bg-white border-gray-300 focus:border-black'
+                } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+            </div>
+          </div>
+          
           <button 
             onClick={handleGenerate}
             disabled={isGenerating || !prompt.trim()}
@@ -1105,19 +1244,15 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           <div className="flex items-center gap-4">
                             <div 
                               onClick={() => {
-                                if (asset.type === 'audio' && (asset.metadata?.coverUrl || asset.metadata?.imageUrl)) {
-                                  setViewingCover(asset);
-                                }
+                                setViewingCover(asset);
                               }}
-                              className={`w-12 h-12 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform ${asset.metadata?.coverUrl || asset.metadata?.imageUrl ? 'cursor-pointer hover:scale-105 active:scale-95' : ''} ${getBorderColor(asset).split(' ')[0]}`}
+                              className={`w-12 h-12 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
                             >
-                              {(asset.metadata?.coverUrl || asset.metadata?.imageUrl) && asset.type === 'audio' ? (
-                                <img src={asset.metadata.coverUrl || asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
-                              ) : (
+                              {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url) && (
+                                <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              )}
+                              {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url) && (
                                 <>
-                                  {asset.metadata?.imageUrl && asset.type === 'audio' && (
-                                    <img src={asset.metadata.imageUrl} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
-                                  )}
                                   {asset.type === 'image' && <ImageIcon className="w-4 h-4 opacity-50 relative z-10" />}
                                   {asset.type === 'video' && <Video className="w-4 h-4 opacity-50 relative z-10" />}
                                   {asset.type === 'audio' && <Music className="w-4 h-4 opacity-50 relative z-10" />}
@@ -1138,11 +1273,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           <div className="flex flex-col items-start gap-2">
                              <div 
                                onClick={() => {
-                                 if (asset.type === 'audio') {
-                                   setViewingAssetDetails(asset);
-                                 }
+                                 setViewingAssetDetails(asset);
                                }}
-                               className={`px-2 py-1 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} ${asset.type === 'audio' ? 'cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95' : ''}`}
+                               className={`px-2 py-1 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
                              >
                                {asset.type}
                              </div>
@@ -1384,8 +1517,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             >
               <div className="flex items-center justify-between p-4 border-b border-current/10">
                 <div className="flex items-center gap-3">
-                  <Music className="w-5 h-5 text-indigo-500" />
-                  <h3 className="text-sm font-black uppercase tracking-widest italic">{viewingAssetDetails.name}</h3>
+                  {viewingAssetDetails.type === 'audio' && <Music className="w-5 h-5 text-indigo-500" />}
+                  {viewingAssetDetails.type === 'image' && <ImageIcon className="w-5 h-5 text-indigo-500" />}
+                  {viewingAssetDetails.type === 'video' && <Video className="w-5 h-5 text-indigo-500" />}
+                  <h3 className="text-[9px] w-[236.688px] font-black uppercase tracking-widest italic">{viewingAssetDetails.name}</h3>
                 </div>
                 <button onClick={() => setViewingAssetDetails(null)} className="p-1 hover:opacity-50 transition-opacity">
                   <X className="w-5 h-5" />
@@ -1396,9 +1531,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 {/* Visual Header */}
                 <div className="flex gap-4 items-start">
                   <div className={`w-24 h-24 shrink-0 border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} relative overflow-hidden bg-black/5`}>
-                    {(viewingAssetDetails.metadata?.coverUrl || viewingAssetDetails.metadata?.imageUrl) ? (
+                    {(viewingAssetDetails.metadata?.coverUrl || viewingAssetDetails.metadata?.imageUrl || viewingAssetDetails.url) ? (
                       <img 
-                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl} 
+                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl || viewingAssetDetails.url} 
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                         alt=""

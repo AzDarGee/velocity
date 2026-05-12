@@ -27,6 +27,7 @@
     "@types/nodemailer": "^8.0.0",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
+    "browser-id3-writer": "^6.3.1",
     "dompurify": "^3.4.2",
     "dotenv": "^17.2.3",
     "esbuild": "^0.28.0",
