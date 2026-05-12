@@ -309,11 +309,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const endTime = Date.now();
       finalMetadata.generationTimeMs = endTime - startTime;
 
+      let assetName = `${activeMode}_generation_${prompt.substring(0, 10).replace(/[^a-zA-Z0-9_\-]/g, "")}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`;
+      if (activeMode === 'music') {
+        const titleToUse = finalMetadata.title || sunoTitle;
+        if (titleToUse) {
+           assetName = `${titleToUse.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, "_")}.mp3`;
+        }
+      }
+
       const newAsset: MediaAsset = {
         id: `gen-${Math.random().toString(36).substr(2, 9)}`,
         type: activeMode === 'music' ? 'audio' : activeMode,
         source: 'generated',
-        name: `${activeMode}_generation_${prompt.substring(0, 10).replace(/[^a-zA-Z0-9_\-]/g, "")}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`,
+        name: assetName,
         model: modelUsed,
         timestamp: new Date().toISOString(),
         metadata: finalMetadata,
@@ -827,8 +835,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-            <div className={`overflow-x-auto border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
-              <table className="w-full text-left border-collapse min-w-[800px]">
+            {assets.length === 0 ? (
+              <div className={`w-full h-full min-h-[300px] flex flex-col items-center justify-center border-2 border-dashed ${theme === 'dark' ? 'border-[#333] text-[#F8F8F7]' : 'border-gray-300 text-black'}`}>
+                <div className={`p-4 rounded-full mb-4 ${theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-gray-100'}`}>
+                  < ImageIcon className="w-8 h-8 opacity-40" />
+                </div>
+                <h4 className="text-sm font-bold uppercase tracking-widest mb-2">No Assets Generated</h4>
+                <p className="text-[10px] font-mono opacity-50 uppercase tracking-widest text-center max-w-xs">
+                  Generate images, videos, or audio tracks to populate your synthesis library.
+                </p>
+              </div>
+            ) : (
+              <div className={`overflow-x-auto border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
+                <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead className={`border-b-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
                   <tr className="text-[9px] uppercase font-mono tracking-widest opacity-60">
                     <th className="py-4 px-4 font-normal">Asset</th>
@@ -960,6 +979,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         </div>
       </div>
