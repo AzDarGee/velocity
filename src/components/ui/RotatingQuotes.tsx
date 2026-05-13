@@ -20,7 +20,7 @@ export function RotatingQuotes({ quotes, interval = 2500, theme = 'dark' }: Rota
   return (
     <div className="flex flex-col items-center justify-center gap-4 text-center px-6">
       <div className="relative h-12 w-full flex items-center justify-center">
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           <motion.p
             key={index}
             initial={{ opacity: 0, y: 10, filter: 'blur(10px)' }}

@@ -833,7 +833,7 @@ export default function App() {
       if (savedGenId) {
         const savedGen = history.find((g: any) => g.id === savedGenId);
         if (savedGen) {
-          loadGeneration(savedGen);
+          loadGeneration(savedGen, true);
         }
       }
     }
@@ -1336,7 +1336,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  const loadGeneration = async (gen: any) => {
+  const loadGeneration = async (gen: any, isInitialLoad = false) => {
     setIsProcessing(true);
     setError(null);
     try {
@@ -1354,7 +1354,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       let restoredMedia: MediaFile[] = [];
 
       // Fetch attached files
-      if (gen.fileIds && gen.fileIds.length > 0) {
+      if (!isInitialLoad && gen.fileIds && gen.fileIds.length > 0) {
         const filePromises = gen.fileIds.map((fileId: string) => getDoc(doc(db, "files", fileId)));
         const fileSnaps = await Promise.all(filePromises);
         
@@ -1392,8 +1392,10 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       }
 
       // Update states atomically at the end
-      setCurrentAttachedFiles(fetchedFiles);
-      setMediaFiles(Array.from(new Map(restoredMedia.map(m => [m.id, m])).values()));
+      if (!isInitialLoad) {
+        setCurrentAttachedFiles(fetchedFiles);
+        setMediaFiles(Array.from(new Map(restoredMedia.map(m => [m.id, m])).values()));
+      }
       
       setIsHistoryOpen(false);
     } catch (err: any) {
@@ -2599,19 +2601,19 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             <div className={`flex-1 overflow-y-auto relative p-12 md:p-16 m-4 border ${theme === 'dark' ? 'selection:bg-yellow-600/40 selection:text-white' : 'selection:bg-yellow-200'} transition-colors ${
               theme === 'dark' ? 'bg-[#141414] border-[#333]' : 'bg-white border-[#141414]'
             }`}>
-              <AnimatePresence mode="wait">
-                {isProcessing && (
-                  <div className="absolute top-0 left-0 w-full h-1.5 z-30 overflow-hidden">
-                    <motion.div 
-                      className={`h-full ${theme === 'dark' ? 'bg-white' : 'bg-black'}`}
-                      initial={{ left: "-100%" }}
-                      animate={{ left: "100%" }}
-                      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                      style={{ position: "absolute", width: "40%" }}
-                    />
-                    <div className={`absolute inset-0 opacity-20 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/5'}`} />
-                  </div>
-                )}
+              {isProcessing && (
+                <div className="absolute top-0 left-0 w-full h-1.5 z-30 overflow-hidden">
+                  <motion.div 
+                    className={`h-full ${theme === 'dark' ? 'bg-white' : 'bg-black'}`}
+                    initial={{ left: "-100%" }}
+                    animate={{ left: "100%" }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                    style={{ position: "absolute", width: "40%" }}
+                  />
+                  <div className={`absolute inset-0 opacity-20 ${theme === 'dark' ? 'bg-white/10' : 'bg-black/5'}`} />
+                </div>
+              )}
+              <AnimatePresence>
                 {isProcessing ? (
                   <motion.div 
                     key="loading"
@@ -2635,7 +2637,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                   </motion.div>
                 ) : blogPost ? (
                   <motion.div
-                    key={`${viewMode}-${blogPost.length}`}
+                    key={viewMode}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="h-full"
