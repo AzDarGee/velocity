@@ -1222,11 +1222,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               </div>
             ) : (
               <div className={`overflow-x-auto border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
-                <table className="w-full text-left border-collapse min-w-[800px]">
+                <table className="w-full text-left border-collapse min-w-[600px]">
                 <thead className={`border-b-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
                   <tr className="text-[9px] uppercase font-mono tracking-widest opacity-60">
-                    <th className="py-4 px-4 font-normal">Asset</th>
-                    <th className="py-4 px-4 font-normal">Details & Metadata</th>
+                    <th className="py-4 px-4 font-normal">Asset Library</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1243,48 +1242,53 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       >
                         {/* Name and Preview */}
                         <td className="py-4 px-4">
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-start gap-4 md:gap-6">
                             <div 
                               onClick={() => {
                                 setViewingCover(asset);
                               }}
-                              className={`w-12 h-12 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
+                              className={`w-16 h-16 md:w-24 md:h-24 mt-1 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
                             >
                               {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url) && (
                                 <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
                               )}
                               {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url) && (
                                 <>
-                                  {asset.type === 'image' && <ImageIcon className="w-4 h-4 opacity-50 relative z-10" />}
-                                  {asset.type === 'video' && <Video className="w-4 h-4 opacity-50 relative z-10" />}
-                                  {asset.type === 'audio' && <Music className="w-4 h-4 opacity-50 relative z-10" />}
+                                  {asset.type === 'image' && <ImageIcon className="w-6 h-6 opacity-50 relative z-10" />}
+                                  {asset.type === 'video' && <Video className="w-6 h-6 opacity-50 relative z-10" />}
+                                  {asset.type === 'audio' && <Music className="w-6 h-6 opacity-50 relative z-10" />}
                                 </>
                               )}
                             </div>
-                            <div className="flex flex-col min-w-0">
-                               <span className="font-bold text-sm uppercase tracking-tight truncate max-w-[200px] mb-1" title={asset.name}>{asset.name}</span>
+                            <div className="flex flex-col min-w-0 flex-1">
+                               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-1">
+                                 <span className="font-bold text-sm md:text-base uppercase tracking-tight truncate max-w-[400px]" title={asset.name}>{asset.name}</span>
+                                 <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest whitespace-nowrap">
+                                   {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                 </span>
+                               </div>
                                
                                {/* Type and Source (Moved) */}
-                               <div className="flex items-center gap-2 mb-2">
+                               <div className="flex items-center gap-3 mb-3">
                                   <div 
                                     onClick={() => {
                                       setViewingAssetDetails(asset);
                                     }}
-                                    className={`px-1.5 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
+                                    className={`px-2 py-0.5 text-[9px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
                                   >
                                     {asset.type}
                                   </div>
                                   {asset.source === 'uploaded' ? (
-                                    <div className="text-[8px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                    <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
                                       USR_RAW
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-2">
-                                      <div className={`text-[8px] uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                      <div className={`text-[9px] uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
                                         {asset.model}
                                       </div>
                                       {asset.metadata?.generationTimeMs && (
-                                        <div className="text-[8px] font-mono opacity-40">
+                                        <div className="text-[9px] font-mono opacity-40">
                                           | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
                                         </div>
                                       )}
@@ -1293,20 +1297,20 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                </div>
                                
                                {/* Asset Actions */}
-                               <div className="flex gap-1.5 mt-1.5 mb-1.5">
+                               <div className="flex gap-2 mb-3">
                                  {asset.type === 'audio' && asset.source === 'generated' && (
                                    <button 
                                      onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
                                      disabled={coverGeneratingAssets.has(asset.id)}
-                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
                                        theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
                                      } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                                      title="Generate Song Cover"
                                    >
                                      {coverGeneratingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                       <RefreshCw className="w-4 h-4 animate-spin" />
                                      ) : (
-                                       <Sparkles className="w-3.5 h-3.5" />
+                                       <Sparkles className="w-4 h-4" />
                                      )}
                                    </button>
                                  )}
@@ -1314,27 +1318,27 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                    <button 
                                      onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
                                      disabled={lyricsLoadingAssets.has(asset.id)}
-                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
                                        theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
                                      } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                                      title="View Temporal Lyrics"
                                    >
                                      {lyricsLoadingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                       <RefreshCw className="w-4 h-4 animate-spin" />
                                      ) : (
-                                       <Wand2 className="w-3.5 h-3.5" />
+                                       <Wand2 className="w-4 h-4" />
                                      )}
                                    </button>
                                  )}
                                  {asset.source === 'generated' && (
                                    <button 
                                      onClick={() => onAddAssetToNarrative?.(asset)}
-                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
                                        theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
                                      }`}
                                      title="Add to Narrative Context"
                                    >
-                                     <BookOpen className="w-3.5 h-3.5" />
+                                     <BookOpen className="w-4 h-4" />
                                    </button>
                                  )}
                                  <button 
@@ -1343,49 +1347,45 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                        window.open(asset.url, '_blank');
                                      }
                                    }}
-                                   className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                   className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
                                      theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
                                    }`} title="Download / Open">
-                                     <Download className="w-3.5 h-3.5" />
+                                     <Download className="w-4 h-4" />
                                  </button>
                                  <button 
                                    onClick={() => setAssetToDelete(asset)}
-                                   className="w-7 h-7 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
-                                     <Trash2 className="w-3.5 h-3.5" />
+                                   className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
+                                     <Trash2 className="w-4 h-4" />
                                  </button>
                                </div>
 
-                               <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest mt-1">
-                                 {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                               </span>
+                               {/* Details and Metadata */}
+                               <div className="w-full max-w-3xl mt-2">
+                                 {asset.type === 'audio' && asset.url && (
+                                   <div className="mb-3 w-full">
+                                     <audio src={asset.url} controls className="w-full max-w-md h-8 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
+                                   </div>
+                                 )}
+                                 {asset.source === 'generated' && asset.metadata ? (
+                                   <div className={`flex flex-col gap-2 w-full p-4 border-l-2 transition-colors ${theme === 'dark' ? 'bg-white/5 border-white/20 hover:border-white/40' : 'bg-black/5 border-black/20 hover:border-black/40'}`}>
+                                     <div className="flex items-start gap-2">
+                                       <span className={`text-xs font-mono italic leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`} title={asset.metadata.prompt}>
+                                         "{asset.metadata.prompt}"
+                                       </span>
+                                     </div>
+                                     {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
+                                       <div className="flex flex-wrap gap-3 text-[9px] font-mono uppercase tracking-widest opacity-60 mt-2">
+                                          {asset.metadata.title && <span className="font-bold border px-2 py-0.5 border-current bg-current/5">{asset.metadata.title}</span>}
+                                          {asset.metadata.duration && <span className="flex items-center">🕒 {asset.metadata.duration}s</span>}
+                                          {asset.metadata.tags && <span className="truncate max-w-[300px] flex items-center">🏷️ {asset.metadata.tags}</span>}
+                                       </div>
+                                     )}
+                                   </div>
+                                 ) : (
+                                   <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest inline-block mt-2">No Context Data Available</span>
+                                 )}
+                               </div>
                             </div>
-                          </div>
-                        </td>
-
-                        {/* Details and Metadata */}
-                        <td className="py-4 px-4">
-                          <div className="flex flex-col items-start justify-center max-w-[300px]">
-                            {asset.type === 'audio' && asset.url && (
-                              <div className="mb-2 w-full">
-                                <audio src={asset.url} controls className="w-full max-w-[200px] h-7 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
-                              </div>
-                            )}
-                            {asset.source === 'generated' && asset.metadata ? (
-                              <div className="flex flex-col gap-1 w-full relative">
-                                <span className={`text-[11px] font-mono italic leading-relaxed line-clamp-2 pr-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} title={asset.metadata.prompt}>
-                                  "{asset.metadata.prompt}"
-                                </span>
-                                {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
-                                  <div className="flex flex-wrap gap-2 text-[9px] font-mono uppercase tracking-widest opacity-50 mt-1">
-                                     {asset.metadata.title && <span>{asset.metadata.title}</span>}
-                                     {asset.metadata.duration && <span>• {asset.metadata.duration}s</span>}
-                                     {asset.metadata.tags && <span className="truncate max-w-[150px]">• {asset.metadata.tags}</span>}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest">No Context Data</span>
-                            )}
                           </div>
                         </td>
                       </motion.tr>
