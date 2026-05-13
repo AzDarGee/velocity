@@ -290,7 +290,21 @@ export default function App() {
   const [appMode, setAppMode] = useState<'narrative' | 'media'>(() => {
     return (localStorage.getItem("appMode") as 'narrative' | 'media') || 'narrative';
   });
-  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>(() => {
+    const saved = localStorage.getItem("narrativeMediaFiles");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((m: any) => {
+          if (m.previewUrl && m.previewUrl.startsWith('blob:')) {
+            m.previewUrl = m.storageUrl || m.uri || undefined;
+          }
+          return m;
+        });
+      } catch (e) {}
+    }
+    return [];
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [blogPost, setBlogPost] = useState<string | null>(null);
   const [originalContent, setOriginalContent] = useState<string | null>(null);
@@ -777,6 +791,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("customTones", JSON.stringify(customTones));
   }, [customTones]);
+
+  useEffect(() => {
+    const filesToSave = mediaFiles.map(f => {
+      // Omit original File object from serialization
+      const { file, ...rest } = f;
+      return rest;
+    });
+    localStorage.setItem("narrativeMediaFiles", JSON.stringify(filesToSave));
+  }, [mediaFiles]);
 
   const removeMedia = (id: string) => {
     const fileToRemove = mediaFiles.find(v => v.id === id);
@@ -1727,8 +1750,8 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3 overflow-hidden flex-1">
                           <div className={`w-10 h-10 shrink-0 flex items-center justify-center border-2 ${theme === 'dark' ? 'bg-black/60 border-white/10 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]' : 'bg-gray-100 border-black/10 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.05)]'} overflow-hidden rounded-sm group-hover:scale-110 transition-transform duration-300`}>
-                            {(v.mimeType?.includes('image') || (v.file && v.file.type.includes('image'))) && v.previewUrl ? (
-                              <img src={v.previewUrl} className="w-full h-full object-cover" alt="" />
+                            {(v.mimeType?.includes('image') || (v.file && v.file.type.includes('image'))) && (v.previewUrl || v.storageUrl) ? (
+                              <img src={v.previewUrl || v.storageUrl} className="w-full h-full object-cover" alt="" />
                             ) : v.mimeType?.includes('video') || (v.file && v.file.type.includes('video')) ? (
                               <div className="relative w-full h-full flex items-center justify-center">
                                 <FileVideo className="w-4 h-4 opacity-60" />
@@ -2774,7 +2797,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               <div className="flex-1 bg-black/95 flex items-center justify-center overflow-hidden min-h-[500px]">
                 {(previewMedia.mimeType?.includes('video') || previewMedia.file?.type.includes('video')) && (
                   <video 
-                    src={previewMedia.previewUrl} 
+                    src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri} 
                     controls 
                     className="max-w-full max-h-[75vh] shadow-[0_0_100px_rgba(0,0,0,0.5)]"
                     autoPlay
@@ -2787,7 +2810,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           <FileAudio className="w-10 h-10 text-white/40" />
                           <div className="absolute inset-0 rounded-full border-b-2 border-white/20 animate-spin" />
                        </div>
-                       <audio src={previewMedia.previewUrl} controls className="w-full" autoPlay />
+                       <audio src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri} controls className="w-full" autoPlay />
                        <div className="text-center space-y-2">
                          <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.3em]">Temporal_Data_Source</p>
                        </div>
@@ -2796,7 +2819,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 )}
                 {(previewMedia.mimeType?.includes('image') || previewMedia.file?.type.includes('image')) && (
                   <img 
-                    src={previewMedia.previewUrl} 
+                    src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri} 
                     alt={previewMedia.name} 
                     referrerPolicy="no-referrer"
                     className="max-w-full max-h-[80vh] object-contain shadow-2xl"
