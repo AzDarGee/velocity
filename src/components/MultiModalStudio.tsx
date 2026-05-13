@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -99,6 +99,65 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
   const [viewingLyrics, setViewingLyrics] = useState<MediaAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<MediaAsset | null>(null);
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const toggleSelectAsset = (id: string) => {
+    setSelectedAssets(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllAssets = () => {
+    setSelectedAssets(new Set(assets.map(a => a.id)));
+  };
+
+  const deselectAllAssets = () => {
+    setSelectedAssets(new Set());
+  };
+
+  const executeBulkDelete = async () => {
+    if (!userId || selectedAssets.size === 0) return;
+    
+    // We can do this with Promise.all for parallelism, or sequentially to avoid hitting rate limits.
+    // Let's do a map to promise array and Promise.all.
+    try {
+      const { db, storage } = await import('../lib/firebase');
+      const { doc, deleteDoc } = await import('firebase/firestore');
+      const { ref, deleteObject } = await import('firebase/storage');
+      
+      const deletions = Array.from(selectedAssets).map(async (assetId) => {
+        const asset = assets.find(a => a.id === assetId);
+        if (!asset) return;
+
+        const assetRef = doc(db, 'users', userId, 'media_assets', assetId);
+        await deleteDoc(assetRef);
+        
+        if (asset.source === 'generated') {
+          try {
+            const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
+            await deleteObject(storageRef);
+          } catch (e) { console.error("Storage delete fail", e); }
+          
+          if (asset.metadata?.coverUrl || asset.type === 'audio') {
+            try {
+              const coverRef = ref(storage, `uploads/generated/${userId}/${asset.id}_cover.png`);
+              await deleteObject(coverRef);
+            } catch (e) { }
+          }
+        }
+      });
+      
+      await Promise.all(deletions);
+      setSelectedAssets(new Set());
+    } catch (err) {
+      console.error("Bulk delete failed", err);
+    }
+    setIsBulkDeleting(false);
+  };
 
   useEffect(() => {
     localStorage.setItem("studioActiveMode", activeMode);
@@ -1411,8 +1470,31 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               </div>
             ) : (
               <div className={`border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
-                <div className={`border-b-2 py-4 px-4 text-[9px] uppercase font-mono tracking-widest opacity-60 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
-                  Synthesis Items
+                <div className={`border-b-2 py-4 px-4 flex items-center justify-between transition-all ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
+                  {selectedAssets.size > 0 ? (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold uppercase font-mono tracking-widest">{selectedAssets.size} Selected</span>
+                        <button onClick={deselectAllAssets} className="px-2 py-1 border text-[10px] uppercase font-mono tracking-widest hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                          Deselect All
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => setIsBulkDeleting(true)}
+                        className="px-3 py-1 border-2 border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white transition-colors text-[10px] uppercase font-mono font-bold tracking-widest flex items-center gap-2"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[9px] uppercase font-mono tracking-widest opacity-60">Synthesis Items</span>
+                      <button onClick={selectAllAssets} className="px-2 py-1 text-[10px] uppercase font-mono tracking-widest opacity-50 hover:opacity-100 transition-opacity">
+                        Select All
+                      </button>
+                    </>
+                  )}
                 </div>
                 <div className="flex flex-col">
                   <AnimatePresence>
@@ -1424,15 +1506,22 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         exit={{ opacity: 0, y: -10 }}
                         className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors ${
                           theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
-                        }`}
+                        } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
                       >
-                         <div className="flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6">
-                            <div 
-                              onClick={() => {
-                                setViewingCover(asset);
-                              }}
-                              className={`w-[72px] h-[72px] sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
-                            >
+                         <div className="flex items-start gap-3">
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
+                             className="mt-2 w-5 h-5 flex items-center justify-center opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
+                           >
+                             {selectedAssets.has(asset.id) ? <CheckSquare className="w-5 h-5 text-indigo-500" /> : <Square className="w-5 h-5" />}
+                           </button>
+                           <div className="flex-1 flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6 min-w-0">
+                             <div 
+                               onClick={() => {
+                                 setViewingCover(asset);
+                               }}
+                               className={`w-[72px] h-[72px] sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
+                             >
                               {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
                                 <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
                               )}
@@ -1578,6 +1667,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                </span>
                             </div>
+                           </div>
                          </div>
                       </motion.div>
                     ))}
@@ -1893,6 +1983,32 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               <div className="flex gap-4">
                  <button onClick={() => setAssetToDelete(null)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
                  <button onClick={() => executeDeleteAsset(assetToDelete)} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isBulkDeleting && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setIsBulkDeleting(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="font-black uppercase tracking-widest mb-4">Purge {selectedAssets.size} Assets</h3>
+              <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to permanently delete {selectedAssets.size} selected assets? This action cannot be undone.</p>
+              <div className="flex gap-4">
+                 <button onClick={() => setIsBulkDeleting(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                 <button onClick={executeBulkDelete} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
               </div>
             </motion.div>
           </motion.div>
