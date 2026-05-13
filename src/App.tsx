@@ -2843,14 +2843,14 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 md:pt-24 bg-black/90 backdrop-blur-sm"
             onClick={() => setPreviewMedia(null)}
           >
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className={`relative max-w-5xl w-full max-h-[90vh] border-2 border-black overflow-hidden flex flex-col ${theme === 'dark' ? 'bg-[#0A0A0A] border-white/20' : 'bg-white border-black'}`}
+              className={`relative max-w-5xl w-full max-h-[70vh] md:max-h-[85vh] border-2 border-black overflow-hidden flex flex-col ${theme === 'dark' ? 'bg-[#0A0A0A] border-white/20' : 'bg-white border-black'}`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-white/10 bg-[#141414]' : 'border-black bg-white'}`}>
@@ -2955,19 +2955,6 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     </div>
                   </div>
                 )}
-              </div>
-              
-              <div className={`p-4 border-t flex justify-end ${theme === 'dark' ? 'border-white/10 bg-[#141414]' : 'border-black bg-white'}`}>
-                <button 
-                  onClick={() => setPreviewMedia(null)}
-                  className={`px-6 py-2 border-2 font-bold text-xs uppercase tracking-widest transition-all active:shadow-none active:translate-x-[2px] active:translate-y-[2px] ${
-                    theme === 'dark' 
-                      ? 'border-white text-white hover:bg-white hover:text-black shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)]' 
-                      : 'border-black text-black hover:bg-black hover:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                  }`}
-                >
-                  Close_Preview
-                </button>
               </div>
             </motion.div>
           </motion.div>
