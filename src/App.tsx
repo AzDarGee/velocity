@@ -1759,7 +1759,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         setAppMode={setAppMode}
       />
 
-      <main className={`max-w-7xl mx-auto p-4 md:p-12 ${appMode === 'media' ? 'h-auto lg:h-[calc(100vh-80px)] p-0 md:p-0' : ''}`}>
+      <main className={`mx-auto ${appMode === 'media' ? 'max-w-7xl h-auto lg:h-[calc(100vh-80px)] p-0 md:p-0' : 'max-w-none w-full p-4 md:p-12'}`}>
         {appMode === 'media' ? (
           <div className={`h-full border-2 ${theme === 'dark' ? 'border-[#333] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'}`}>
             <MultiModalStudio 
