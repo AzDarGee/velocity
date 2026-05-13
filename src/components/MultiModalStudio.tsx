@@ -66,6 +66,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [viewingCover, setViewingCover] = useState<MediaAsset | null>(null);
   const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
   const [viewingLyrics, setViewingLyrics] = useState<MediaAsset | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<MediaAsset | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -346,21 +347,23 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         const genAI = new GoogleGenAI({ apiKey });
 
         if (activeMode === 'image') {
-          modelUsed = "Gemini 2.5 Flash Image";
+          modelUsed = "Imagen 3.0";
           const response = await genAI.models.generateContent({
-            model: "gemini-2.5-flash-image",
+            model: "imagen-3.0-generate-002",
             contents: [{ parts: [{ text: prompt }] }],
             config: {
               imageConfig: {
-                aspectRatio: aspectRatio as any,
+                 aspectRatio: aspectRatio as any,
               }
             }
           });
           
+          console.log("Image generation response:", JSON.stringify(response));
           const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
           if (imagePart?.inlineData?.data) {
             finalUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
           } else {
+            console.error("Image generation failed, response:", JSON.stringify(response));
             throw new Error("No image data returned. Ensure Imagen API is enabled.");
           }
         } else if (activeMode === 'video') {
@@ -485,11 +488,12 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const genAI = new GoogleGenAI({ apiKey });
       
       const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash-image",
+        model: "imagen-3.0-generate-002",
         contents: [{ parts: [{ text: prompt }] }],
         config: {
           imageConfig: {
-            aspectRatio: "1:1",
+             numberOfImages: 1,
+             outputMimeType: "image/png",
           }
         }
       });
@@ -688,7 +692,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     }
   };
 
-  const handleDeleteAsset = async (asset: MediaAsset) => {
+  const executeDeleteAsset = async (asset: MediaAsset) => {
     if (!userId) return;
     try {
       const { db, storage } = await import('../lib/firebase');
@@ -717,6 +721,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     } catch (err) {
       console.error("Failed to delete asset:", err);
     }
+    setAssetToDelete(null);
   };
 
   const getModelBadgeColors = (type: GenerationMode) => {
@@ -1224,7 +1229,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     <th className="py-4 px-4 font-normal">Asset</th>
                     <th className="py-4 px-4 font-normal">Type & Source</th>
                     <th className="py-4 px-4 font-normal">Details & Metadata</th>
-                    <th className="py-4 px-4 font-normal text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1261,7 +1265,71 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             </div>
                             <div className="flex flex-col min-w-0">
                                <span className="font-bold text-sm uppercase tracking-tight truncate max-w-[200px] mb-1" title={asset.name}>{asset.name}</span>
-                               <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest">
+                               
+                               {/* Asset Actions */}
+                               <div className="flex gap-1.5 mt-1.5 mb-1.5">
+                                 {asset.type === 'audio' && asset.source === 'generated' && (
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
+                                     disabled={coverGeneratingAssets.has(asset.id)}
+                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                       theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
+                                     } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                     title="Generate Song Cover"
+                                   >
+                                     {coverGeneratingAssets.has(asset.id) ? (
+                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                     ) : (
+                                       <Sparkles className="w-3.5 h-3.5" />
+                                     )}
+                                   </button>
+                                 )}
+                                 {asset.type === 'audio' && asset.source === 'generated' && (
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
+                                     disabled={lyricsLoadingAssets.has(asset.id)}
+                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                       theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
+                                     } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                     title="View Temporal Lyrics"
+                                   >
+                                     {lyricsLoadingAssets.has(asset.id) ? (
+                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                     ) : (
+                                       <Wand2 className="w-3.5 h-3.5" />
+                                     )}
+                                   </button>
+                                 )}
+                                 {asset.source === 'generated' && (
+                                   <button 
+                                     onClick={() => onAddAssetToNarrative?.(asset)}
+                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                       theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
+                                     }`}
+                                     title="Add to Narrative Context"
+                                   >
+                                     <BookOpen className="w-3.5 h-3.5" />
+                                   </button>
+                                 )}
+                                 <button 
+                                   onClick={() => {
+                                     if (asset.url) {
+                                       window.open(asset.url, '_blank');
+                                     }
+                                   }}
+                                   className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
+                                     theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                                   }`} title="Download / Open">
+                                     <Download className="w-3.5 h-3.5" />
+                                 </button>
+                                 <button 
+                                   onClick={() => setAssetToDelete(asset)}
+                                   className="w-7 h-7 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
+                                     <Trash2 className="w-3.5 h-3.5" />
+                                 </button>
+                               </div>
+
+                               <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest mt-1">
                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                </span>
                             </div>
@@ -1322,78 +1390,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             ) : (
                               <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest">No Context Data</span>
                             )}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-4 px-4 text-right whitespace-nowrap">
-                          <div className={`flex items-center justify-end gap-2 transition-opacity ${asset.url ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                             {asset.type === 'audio' && asset.source === 'generated' && (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
-                                 disabled={coverGeneratingAssets.has(asset.id)}
-                                 className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
-                                   theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
-                                 } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                 title="Generate Song Cover"
-                               >
-                                 {coverGeneratingAssets.has(asset.id) ? (
-                                   <RefreshCw className="w-3 h-3 animate-spin" />
-                                 ) : (
-                                   <Sparkles className="w-3 h-3" />
-                                 )}
-                                 <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">
-                                   {coverGeneratingAssets.has(asset.id) ? 'Painting...' : 'Cover'}
-                                 </span>
-                               </button>
-                            )}
-                            {asset.type === 'audio' && asset.source === 'generated' && (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
-                                 disabled={lyricsLoadingAssets.has(asset.id)}
-                                 className={`p-2 rounded-none border-2 transition-colors flex items-center gap-2 ${
-                                   theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
-                                 } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                 title="View Temporal Lyrics"
-                               >
-                                 {lyricsLoadingAssets.has(asset.id) ? (
-                                   <RefreshCw className="w-3 h-3 animate-spin" />
-                                 ) : (
-                                   <Wand2 className="w-3 h-3" />
-                                 )}
-                                 <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">
-                                   {lyricsLoadingAssets.has(asset.id) ? 'Decoding...' : 'Lyrics'}
-                                 </span>
-                               </button>
-                            )}
-                            {asset.source === 'generated' && (
-                              <button 
-                                onClick={() => onAddAssetToNarrative?.(asset)}
-                                className={`p-2 rounded-none border-2 transition-colors group-hover:border-current flex items-center gap-2 ${
-                                  theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black hover:border-white' : 'border-gray-200 hover:bg-black hover:text-white hover:border-black'
-                                }`}
-                                title="Add to Narrative Context"
-                              >
-                                <BookOpen className="w-3 h-3" />
-                                <span className="text-[9px] font-bold uppercase tracking-widest hidden xl:inline">Insert</span>
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => {
-                                if (asset.url) {
-                                  window.open(asset.url, '_blank');
-                                }
-                              }}
-                              className={`p-2 rounded-none border-2 transition-colors ${
-                              theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
-                            }`} title="Download / Open">
-                              <Download className="w-3 h-3" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteAsset(asset)}
-                              className="p-2 rounded-none border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
-                              <Trash2 className="w-3 h-3" />
-                            </button>
                           </div>
                         </td>
                       </motion.tr>
@@ -1684,6 +1680,33 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 >
                   Return to Studio
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Deletion Confirmation Modal */}
+      <AnimatePresence>
+        {assetToDelete && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setAssetToDelete(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="font-black uppercase tracking-widest mb-4">Purge Asset</h3>
+              <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to permanently delete {assetToDelete.name}? This action cannot be undone.</p>
+              <div className="flex gap-4">
+                 <button onClick={() => setAssetToDelete(null)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                 <button onClick={() => executeDeleteAsset(assetToDelete)} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
               </div>
             </motion.div>
           </motion.div>
