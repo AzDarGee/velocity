@@ -857,7 +857,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         <div className={`w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-gray-50'} p-4 md:p-6 flex flex-col lg:h-auto max-h-[100vh] lg:max-h-none`}>
           <div className="flex items-center gap-2 mb-4 md:mb-6 shrink-0">
             <Wand2 className="w-4 h-4 md:w-5 md:h-5 opacity-60" />
-            <h3 className="font-bold uppercase tracking-widest text-[10px] md:text-sm">Composer Parameters</h3>
+            <h3 className="font-bold uppercase tracking-widest text-[13px]">Composer Parameters</h3>
           </div>
 
           <div className="flex-1 space-y-4 md:space-y-6 overflow-y-auto min-h-0 pr-1 md:pr-4 history-scrollbar">

@@ -1196,7 +1196,7 @@ export function UserButton({
                     <div className="flex items-start justify-between w-full">
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-mono tracking-widest opacity-40">{pack.name}_Unit</span>
-                        <div className="text-2xl font-bold font-mono">{pack.credits} <span className="text-xs italic opacity-60">CRD</span></div>
+                        <div className="text-2xl font-bold font-mono">{pack.credits} <span className="text-[13px] italic opacity-60">CRD</span></div>
                       </div>
                       <div className={`text-xl font-bold font-mono ${theme === 'dark' ? 'text-yellow-500' : 'text-yellow-600'}`}>
                         {pack.price}
@@ -1241,7 +1241,7 @@ export function UserButton({
                     <div className="flex items-start justify-between w-full">
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-mono tracking-widest opacity-40">{plan.name}_Subscription</span>
-                        <div className="text-2xl font-bold font-mono">{plan.credits} <span className="text-xs italic opacity-60">CRD / {plan.interval === 'week' ? 'WK' : plan.interval === 'month' ? 'MO' : 'YR'}</span></div>
+                        <div className="text-2xl font-bold font-mono">{plan.credits} <span className="text-[13px] italic opacity-60">CRD / {plan.interval === 'week' ? 'WK' : plan.interval === 'month' ? 'MO' : 'YR'}</span></div>
                       </div>
                       <div className={`text-xl font-bold font-mono ${theme === 'dark' ? 'text-yellow-500' : 'text-yellow-600'}`}>
                         {plan.price}<span className="text-[10px] uppercase opacity-40">/{plan.interval}</span>
@@ -1285,7 +1285,8 @@ export function UserButton({
                     <div className="flex items-start justify-between w-full">
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-mono tracking-widest opacity-40">{plan.name}_Studio</span>
-                        <div className="text-2xl font-bold font-mono">{plan.credits} <span className="text-xs italic opacity-60">CRD / {plan.interval === 'mo' ? 'MO' : 'YR'}</span></div>
+                        <div className="text-2xl font-bold font-mono">{plan.credits} <span className="text-[13px] italic opacity-60">CRD / MO</span></div>
+                        {plan.interval === 'yr' && <span className="text-[8px] block opacity-40 italic">(accrued monthly)</span>}
                       </div>
                       <div className={`text-xl font-bold font-mono ${theme === 'dark' ? 'text-yellow-500' : 'text-yellow-600'}`}>
                         {plan.price}<span className="text-[10px] uppercase opacity-40">/{plan.interval}</span>
@@ -1334,7 +1335,7 @@ export function UserButton({
                        </span>
                     </div>
                     <div className="text-xl font-bold font-mono">
-                      {tier.credits} <span className="text-xs italic opacity-60">CRD / MO</span>
+                      {tier.credits} <span className="text-[13px] italic opacity-60">CRD / MO</span>
                       {tier.interval === 'yr' && <span className="text-[8px] block opacity-40 italic">(accrued monthly)</span>}
                     </div>
                     <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60">
