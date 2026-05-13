@@ -30,13 +30,21 @@ export interface MediaAsset {
   metadata?: any;
 }
 
-const DEFAULT_STYLES = [
+const DEFAULT_MUSIC_STYLES = [
   "Pop", "Rock", "Hip Hop", "R&B", "Country", 
   "Jazz", "Classical", "Electronic", "Dance", "Folk",
   "Acoustic", "Blues", "Soul", "Funk", "Disco",
   "Reggae", "Latin", "Metal", "Punk", "Indie Rock",
   "Alternative", "Synthwave", "Ambient", "Cinematic", "Lo-Fi",
   "Trap", "EDM", "House", "Techno", "K-Pop"
+];
+
+const DEFAULT_IMAGE_STYLES = [
+  "Photorealistic", "Cinematic", "Digital Art", "Oil Painting", "Watercolor",
+  "Sketch", "Anime", "Cyberpunk", "Vaporwave", "Surrealism",
+  "Pop Art", "Minimalist", "Baroque", "Impressionism", "Renaissance",
+  "Street Art", "Pixel Art", "3D Render", "Isometric", "Macro Photography",
+  "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
 export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
@@ -55,7 +63,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     }
   });
   const prompt = prompts[activeMode];
-  const [imageStyle, setImageStyle] = useState<string>(() => localStorage.getItem("studioImageStyle") || "Photorealistic");
+  const [imageStyles, setImageStyles] = useState<string[]>(() => {
+    const saved = localStorage.getItem("studioImageStyles");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    const legacy = localStorage.getItem("studioImageStyle");
+    return legacy ? [legacy] : ["Photorealistic"];
+  });
+  const [customImageStyles, setCustomImageStyles] = useState<string[]>(() => {
+    const saved = localStorage.getItem("customImageStyles");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [newImageStyle, setNewImageStyle] = useState("");
   const [aspectRatio, setAspectRatio] = useState<string>(() => localStorage.getItem("studioAspectRatio") || "16:9");
   const [resolution, setResolution] = useState<string>(() => localStorage.getItem("studioResolution") || "1080p");
   const [generatingModes, setGeneratingModes] = useState<Set<string>>(new Set());
@@ -169,8 +189,12 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   }, [prompts]);
 
   useEffect(() => {
-    localStorage.setItem("studioImageStyle", imageStyle);
-  }, [imageStyle]);
+    localStorage.setItem("studioImageStyles", JSON.stringify(imageStyles));
+  }, [imageStyles]);
+
+  useEffect(() => {
+    localStorage.setItem("customImageStyles", JSON.stringify(customImageStyles));
+  }, [customImageStyles]);
 
   useEffect(() => {
     localStorage.setItem("studioAspectRatio", aspectRatio);
@@ -532,7 +556,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           modelUsed = "Gemini 3.1 Flash Image";
           const response = await genAI.models.generateContent({
             model: "gemini-3.1-flash-image-preview",
-            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Style: ${imageStyle}. Do not output text, only generate the image: ${prompt}` }] }],
+            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Style: ${imageStyles.join(", ")}. Do not output text, only generate the image: ${prompt}` }] }],
             config: {
               imageConfig: {
                  aspectRatio: aspectRatio as any,
@@ -1033,14 +1057,14 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               
               <div className="space-y-4">
                 {activeMode === 'image' && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-6">
                     <div>
-                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Aspect Ratio</label>
+                      <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Aspect Ratio</label>
                       <select 
                         value={aspectRatio}
                         onChange={e => setAspectRatio(e.target.value)}
                         disabled={isGenerating}
-                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`w-full p-2.5 border text-[11px] font-mono outline-none cursor-pointer ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <option value="1:1">1:1 Square</option>
                         <option value="4:3">4:3 Ratio</option>
@@ -1049,18 +1073,91 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         <option value="9:16">9:16 Vertical</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Style</label>
-                      <select 
-                        value={imageStyle}
-                        onChange={e => setImageStyle(e.target.value)}
-                        disabled={isGenerating}
-                        className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <option value="Photorealistic">Photorealistic</option>
-                        <option value="Cinematic">Cinematic</option>
-                        <option value="Digital Art">Digital Art</option>
-                      </select>
+
+                    <div className="pt-2">
+                       <div className="flex justify-between items-center mb-2">
+                        <label className="text-[10px] uppercase font-mono opacity-60 tracking-wider">Styles [{imageStyles.length}]</label>
+                        {imageStyles.length > 0 && (
+                          <button 
+                            onClick={() => setImageStyles([])}
+                            className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      <div className={`flex gap-2 mb-2 ${isGenerating ? 'opacity-50' : ''}`}>
+                        <input 
+                          type="text"
+                          value={newImageStyle}
+                          onChange={(e) => setNewImageStyle(e.target.value)}
+                          disabled={isGenerating}
+                          placeholder="Custom style..."
+                          className={`flex-1 p-2 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'} ${isGenerating ? 'cursor-not-allowed' : ''}`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newImageStyle.trim() && !isGenerating) {
+                              e.preventDefault();
+                              const val = newImageStyle.trim();
+                              if (!customImageStyles.includes(val) && !DEFAULT_IMAGE_STYLES.includes(val)) {
+                                setCustomImageStyles([val, ...customImageStyles]);
+                              }
+                              if (!imageStyles.includes(val)) {
+                                setImageStyles([...imageStyles, val]);
+                              }
+                              setNewImageStyle("");
+                            }
+                          }}
+                        />
+                        <button 
+                          onClick={() => {
+                            const val = newImageStyle.trim();
+                            if (!customImageStyles.includes(val) && !DEFAULT_IMAGE_STYLES.includes(val)) {
+                              setCustomImageStyles([val, ...customImageStyles]);
+                            }
+                            if (!imageStyles.includes(val)) {
+                              setImageStyles([...imageStyles, val]);
+                            }
+                            setNewImageStyle("");
+                          }}
+                          disabled={isGenerating || !newImageStyle.trim()}
+                          className={`px-2 py-1 border text-[11px] font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-white hover:bg-white hover:text-black' : 'bg-white border-gray-300 text-black hover:bg-black hover:text-white'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          Add
+                        </button>
+                      </div>
+                      <div className={`w-full border max-h-48 overflow-y-auto p-3 space-y-2 scrollbar-thin ${
+                        theme === 'dark' 
+                          ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
+                          : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
+                      }`}>
+                        {Array.from(new Set([...customImageStyles, ...DEFAULT_IMAGE_STYLES])).map((style) => (
+                          <label key={`img-style-${style}`} className={`flex items-center gap-3 group/item ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            <div className="relative flex items-center justify-center">
+                              <input 
+                                type="checkbox"
+                                checked={imageStyles.includes(style)}
+                                disabled={isGenerating}
+                                onChange={(e) => {
+                                  if (isGenerating) return;
+                                  const newList = e.target.checked 
+                                    ? [...imageStyles, style]
+                                    : imageStyles.filter(a => a !== style);
+                                  setImageStyles(newList);
+                                }}
+                                className={`peer appearance-none w-3.5 h-3.5 border transition-colors ${
+                                  theme === 'dark' 
+                                    ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white' 
+                                    : 'border-gray-300 bg-white checked:bg-black checked:border-black'
+                                } ${isGenerating ? 'cursor-not-allowed' : ''}`}
+                              />
+                              <Check className={`w-2.5 h-2.5 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
+                            </div>
+                            <span className={`text-[10px] font-mono transition-colors ${imageStyles.includes(style) ? 'font-bold' : 'opacity-60 group-hover/item:opacity-100'}`}>
+                              {style}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1179,7 +1276,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                   let addedStyles = [...customStyles];
                                   let selectedStyles = [...sunoStyles];
                                   vals.forEach(val => {
-                                    if (!addedStyles.includes(val) && !DEFAULT_STYLES.includes(val)) {
+                                    if (!addedStyles.includes(val) && !DEFAULT_MUSIC_STYLES.includes(val)) {
                                       addedStyles = [val, ...addedStyles];
                                     }
                                     if (!selectedStyles.includes(val)) {
@@ -1199,7 +1296,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                   let addedStyles = [...customStyles];
                                   let selectedStyles = [...sunoStyles];
                                   vals.forEach(val => {
-                                    if (!addedStyles.includes(val) && !DEFAULT_STYLES.includes(val)) {
+                                    if (!addedStyles.includes(val) && !DEFAULT_MUSIC_STYLES.includes(val)) {
                                       addedStyles = [val, ...addedStyles];
                                     }
                                     if (!selectedStyles.includes(val)) {
@@ -1222,7 +1319,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                               ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
                               : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
                           }`}>
-                            {Array.from(new Set([...customStyles, ...DEFAULT_STYLES])).map((style, idx) => (
+                            {Array.from(new Set([...customStyles, ...DEFAULT_MUSIC_STYLES])).map((style, idx) => (
                               <label key={`style-seg-${style}`} className={`flex items-center gap-3 group/item ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                 <div className="relative flex items-center justify-center">
                                   <input 
