@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { RotatingQuotes } from './ui/RotatingQuotes';
 import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check } from 'lucide-react';
 
 interface MultiModalStudioProps {
@@ -40,10 +41,18 @@ const DEFAULT_STYLES = [
 
 export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>('image');
-  const [prompt, setPrompt] = useState("");
+  const [prompts, setPrompts] = useState({
+    image: "",
+    video: "",
+    music: ""
+  });
+  const prompt = prompts[activeMode];
   const [aspectRatio, setAspectRatio] = useState<string>("16:9");
   const [resolution, setResolution] = useState<string>("1080p");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingModes, setGeneratingModes] = useState<Set<string>>(new Set());
+  const [autoPromptModes, setAutoPromptModes] = useState<Set<string>>(new Set());
+  const isGenerating = generatingModes.has(activeMode);
+  const isAutoPrompting = autoPromptModes.has(activeMode);
   const [error, setError] = useState<string | null>(null);
   const [sunoCustomMode, setSunoCustomMode] = useState(false);
   const [sunoInstrumental, setSunoInstrumental] = useState(false);
@@ -59,7 +68,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [sunoStyleWeight, setSunoStyleWeight] = useState<number>(0.65);
   const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(0.65);
   const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
-  const [isAutoPrompting, setIsAutoPrompting] = useState(false);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [coverGeneratingAssets, setCoverGeneratingAssets] = useState<Set<string>>(new Set());
   const [lyricsLoadingAssets, setLyricsLoadingAssets] = useState<Set<string>>(new Set());
@@ -67,6 +75,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
   const [viewingLyrics, setViewingLyrics] = useState<MediaAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<MediaAsset | null>(null);
+
+  const FOCUS_QUOTES = [
+    "Scanning content nodes...",
+    "Aligning narrative vectors...",
+    "Calibrating strategic intent...",
+    "Synthesizing unique angles...",
+    "Decoding audience resonance...",
+    "Optimizing hook frequency...",
+    "Mapping key thematic clusters..."
+  ];
 
   useEffect(() => {
     if (!userId) return;
@@ -108,8 +126,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   }, [userId]);
 
   const handleAutoPrompt = async () => {
-    if (isAutoPrompting || isGenerating) return;
-    setIsAutoPrompting(true);
+    const executeMode = activeMode;
+    const currentPrompt = prompts[executeMode];
+    if (autoPromptModes.has(executeMode) || generatingModes.has(executeMode)) return;
+    setAutoPromptModes(prev => new Set(prev).add(executeMode));
     setError(null);
     try {
       const { GoogleGenAI } = await import("@google/genai");
@@ -119,14 +139,14 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const genAI = new GoogleGenAI({ apiKey });
       
       let systemPrompt = "You are a creative prompt engineer. ";
-      if (activeMode === 'image') systemPrompt += "Generate a highly detailed and descriptive prompt for an image generation model. Focus on composition, lighting, subject matter, style, and mood.";
-      else if (activeMode === 'video') systemPrompt += "Generate a highly detailed, cinematic prompt for a video generation model (like Veo). Describe the scene, the motion, the camera movement, the lighting, and the overall atmosphere.";
-      else if (activeMode === 'music') {
+      if (executeMode === 'image') systemPrompt += "Generate a highly detailed and descriptive prompt for an image generation model. Focus on composition, lighting, subject matter, style, and mood.";
+      else if (executeMode === 'video') systemPrompt += "Generate a highly detailed, cinematic prompt for a video generation model (like Veo). Describe the scene, the motion, the camera movement, the lighting, and the overall atmosphere.";
+      else if (executeMode === 'music') {
         if (sunoCustomMode) systemPrompt += "Generate creative lyrics with musical direction tags (like [Verse], [Chorus]) for a custom music generation model.";
         else systemPrompt += "Generate a creative and evocative prompt for a music generation model. Describe the genre, instrumentation, tempo, mood, and any lyrical themes.";
       }
       
-      systemPrompt += ` Only return the prompt text, nothing else. If the user already provided some text, enhance and expand upon it: "${prompt || 'Surprise me'}"`;
+      systemPrompt += ` Only return the prompt text, nothing else. If the user already provided some text, enhance and expand upon it: "${currentPrompt || 'Surprise me'}"`;
 
       const response = await genAI.models.generateContent({
         model: "gemini-2.5-flash",
@@ -134,26 +154,32 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       });
       
       const newPrompt = response.text?.trim() || "";
-      if (newPrompt) setPrompt(newPrompt);
+      if (newPrompt) setPrompts(prev => ({ ...prev, [executeMode]: newPrompt }));
     } catch (err: any) {
       console.error("Auto prompt error:", err);
       setError(err.message || "Failed to generate prompt.");
     } finally {
-      setIsAutoPrompting(false);
+      setAutoPromptModes(prev => {
+        const next = new Set(prev);
+        next.delete(executeMode);
+        return next;
+      });
     }
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    const executeMode = activeMode;
+    const currentPrompt = prompts[executeMode];
+    if (!currentPrompt.trim()) return;
     setError(null);
 
-    const cost = GENERATION_COSTS[activeMode];
+    const cost = GENERATION_COSTS[executeMode];
     if (!isAdmin && credits < cost) {
       setError(`Insufficient Credits: Generation requires ${cost} credits. You have ${credits}.`);
       return;
     }
 
-    setIsGenerating(true);
+    setGeneratingModes(prev => new Set(prev).add(executeMode));
 
     const startTime = Date.now();
 
@@ -369,12 +395,12 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         } else if (activeMode === 'video') {
           modelUsed = "Veo 3.1";
           let operation = await genAI.models.generateVideos({
-            model: 'veo-3.1-generate-preview',
+            model: 'veo-3.1-lite-generate-preview',
             prompt: prompt,
             config: {
               numberOfVideos: 1,
-              resolution: resolution as any,
-              aspectRatio: aspectRatio as any
+              resolution: resolution === '4k' ? '1080p' : (resolution as any),
+              aspectRatio: (aspectRatio === '1:1' || aspectRatio === '4:3' || aspectRatio === '3:4') ? '16:9' : (aspectRatio as any)
             }
           });
 
@@ -385,7 +411,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           }
 
           const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-          if (!downloadLink) throw new Error("Video synthesis failed to return a valid stream URI.");
+          if (!downloadLink) {
+             console.error("Video synthesis failed. Operation result:", JSON.stringify(operation));
+             const errMsg = (operation.error as any)?.message || "Video synthesis failed to return a valid stream URI.";
+             throw new Error(errMsg);
+          }
 
           // Fetch video using API key in header as per skill guidelines
           const videoResponse = await fetch(downloadLink, {
@@ -398,6 +428,25 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           if (!videoResponse.ok) throw new Error("Failed to secure kinetic stream from synthesized URI.");
           const blob = await videoResponse.blob();
           finalUrl = URL.createObjectURL(blob);
+          
+          // Generate a cover image based on the video prompt
+          try {
+            const coverImageResponse = await genAI.models.generateContent({
+              model: "gemini-3.1-flash-image-preview",
+              contents: [{ parts: [{ text: `Generate a high quality cover image for the following video concept. No text on the image. Concept: ${prompt}` }] }],
+              config: {
+                imageConfig: {
+                  aspectRatio: aspectRatio as any,
+                }
+              }
+            });
+            const imagePart = coverImageResponse.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+            if (imagePart?.inlineData?.data) {
+               finalMetadata.coverBase64 = imagePart.inlineData.data;
+            }
+          } catch (coverErr) {
+            console.error("Failed to generate cover image for video:", coverErr);
+          }
         }
       }
       
@@ -426,7 +475,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       let storageUrl = finalUrl;
       const { db, storage } = await import('../lib/firebase');
       const { doc, setDoc } = await import('firebase/firestore');
-      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { ref, uploadBytes, uploadString, getDownloadURL } = await import('firebase/storage');
       
       try {
         if (finalUrl) {
@@ -444,6 +493,17 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             imageUrl: storageUrl // Ensure imageUrl is added for image mode
           };
           
+          if (finalMetadata.coverBase64) {
+             const coverRef = ref(storage, `uploads/generated/${userId}/${newAsset.id}_cover.png`);
+             await uploadString(coverRef, finalMetadata.coverBase64, 'base64', { contentType: 'image/png' });
+             const coverUrl = await getDownloadURL(coverRef);
+             newAsset.metadata.coverUrl = coverUrl;
+             delete newAsset.metadata.coverBase64;
+             
+             // Optionally update finalMetadata as well so it's not saved to Firestore
+             delete finalMetadata.coverBase64;
+          }
+
           // Revoke the local object URL to prevent memory leaks now that we have it requested
           if (finalUrl.startsWith('blob:')) {
              URL.revokeObjectURL(finalUrl);
@@ -459,12 +519,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         console.error("Failed to save asset to database:", err);
       }
       
-      setPrompt("");
+      setPrompts(prev => ({ ...prev, [executeMode]: "" }));
     } catch (err: any) {
-      console.error(`Generation error (${activeMode}):`, err);
+      console.error(`Generation error (${executeMode}):`, err);
       setError(err.message || "An unexpected error occurred during synthesis.");
     } finally {
-      setIsGenerating(false);
+      setGeneratingModes(prev => {
+        const next = new Set(prev);
+        next.delete(executeMode);
+        return next;
+      });
     }
   };
 
@@ -1145,7 +1209,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           <div className="mt-4 pt-4 border-t border-current/10 shrink-0">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt</label>
+                <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt ({activeMode})</label>
                 <button
                   onClick={handleAutoPrompt}
                   disabled={isAutoPrompting || isGenerating}
@@ -1155,17 +1219,33 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   Auto-Generate
                 </button>
               </div>
-              <textarea 
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                disabled={isGenerating || isAutoPrompting}
-                placeholder={`Describe the ${activeMode} you want to synthesize...`}
-                className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
-                  theme === 'dark' 
-                    ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
-                    : 'bg-white border-gray-300 focus:border-black'
-                } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''}`}
-              />
+              <div className="relative">
+                <textarea 
+                  value={prompt}
+                  onChange={e => setPrompts(prev => ({ ...prev, [activeMode]: e.target.value }))}
+                  disabled={isGenerating || isAutoPrompting}
+                  placeholder={`Describe the ${activeMode} you want to synthesize...`}
+                  className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
+                    theme === 'dark' 
+                      ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
+                      : 'bg-white border-gray-300 focus:border-black'
+                  } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''} ${isAutoPrompting ? 'text-transparent selection:text-transparent' : ''}`}
+                />
+                <AnimatePresence>
+                  {isAutoPrompting && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
+                        theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
+                      }`}
+                    >
+                      <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
           
@@ -1184,7 +1264,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               <Wand2 className="w-5 h-5" />
             )}
             <div className="flex flex-col items-center">
-              <span>{isGenerating ? 'Synthesizing...' : `Generate ${activeMode}`}</span>
+              <span>{isGenerating ? `Synthesizing ${activeMode}...` : `Generate ${activeMode}`}</span>
               {!isGenerating && (
                 <span className="text-[10px] opacity-60 font-mono tracking-tighter">
                   -{GENERATION_COSTS[activeMode]} CREDITS
@@ -1244,10 +1324,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                               }}
                               className={`w-[72px] h-[72px] sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
                             >
-                              {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url) && (
+                              {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
                                 <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
                               )}
-                              {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url) && (
+                              {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
                                 <>
                                   {asset.type === 'image' && <ImageIcon className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
                                   {asset.type === 'video' && <Video className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
