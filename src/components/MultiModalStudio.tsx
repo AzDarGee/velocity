@@ -1511,7 +1511,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                          <div className="flex items-start gap-3">
                            <button 
                              onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
-                             className="mt-2 w-5 h-5 flex items-center justify-center opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
+                             className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
+                               selectedAssets.has(asset.id) 
+                                 ? 'opacity-100' 
+                                 : 'opacity-0 group-hover:opacity-100'
+                             }`}
                            >
                              {selectedAssets.has(asset.id) ? <CheckSquare className="w-5 h-5 text-indigo-500" /> : <Square className="w-5 h-5" />}
                            </button>

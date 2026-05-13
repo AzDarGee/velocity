@@ -357,7 +357,9 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
+  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(() => {
+    return localStorage.getItem("currentGenerationId");
+  });
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
   const [historySortBy, setHistorySortBy] = useState<'updatedAt' | 'createdAt'>(() => {
     return (localStorage.getItem("historySortBy") as 'updatedAt' | 'createdAt') || 'updatedAt';
@@ -366,6 +368,7 @@ export default function App() {
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [viewerContent, setViewerContent] = useState<{ content: string; title: string } | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const hasLoadedInitialGen = useRef(false);
   const loadingMessages = [
     { title: "Initializing_Protocol", detail: "ESTABLISHING SECURE UPLINK TO MULTIMODAL CORES..." },
     { title: "Analyzing_Data_Streams", detail: "EXTRACTING SEMANTIC VECTORS FROM SOURCE MEDIA..." },
@@ -523,6 +526,7 @@ export default function App() {
         setHasOpenRouterKey(false);
         
         setCredits(null);
+        hasLoadedInitialGen.current = false;
         setHistory([]);
         setCurrentGenerationId(null);
         setCurrentAttachedFiles([]);
@@ -797,6 +801,35 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("historySortBy", historySortBy);
   }, [historySortBy]);
+
+  useEffect(() => {
+    if (currentGenerationId) {
+      localStorage.setItem("currentGenerationId", currentGenerationId);
+    } else {
+      localStorage.removeItem("currentGenerationId");
+    }
+  }, [currentGenerationId]);
+
+  useEffect(() => {
+    if (viewerContent) {
+      localStorage.setItem("isViewerOpenPersisted", "true");
+    } else {
+      localStorage.setItem("isViewerOpenPersisted", "false");
+    }
+  }, [viewerContent]);
+
+  useEffect(() => {
+    if (history.length > 0 && !hasLoadedInitialGen.current) {
+      hasLoadedInitialGen.current = true;
+      const savedGenId = localStorage.getItem("currentGenerationId");
+      if (savedGenId) {
+        const savedGen = history.find((g: any) => g.id === savedGenId);
+        if (savedGen) {
+          loadGeneration(savedGen);
+        }
+      }
+    }
+  }, [history]);
 
   useEffect(() => {
     const filesToSave = mediaFiles.map(f => {
