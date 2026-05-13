@@ -101,6 +101,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [assetToDelete, setAssetToDelete] = useState<MediaAsset | null>(null);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false);
 
   const toggleSelectAsset = (id: string) => {
     setSelectedAssets(prev => {
@@ -1371,75 +1372,85 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-          
-          <div className="mt-4 pt-4 border-t border-current/10 shrink-0">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt ({activeMode})</label>
-                <button
-                  onClick={handleAutoPrompt}
-                  disabled={isAutoPrompting || isGenerating}
-                  className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-white hover:text-black' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'} ${(isAutoPrompting || isGenerating) ? 'opacity-50 cursor-not-allowed' : ''}`}
+
+              <div className="space-y-4 pt-4 border-t border-current/10">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt ({activeMode})</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowClearConfirmation(true)}
+                        disabled={!prompt.trim() || isGenerating || isAutoPrompting}
+                        className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'} ${(!prompt.trim() || isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <Trash2 className="w-3 h-3 shrink-0" />
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleAutoPrompt}
+                        disabled={isAutoPrompting || isGenerating}
+                        className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-white hover:text-black' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'} ${(isAutoPrompting || isGenerating) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {isAutoPrompting ? <RefreshCw className="w-3 h-3 animate-spin shrink-0" /> : <Sparkles className="w-3 h-3 shrink-0" />}
+                        Auto-Generate
+                      </button>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <textarea 
+                      value={prompt}
+                      onChange={e => setPrompts(prev => ({ ...prev, [activeMode]: e.target.value }))}
+                      disabled={isGenerating || isAutoPrompting}
+                      placeholder={`Describe the ${activeMode} you want to synthesize...`}
+                      className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
+                        theme === 'dark' 
+                          ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
+                          : 'bg-white border-gray-300 focus:border-black'
+                      } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''} ${isAutoPrompting ? 'text-transparent selection:text-transparent' : ''}`}
+                    />
+                    <AnimatePresence>
+                      {isAutoPrompting && (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
+                            theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
+                          }`}
+                        >
+                          <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !prompt.trim()}
+                  className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-2 ${
+                    isGenerating 
+                      ? 'opacity-50 cursor-not-allowed bg-gray-500 text-white' 
+                      : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5`
+                  }`}
                 >
-                  {isAutoPrompting ? <RefreshCw className="w-3 h-3 animate-spin shrink-0" /> : <Sparkles className="w-3 h-3 shrink-0" />}
-                  Auto-Generate
+                  {isGenerating ? (
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-5 h-5" />
+                  )}
+                  <div className="flex flex-col items-center">
+                    <span>{isGenerating ? `Synthesizing ${activeMode}...` : `Generate ${activeMode}`}</span>
+                    {!isGenerating && (
+                      <span className="text-[10px] opacity-60 font-mono tracking-tighter">
+                        -{GENERATION_COSTS[activeMode]} CREDITS
+                      </span>
+                    )}
+                  </div>
                 </button>
               </div>
-              <div className="relative">
-                <textarea 
-                  value={prompt}
-                  onChange={e => setPrompts(prev => ({ ...prev, [activeMode]: e.target.value }))}
-                  disabled={isGenerating || isAutoPrompting}
-                  placeholder={`Describe the ${activeMode} you want to synthesize...`}
-                  className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
-                    theme === 'dark' 
-                      ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
-                      : 'bg-white border-gray-300 focus:border-black'
-                  } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''} ${isAutoPrompting ? 'text-transparent selection:text-transparent' : ''}`}
-                />
-                <AnimatePresence>
-                  {isAutoPrompting && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
-                        theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
-                      }`}
-                    >
-                      <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
             </div>
           </div>
-          
-          <button 
-            onClick={handleGenerate}
-            disabled={isGenerating || !prompt.trim()}
-            className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-6 flex-shrink-0 ${
-              isGenerating 
-                ? 'opacity-50 cursor-not-allowed bg-gray-500 text-white' 
-                : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5`
-            }`}
-          >
-            {isGenerating ? (
-              <RefreshCw className="w-5 h-5 animate-spin" />
-            ) : (
-              <Wand2 className="w-5 h-5" />
-            )}
-            <div className="flex flex-col items-center">
-              <span>{isGenerating ? `Synthesizing ${activeMode}...` : `Generate ${activeMode}`}</span>
-              {!isGenerating && (
-                <span className="text-[10px] opacity-60 font-mono tracking-tighter">
-                  -{GENERATION_COSTS[activeMode]} CREDITS
-                </span>
-              )}
-            </div>
-          </button>
         </div>
 
         {/* Right Console - Assets File Manager */}
@@ -2013,6 +2024,40 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               <div className="flex gap-4">
                  <button onClick={() => setIsBulkDeleting(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
                  <button onClick={executeBulkDelete} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showClearConfirmation && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setShowClearConfirmation(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="font-black uppercase tracking-widest mb-4">Clear Master Prompt</h3>
+              <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to clear the {activeMode} master prompt? This will erase all current text in the prompt field.</p>
+              <div className="flex gap-4">
+                 <button onClick={() => setShowClearConfirmation(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                 <button 
+                  onClick={() => {
+                    setPrompts((prev: any) => ({ ...prev, [activeMode]: "" }));
+                    setShowClearConfirmation(false);
+                  }} 
+                  className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors"
+                >
+                  Clear Prompt
+                </button>
               </div>
             </motion.div>
           </motion.div>
