@@ -1378,14 +1378,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt ({activeMode})</label>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowClearConfirmation(true)}
-                        disabled={!prompt.trim() || isGenerating || isAutoPrompting}
-                        className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'} ${(!prompt.trim() || isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <Trash2 className="w-3 h-3 shrink-0" />
-                        Clear
-                      </button>
+                      {prompt.length > 200 && (
+                        <button
+                          onClick={() => setShowClearConfirmation(true)}
+                          disabled={isGenerating || isAutoPrompting}
+                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'} ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <Trash2 className="w-3 h-3 shrink-0" />
+                          Clear
+                        </button>
+                      )}
                       <button
                         onClick={handleAutoPrompt}
                         disabled={isAutoPrompting || isGenerating}

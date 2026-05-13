@@ -334,7 +334,13 @@ export default function App() {
   const [preferences, setPreferences] = useState<BlogPreferences>(() => {
     const saved = localStorage.getItem("blogPreferences");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { 
+        const parsed = JSON.parse(saved);
+        if (parsed.specificFocus === "Unique narrative stories.") {
+          parsed.specificFocus = "";
+        }
+        return parsed;
+      } catch (e) {}
     }
     return {
       targetAudience: [],
@@ -375,6 +381,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [viewerContent, setViewerContent] = useState<{ content: string; title: string } | null>(null);
+  const [showClearConfirmation, setShowClearConfirmation] = useState<{ type: 'systemPrompt' | 'specificFocus' } | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const hasLoadedInitialGen = useRef(false);
   const loadingMessages = [
@@ -550,7 +557,7 @@ export default function App() {
           targetAudience: [],
           tone: [],
           length: "Medium (approx. 600 words)",
-          specificFocus: "Unique narrative stories.",
+          specificFocus: "",
           systemPrompt: "",
           model: "gemini-3-flash-preview",
         });
@@ -1327,7 +1334,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       targetAudience: [],
       tone: [],
       length: "Medium (approx. 600 words)",
-      specificFocus: "Unique narrative stories.",
+      specificFocus: "",
       systemPrompt: "",
       model: "gemini-3-flash-preview",
     });
@@ -2254,28 +2261,40 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-30' : 'opacity-60'}`}>System_Prompt *</label>
-                    <button
-                      type="button"
-                      onClick={handleGenerateSystemPrompt}
-                      disabled={isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
-                      className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
-                        theme === 'dark'
-                          ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
-                          : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                       } ${(!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {isGeneratingSystemPrompt ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="w-3 h-3" />
-                          Auto-Generate
-                        </>
+                    <div className="flex items-center gap-2">
+                      {preferences.systemPrompt.length > 200 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowClearConfirmation({ type: 'systemPrompt' })}
+                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'}`}
+                        >
+                          <Trash2 className="w-3 h-3 shrink-0" />
+                          Clear
+                        </button>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateSystemPrompt}
+                        disabled={isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                        className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
+                          theme === 'dark'
+                            ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
+                            : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
+                         } ${(!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {isGeneratingSystemPrompt ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="w-3 h-3" />
+                            Auto-Generate
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div className="relative">
                     <textarea 
@@ -2340,28 +2359,40 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className={`text-[10px] uppercase font-mono font-bold tracking-widest ${(!isFilesReady || preferences.targetAudience.length === 0) ? 'opacity-30' : 'opacity-60'}`}>Strategic_Focus</label>
-                    <button
-                      type="button"
-                      onClick={handleGenerateFocus}
-                      disabled={isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
-                      className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
-                        theme === 'dark'
-                          ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
-                          : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                      } ${!isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {isGeneratingFocus ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="w-3 h-3" />
-                          Auto-Generate
-                        </>
+                    <div className="flex items-center gap-2">
+                       {preferences.specificFocus.length > 200 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowClearConfirmation({ type: 'specificFocus' })}
+                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'}`}
+                        >
+                          <Trash2 className="w-3 h-3 shrink-0" />
+                          Clear
+                        </button>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateFocus}
+                        disabled={isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                        className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
+                          theme === 'dark'
+                            ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
+                            : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
+                        } ${!isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {isGeneratingFocus ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="w-3 h-3" />
+                            Auto-Generate
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div className="relative">
                     <textarea 
@@ -2369,7 +2400,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
                       disabled={!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || isGeneratingFocus}
                       rows={4}
-                      placeholder="Enter a strategic focus for the blog... *"
+                      placeholder="Define the core objective or specific angle for this narrative (e.g., 'Focus on the technical implementation of the new synthesis engine' or 'Highlight the emotional journey of the creator'). Use Auto-Generate for a suggestion based on your media context. *"
                       className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
                         theme === 'dark' 
                           ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
@@ -3074,6 +3105,40 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       </div>
     </div>
     <AnimatePresence>
+      {showClearConfirmation && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setShowClearConfirmation(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="font-black uppercase tracking-widest mb-4">Clear {showClearConfirmation.type === 'systemPrompt' ? 'System Prompt' : 'Strategic Focus'}</h3>
+              <p className="text-sm font-mono mb-6 opacity-70">
+                Are you sure you want to clear the {showClearConfirmation.type === 'systemPrompt' ? 'custom system prompt' : 'strategic focus'}? This will erase all current text in this field.
+              </p>
+              <div className="flex gap-4">
+                 <button onClick={() => setShowClearConfirmation(null)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                 <button 
+                  onClick={() => {
+                    setPreferences(prev => ({ ...prev, [showClearConfirmation.type]: "" }));
+                    setShowClearConfirmation(null);
+                  }} 
+                  className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors"
+                >
+                  Clear_Field
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       {isAdminModalOpen && (
         <AdminDashboard theme={theme} isAdmin={isAdmin} onClose={() => setIsAdminModalOpen(false)} />
       )}
