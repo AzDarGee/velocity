@@ -3117,7 +3117,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
+              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-[#F8F8F7]' : 'bg-white border-black text-[#141414]'} shadow-2xl`}
               onClick={e => e.stopPropagation()}
             >
               <h3 className="font-black uppercase tracking-widest mb-4">Clear {showClearConfirmation.type === 'systemPrompt' ? 'System Prompt' : 'Strategic Focus'}</h3>
