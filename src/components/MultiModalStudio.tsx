@@ -1355,38 +1355,9 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                  </button>
                                </div>
 
-<<<<<<< Updated upstream
                                <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest mt-1">
                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                </span>
-=======
-                               {/* Details and Metadata */}
-                               <div className="w-full max-w-3xl mt-2">
-                                 {asset.type === 'audio' && asset.url && (
-                                   <div className="mb-3 w-full">
-                                     <audio src={asset.url} controls className="w-full max-w-md h-8 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
-                                   </div>
-                                 )}
-                                 {asset.source === 'generated' && asset.metadata ? (
-                                   <div className={`flex flex-col gap-2 w-full p-4 border-l-2 transition-colors ${theme === 'dark' ? 'bg-white/5 border-white/20 hover:border-white/40' : 'bg-black/5 border-black/20 hover:border-black/40'}`}>
-                                     <div className="flex items-start gap-2">
-                                       <span className={`text-xs font-mono italic leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`} title={asset.metadata.prompt}>
-                                         "{asset.metadata.prompt && asset.metadata.prompt.length > 300 ? asset.metadata.prompt.substring(0, 300) + '...' : asset.metadata.prompt}"
-                                       </span>
-                                     </div>
-                                     {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
-                                       <div className="flex flex-wrap gap-3 text-[9px] font-mono uppercase tracking-widest opacity-60 mt-2">
-                                          {asset.metadata.title && <span className="font-bold border px-2 py-0.5 border-current bg-current/5">{asset.metadata.title}</span>}
-                                          {asset.metadata.duration && <span className="flex items-center">🕒 {asset.metadata.duration}s</span>}
-                                          {asset.metadata.tags && <span className="truncate max-w-[300px] flex items-center">🏷️ {asset.metadata.tags}</span>}
-                                       </div>
-                                     )}
-                                   </div>
-                                 ) : (
-                                   <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest inline-block mt-2">No Context Data Available</span>
-                                 )}
-                               </div>
->>>>>>> Stashed changes
                             </div>
                           </div>
                         </td>
