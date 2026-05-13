@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 {
   "name": "react-example",
   "private": true,
@@ -59,3 +60,65 @@
     "@types/dompurify": "^3.0.5"
   }
 }
+=======
+{
+  "name": "velocity",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "tsx server.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@google/genai": "^1.29.0",
+    "@stripe/stripe-js": "^9.4.0",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.1.14",
+    "@tiptap/extension-image": "^3.23.1",
+    "@tiptap/react": "^3.23.1",
+    "@tiptap/starter-kit": "^3.23.1",
+    "@types/express": "^5.0.6",
+    "@types/marked": "^5.0.2",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^22.14.0",
+    "@types/nodemailer": "^8.0.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "autoprefixer": "^10.4.21",
+    "dompurify": "^3.4.2",
+    "dotenv": "^17.2.3",
+    "esbuild": "^0.28.0",
+    "express": "^5.0.1",
+    "firebase": "^12.12.1",
+    "firebase-admin": "^12.7.0",
+    "html-react-parser": "^6.1.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^0.546.0",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.3",
+    "motion": "^12.23.24",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.7",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "react-markdown": "^10.1.0",
+    "react-quill-new": "^3.8.3",
+    "remark-gfm": "^4.0.1",
+    "sonner": "^2.0.7",
+    "stripe": "^17.0.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5"
+  }
+}
+>>>>>>> Stashed changes
