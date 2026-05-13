@@ -287,7 +287,9 @@ const prepareGeminiParts = async (mediaFiles: any[]) => {
 };
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'narrative' | 'media'>('narrative');
+  const [appMode, setAppMode] = useState<'narrative' | 'media'>(() => {
+    return (localStorage.getItem("appMode") as 'narrative' | 'media') || 'narrative';
+  });
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [blogPost, setBlogPost] = useState<string | null>(null);
@@ -307,16 +309,28 @@ export default function App() {
     }
     return "light";
   });
-  const [preferences, setPreferences] = useState<BlogPreferences>({
-    targetAudience: [],
-    tone: [],
-    length: "Medium (approx. 600 words)",
-    specificFocus: "",
-    model: "gemini-3-flash-preview",
-    systemPrompt: "",
+  const [preferences, setPreferences] = useState<BlogPreferences>(() => {
+    const saved = localStorage.getItem("blogPreferences");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      targetAudience: [],
+      tone: [],
+      length: "Medium (approx. 600 words)",
+      specificFocus: "",
+      model: "gemini-3-flash-preview",
+      systemPrompt: "",
+    };
   });
-  const [customAudiences, setCustomAudiences] = useState<string[]>([]);
-  const [customTones, setCustomTones] = useState<string[]>([]);
+  const [customAudiences, setCustomAudiences] = useState<string[]>(() => {
+     const saved = localStorage.getItem("customAudiences");
+     return saved ? JSON.parse(saved) : [];
+  });
+  const [customTones, setCustomTones] = useState<string[]>(() => {
+     const saved = localStorage.getItem("customTones");
+     return saved ? JSON.parse(saved) : [];
+  });
   const [newAudience, setNewAudience] = useState("");
   const [newTone, setNewTone] = useState("");
 
@@ -747,6 +761,22 @@ export default function App() {
       document.documentElement.classList.remove("dark");
     }
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("appMode", appMode);
+  }, [appMode]);
+
+  useEffect(() => {
+    localStorage.setItem("blogPreferences", JSON.stringify(preferences));
+  }, [preferences]);
+
+  useEffect(() => {
+    localStorage.setItem("customAudiences", JSON.stringify(customAudiences));
+  }, [customAudiences]);
+
+  useEffect(() => {
+    localStorage.setItem("customTones", JSON.stringify(customTones));
+  }, [customTones]);
 
   const removeMedia = (id: string) => {
     const fileToRemove = mediaFiles.find(v => v.id === id);

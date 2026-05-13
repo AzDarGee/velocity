@@ -40,34 +40,57 @@ const DEFAULT_STYLES = [
 ];
 
 export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
-  const [activeMode, setActiveMode] = useState<GenerationMode>('image');
-  const [prompts, setPrompts] = useState({
-    image: "",
-    video: "",
-    music: ""
+  const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
+    return (localStorage.getItem("studioActiveMode") as GenerationMode) || 'image';
+  });
+  const [prompts, setPrompts] = useState(() => {
+    const saved = localStorage.getItem("studioPrompts");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      image: "",
+      video: "",
+      music: ""
+    }
   });
   const prompt = prompts[activeMode];
-  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
-  const [resolution, setResolution] = useState<string>("1080p");
+  const [aspectRatio, setAspectRatio] = useState<string>(() => localStorage.getItem("studioAspectRatio") || "16:9");
+  const [resolution, setResolution] = useState<string>(() => localStorage.getItem("studioResolution") || "1080p");
   const [generatingModes, setGeneratingModes] = useState<Set<string>>(new Set());
   const [autoPromptModes, setAutoPromptModes] = useState<Set<string>>(new Set());
   const isGenerating = generatingModes.has(activeMode);
   const isAutoPrompting = autoPromptModes.has(activeMode);
   const [error, setError] = useState<string | null>(null);
-  const [sunoCustomMode, setSunoCustomMode] = useState(false);
-  const [sunoInstrumental, setSunoInstrumental] = useState(false);
-  const [sunoModel, setSunoModel] = useState("V4_5ALL");
-  const [sunoStyles, setSunoStyles] = useState<string[]>([]);
-  const [customStyles, setCustomStyles] = useState<string[]>([]);
+  const [sunoCustomMode, setSunoCustomMode] = useState(() => localStorage.getItem("sunoCustomMode") === "true");
+  const [sunoInstrumental, setSunoInstrumental] = useState(() => localStorage.getItem("sunoInstrumental") === "true");
+  const [sunoModel, setSunoModel] = useState(() => localStorage.getItem("sunoModel") || "V4_5ALL");
+  const [sunoStyles, setSunoStyles] = useState<string[]>(() => {
+    const saved = localStorage.getItem("sunoStyles");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [customStyles, setCustomStyles] = useState<string[]>(() => {
+    const saved = localStorage.getItem("customStyles");
+    return saved ? JSON.parse(saved) : [];
+  });
   const [newStyle, setNewStyle] = useState("");
-  const [sunoTitle, setSunoTitle] = useState("");
-  const [sunoPersonaId, setSunoPersonaId] = useState("");
-  const [sunoPersonaModel, setSunoPersonaModel] = useState("");
-  const [sunoNegativeTags, setSunoNegativeTags] = useState("");
-  const [sunoVocalGender, setSunoVocalGender] = useState("");
-  const [sunoStyleWeight, setSunoStyleWeight] = useState<number>(0.65);
-  const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(0.65);
-  const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(0.65);
+  const [sunoTitle, setSunoTitle] = useState(() => localStorage.getItem("sunoTitle") || "");
+  const [sunoPersonaId, setSunoPersonaId] = useState(() => localStorage.getItem("sunoPersonaId") || "");
+  const [sunoPersonaModel, setSunoPersonaModel] = useState(() => localStorage.getItem("sunoPersonaModel") || "");
+  const [sunoNegativeTags, setSunoNegativeTags] = useState(() => localStorage.getItem("sunoNegativeTags") || "");
+  const [sunoVocalGender, setSunoVocalGender] = useState(() => localStorage.getItem("sunoVocalGender") || "");
+  const [sunoStyleWeight, setSunoStyleWeight] = useState<number>(() => {
+    const saved = localStorage.getItem("sunoStyleWeight");
+    return saved !== null ? parseFloat(saved) : 0.65;
+  });
+  const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState<number>(() => {
+    const saved = localStorage.getItem("sunoWeirdnessConstraint");
+    return saved !== null ? parseFloat(saved) : 0.65;
+  });
+  const [sunoAudioWeight, setSunoAudioWeight] = useState<number>(() => {
+    const saved = localStorage.getItem("sunoAudioWeight");
+    return saved !== null ? parseFloat(saved) : 0.65;
+  });
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [coverGeneratingAssets, setCoverGeneratingAssets] = useState<Set<string>>(new Set());
   const [lyricsLoadingAssets, setLyricsLoadingAssets] = useState<Set<string>>(new Set());
@@ -75,6 +98,74 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
   const [viewingLyrics, setViewingLyrics] = useState<MediaAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<MediaAsset | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("studioActiveMode", activeMode);
+  }, [activeMode]);
+
+  useEffect(() => {
+    localStorage.setItem("studioPrompts", JSON.stringify(prompts));
+  }, [prompts]);
+
+  useEffect(() => {
+    localStorage.setItem("studioAspectRatio", aspectRatio);
+  }, [aspectRatio]);
+
+  useEffect(() => {
+    localStorage.setItem("studioResolution", resolution);
+  }, [resolution]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoCustomMode", sunoCustomMode ? "true" : "false");
+  }, [sunoCustomMode]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoInstrumental", sunoInstrumental ? "true" : "false");
+  }, [sunoInstrumental]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoModel", sunoModel);
+  }, [sunoModel]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoStyles", JSON.stringify(sunoStyles));
+  }, [sunoStyles]);
+
+  useEffect(() => {
+    localStorage.setItem("customStyles", JSON.stringify(customStyles));
+  }, [customStyles]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoTitle", sunoTitle);
+  }, [sunoTitle]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoNegativeTags", sunoNegativeTags);
+  }, [sunoNegativeTags]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoPersonaId", sunoPersonaId);
+  }, [sunoPersonaId]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoPersonaModel", sunoPersonaModel);
+  }, [sunoPersonaModel]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoVocalGender", sunoVocalGender);
+  }, [sunoVocalGender]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoStyleWeight", sunoStyleWeight.toString());
+  }, [sunoStyleWeight]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoWeirdnessConstraint", sunoWeirdnessConstraint.toString());
+  }, [sunoWeirdnessConstraint]);
+
+  useEffect(() => {
+    localStorage.setItem("sunoAudioWeight", sunoAudioWeight.toString());
+  }, [sunoAudioWeight]);
 
   const FOCUS_QUOTES = [
     "Scanning content nodes...",
