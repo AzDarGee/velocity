@@ -55,6 +55,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     }
   });
   const prompt = prompts[activeMode];
+  const [imageStyle, setImageStyle] = useState<string>(() => localStorage.getItem("studioImageStyle") || "Photorealistic");
   const [aspectRatio, setAspectRatio] = useState<string>(() => localStorage.getItem("studioAspectRatio") || "16:9");
   const [resolution, setResolution] = useState<string>(() => localStorage.getItem("studioResolution") || "1080p");
   const [generatingModes, setGeneratingModes] = useState<Set<string>>(new Set());
@@ -106,6 +107,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   useEffect(() => {
     localStorage.setItem("studioPrompts", JSON.stringify(prompts));
   }, [prompts]);
+
+  useEffect(() => {
+    localStorage.setItem("studioImageStyle", imageStyle);
+  }, [imageStyle]);
 
   useEffect(() => {
     localStorage.setItem("studioAspectRatio", aspectRatio);
@@ -467,7 +472,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           modelUsed = "Gemini 3.1 Flash Image";
           const response = await genAI.models.generateContent({
             model: "gemini-3.1-flash-image-preview",
-            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Do not output text, only generate the image: ${prompt}` }] }],
+            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Style: ${imageStyle}. Do not output text, only generate the image: ${prompt}` }] }],
             config: {
               imageConfig: {
                  aspectRatio: aspectRatio as any,
@@ -987,12 +992,14 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     <div>
                       <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Style</label>
                       <select 
+                        value={imageStyle}
+                        onChange={e => setImageStyle(e.target.value)}
                         disabled={isGenerating}
                         className={`w-full p-2 border text-xs font-mono ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333]' : 'bg-gray-50 border-gray-200'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        <option>Photorealistic</option>
-                        <option>Cinematic</option>
-                        <option>Digital Art</option>
+                        <option value="Photorealistic">Photorealistic</option>
+                        <option value="Cinematic">Cinematic</option>
+                        <option value="Digital Art">Digital Art</option>
                       </select>
                     </div>
                   </div>
