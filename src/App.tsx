@@ -359,7 +359,9 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [currentAttachedFiles, setCurrentAttachedFiles] = useState<AttachedFile[]>([]);
-  const [historySortBy, setHistorySortBy] = useState<'updatedAt' | 'createdAt'>('updatedAt');
+  const [historySortBy, setHistorySortBy] = useState<'updatedAt' | 'createdAt'>(() => {
+    return (localStorage.getItem("historySortBy") as 'updatedAt' | 'createdAt') || 'updatedAt';
+  });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [viewerContent, setViewerContent] = useState<{ content: string; title: string } | null>(null);
@@ -791,6 +793,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("customTones", JSON.stringify(customTones));
   }, [customTones]);
+
+  useEffect(() => {
+    localStorage.setItem("historySortBy", historySortBy);
+  }, [historySortBy]);
 
   useEffect(() => {
     const filesToSave = mediaFiles.map(f => {

@@ -26,9 +26,9 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == 'ashdarji1@gmail.com' ||
-        request.auth.token.email == 'ashishdarji88@gmail.com' ||
-        request.auth.token.email == 'saanskarastudios@gmail.com'
+        request.auth.token.get('email', '') == 'ashdarji1@gmail.com' ||
+        request.auth.token.get('email', '') == 'ashishdarji88@gmail.com' ||
+        request.auth.token.get('email', '') == 'saanskarastudios@gmail.com'
       );
     }
 
@@ -160,13 +160,12 @@ service cloud.firestore {
       }
       // Media assets
       match /media_assets/{assetId} {
-        allow list: if isOwner(userId) || isAdmin();
-        allow get: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidMediaAsset(incoming());
-        allow update: if isOwner(userId) && isValidMediaAsset(incoming()) && 
+        allow list, get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidMediaAsset(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidMediaAsset(incoming()) && 
                       incoming().userId == existing().userId &&
                       incoming().id == existing().id;
-        allow delete: if isAdmin() || isOwner(userId);
+        allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       }
     }
 

@@ -798,7 +798,7 @@ export function UserButton({
                   </div>
                 </div>
 
-                <div className="lg:hidden space-y-4 pt-4 border-t border-dashed border-current/10">
+                <div className="space-y-4 pt-4 border-t border-dashed border-current/10">
                   <div className="text-[10px] uppercase font-bold tracking-widest opacity-60">System_Controls</div>
                   <div className="grid grid-cols-2 gap-2">
                     {setIsHistoryOpen && (
