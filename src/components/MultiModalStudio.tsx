@@ -275,17 +275,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         const genAI = new GoogleGenAI({ apiKey });
 
         if (activeMode === 'image') {
-<<<<<<< Updated upstream
-          modelUsed = "Gemini 3.1 Flash Image";
-          const response = await genAI.models.generateContent({
-            model: "gemini-3.1-flash-image-preview",
-            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Do not output text, only generate the image: ${prompt}` }] }],
-=======
           modelUsed = "Gemini 2.5 Flash Image";
           const response = await genAI.models.generateContent({
             model: "gemini-2.5-flash-image",
             contents: [{ parts: [{ text: prompt }] }],
->>>>>>> Stashed changes
             config: {
               imageConfig: {
                 aspectRatio: aspectRatio as any,
@@ -297,12 +290,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           if (imagePart?.inlineData?.data) {
             finalUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
           } else {
-<<<<<<< Updated upstream
-            console.error("Image generation failed, response:", JSON.stringify(response));
-            throw new Error(`Failed to generate an image. The model returned: ${response.candidates?.[0]?.content?.parts?.[0]?.text || 'No output.'}`);
-=======
             throw new Error("No image data returned. Ensure Imagen API is enabled.");
->>>>>>> Stashed changes
           }
         } else if (activeMode === 'video') {
           modelUsed = "Veo 3.1";
@@ -424,19 +412,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const genAI = new GoogleGenAI({ apiKey });
       
       const response = await genAI.models.generateContent({
-<<<<<<< Updated upstream
-        model: "gemini-3.1-flash-image-preview",
-        contents: [{ parts: [{ text: `Generate an image. ${prompt}` }] }],
-        config: {
-          imageConfig: {
-             aspectRatio: "1:1",
-=======
         model: "gemini-2.5-flash-image",
         contents: [{ parts: [{ text: prompt }] }],
         config: {
           imageConfig: {
             aspectRatio: "1:1",
->>>>>>> Stashed changes
           }
         }
       });
@@ -1137,111 +1117,13 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             </div>
                             <div className="flex flex-col min-w-0">
                                <span className="font-bold text-sm uppercase tracking-tight truncate max-w-[200px] mb-1" title={asset.name}>{asset.name}</span>
-<<<<<<< Updated upstream
-                               
-                               {/* Type and Source (Moved) */}
-                               <div className="flex items-center gap-2 mb-2">
-                                  <div 
-                                    onClick={() => {
-                                      setViewingAssetDetails(asset);
-                                    }}
-                                    className={`px-1.5 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
-                                  >
-                                    {asset.type}
-                                  </div>
-                                  {asset.source === 'uploaded' ? (
-                                    <div className="text-[8px] uppercase font-mono font-bold tracking-widest opacity-40">
-                                      USR_RAW
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <div className={`text-[8px] uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
-                                        {asset.model}
-                                      </div>
-                                      {asset.metadata?.generationTimeMs && (
-                                        <div className="text-[8px] font-mono opacity-40">
-                                          | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                               </div>
-                               
-                               {/* Asset Actions */}
-                               <div className="flex gap-1.5 mt-1.5 mb-1.5">
-                                 {asset.type === 'audio' && asset.source === 'generated' && (
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
-                                     disabled={coverGeneratingAssets.has(asset.id)}
-                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
-                                     } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                     title="Generate Song Cover"
-                                   >
-                                     {coverGeneratingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                     ) : (
-                                       <Sparkles className="w-3.5 h-3.5" />
-                                     )}
-                                   </button>
-                                 )}
-                                 {asset.type === 'audio' && asset.source === 'generated' && (
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
-                                     disabled={lyricsLoadingAssets.has(asset.id)}
-                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
-                                     } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                     title="View Temporal Lyrics"
-                                   >
-                                     {lyricsLoadingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                     ) : (
-                                       <Wand2 className="w-3.5 h-3.5" />
-                                     )}
-                                   </button>
-                                 )}
-                                 {asset.source === 'generated' && (
-                                   <button 
-                                     onClick={() => onAddAssetToNarrative?.(asset)}
-                                     className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
-                                     }`}
-                                     title="Add to Narrative Context"
-                                   >
-                                     <BookOpen className="w-3.5 h-3.5" />
-                                   </button>
-                                 )}
-                                 <button 
-                                   onClick={() => {
-                                     if (asset.url) {
-                                       window.open(asset.url, '_blank');
-                                     }
-                                   }}
-                                   className={`w-7 h-7 flex items-center justify-center border-2 transition-colors ${
-                                     theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
-                                   }`} title="Download / Open">
-                                     <Download className="w-3.5 h-3.5" />
-                                 </button>
-                                 <button 
-                                   onClick={() => setAssetToDelete(asset)}
-                                   className="w-7 h-7 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors" title="Purge Record">
-                                     <Trash2 className="w-3.5 h-3.5" />
-                                 </button>
-                               </div>
-
-                               <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest mt-1">
-=======
                                <span className="text-[9px] font-mono opacity-50 uppercase tracking-widest">
->>>>>>> Stashed changes
                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                </span>
                             </div>
                           </div>
                         </td>
 
-<<<<<<< Updated upstream
-=======
                         {/* Type and Source */}
                         <td className="py-4 px-4 whitespace-nowrap">
                           <div className="flex flex-col items-start gap-2">
@@ -1274,7 +1156,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           </div>
                         </td>
 
->>>>>>> Stashed changes
                         {/* Details and Metadata */}
                         <td className="py-4 px-4">
                           <div className="flex flex-col items-start justify-center max-w-[300px]">
