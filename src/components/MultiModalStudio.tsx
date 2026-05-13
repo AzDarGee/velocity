@@ -347,10 +347,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         const genAI = new GoogleGenAI({ apiKey });
 
         if (activeMode === 'image') {
-          modelUsed = "Imagen 3.0";
+          modelUsed = "Gemini 3.1 Flash Image";
           const response = await genAI.models.generateContent({
-            model: "imagen-3.0-generate-002",
-            contents: [{ parts: [{ text: prompt }] }],
+            model: "gemini-3.1-flash-image-preview",
+            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Do not output text, only generate the image: ${prompt}` }] }],
             config: {
               imageConfig: {
                  aspectRatio: aspectRatio as any,
@@ -364,7 +364,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             finalUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
           } else {
             console.error("Image generation failed, response:", JSON.stringify(response));
-            throw new Error("No image data returned. Ensure Imagen API is enabled.");
+            throw new Error(`Failed to generate an image. The model returned: ${response.candidates?.[0]?.content?.parts?.[0]?.text || 'No output.'}`);
           }
         } else if (activeMode === 'video') {
           modelUsed = "Veo 3.1";
@@ -488,12 +488,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       const genAI = new GoogleGenAI({ apiKey });
       
       const response = await genAI.models.generateContent({
-        model: "imagen-3.0-generate-002",
-        contents: [{ parts: [{ text: prompt }] }],
+        model: "gemini-3.1-flash-image-preview",
+        contents: [{ parts: [{ text: `Generate an image. ${prompt}` }] }],
         config: {
           imageConfig: {
-             numberOfImages: 1,
-             outputMimeType: "image/png",
+             aspectRatio: "1:1",
           }
         }
       });
@@ -1227,7 +1226,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 <thead className={`border-b-2 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
                   <tr className="text-[9px] uppercase font-mono tracking-widest opacity-60">
                     <th className="py-4 px-4 font-normal">Asset</th>
-                    <th className="py-4 px-4 font-normal">Type & Source</th>
                     <th className="py-4 px-4 font-normal">Details & Metadata</th>
                   </tr>
                 </thead>
@@ -1265,6 +1263,34 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             </div>
                             <div className="flex flex-col min-w-0">
                                <span className="font-bold text-sm uppercase tracking-tight truncate max-w-[200px] mb-1" title={asset.name}>{asset.name}</span>
+                               
+                               {/* Type and Source (Moved) */}
+                               <div className="flex items-center gap-2 mb-2">
+                                  <div 
+                                    onClick={() => {
+                                      setViewingAssetDetails(asset);
+                                    }}
+                                    className={`px-1.5 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
+                                  >
+                                    {asset.type}
+                                  </div>
+                                  {asset.source === 'uploaded' ? (
+                                    <div className="text-[8px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                      USR_RAW
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <div className={`text-[8px] uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                        {asset.model}
+                                      </div>
+                                      {asset.metadata?.generationTimeMs && (
+                                        <div className="text-[8px] font-mono opacity-40">
+                                          | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                               </div>
                                
                                {/* Asset Actions */}
                                <div className="flex gap-1.5 mt-1.5 mb-1.5">
@@ -1333,36 +1359,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                </span>
                             </div>
-                          </div>
-                        </td>
-
-                        {/* Type and Source */}
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          <div className="flex flex-col items-start gap-2">
-                             <div 
-                               onClick={() => {
-                                 setViewingAssetDetails(asset);
-                               }}
-                               className={`px-2 py-1 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
-                             >
-                               {asset.type}
-                             </div>
-                             {asset.source === 'uploaded' ? (
-                               <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
-                                 USR_RAW
-                               </div>
-                             ) : (
-                               <div className="flex flex-col">
-                                 <div className={`text-[10px] uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
-                                   {asset.model}
-                                 </div>
-                                 {asset.metadata?.generationTimeMs && (
-                                   <div className="text-[8px] font-mono opacity-40 mt-0.5">
-                                     GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
-                                   </div>
-                                 )}
-                               </div>
-                             )}
                           </div>
                         </td>
 
