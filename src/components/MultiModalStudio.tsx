@@ -99,6 +99,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
   const [viewingLyrics, setViewingLyrics] = useState<MediaAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<MediaAsset | null>(null);
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("studioActiveMode", activeMode);
@@ -894,6 +896,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     setAssetToDelete(null);
   };
 
+  const executeBatchDelete = async () => {
+    if (selectedAssets.size === 0) return;
+    const assetsToDelete = assets.filter(a => selectedAssets.has(a.id));
+    for (const asset of assetsToDelete) {
+      await executeDeleteAsset(asset);
+    }
+    setSelectedAssets(new Set());
+    setShowBatchDeleteConfirm(false);
+  };
+
   const getModelBadgeColors = (type: GenerationMode) => {
     switch (type) {
       case 'image': return 'from-purple-500 to-indigo-600 border-indigo-500 text-indigo-50';
@@ -1411,8 +1423,49 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               </div>
             ) : (
               <div className={`border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200'}`}>
-                <div className={`border-b-2 py-4 px-4 text-[9px] uppercase font-mono tracking-widest opacity-60 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
-                  Synthesis Items
+                <div className={`border-b-2 py-3 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${theme === 'dark' ? 'border-[#333] bg-[#141414]' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className="flex items-center gap-4">
+                    <span className="text-[9px] uppercase font-mono tracking-widest opacity-60">Synthesis Items</span>
+                    {assets.length > 0 && (
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedAssets.size === assets.length}
+                          onChange={() => {
+                            if (selectedAssets.size === assets.length) {
+                              setSelectedAssets(new Set());
+                            } else {
+                              setSelectedAssets(new Set(assets.map(a => a.id)));
+                            }
+                          }}
+                          className={`w-3.5 h-3.5 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''}`}
+                        />
+                        <span className="text-[9px] uppercase font-mono tracking-widest group-hover:opacity-100 opacity-60 transition-opacity">Select All</span>
+                      </label>
+                    )}
+                    {selectedAssets.size > 0 && (
+                      <span className="text-[9px] uppercase font-mono tracking-widest font-bold">({selectedAssets.size} Selected)</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {selectedAssets.size > 0 && (
+                      <button
+                        onClick={() => setSelectedAssets(new Set())}
+                        className={`text-[9px] uppercase font-mono tracking-widest font-bold border-2 px-2 py-1 transition-colors ${theme === 'dark' ? 'border-[#444] hover:bg-white hover:text-black' : 'border-gray-300 hover:bg-black hover:text-white'}`}
+                      >
+                        Deselect All
+                      </button>
+                    )}
+                    {selectedAssets.size > 0 && (
+                      <button
+                        onClick={() => setShowBatchDeleteConfirm(true)}
+                        className="flex items-center gap-1.5 text-[9px] uppercase font-mono tracking-widest font-bold border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white px-2 py-1 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Delete Selected
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col">
                   <AnimatePresence>
@@ -1426,7 +1479,20 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
                         }`}
                       >
-                         <div className="flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6">
+                         <div className="flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6 relative group/item">
+                            <div className="absolute -top-2 -left-2 sm:relative sm:top-auto sm:left-auto sm:mt-1 z-20 bg-white dark:bg-black border-2 border-gray-200 dark:border-[#333] sm:bg-transparent sm:border-none rounded p-1 sm:p-0 opacity-0 group-hover/item:opacity-100 transition-opacity focus-within:opacity-100" style={{ opacity: selectedAssets.has(asset.id) ? 1 : undefined }}>
+                              <input 
+                                type="checkbox"
+                                checked={selectedAssets.has(asset.id)}
+                                onChange={() => {
+                                  const newSelected = new Set(selectedAssets);
+                                  if (newSelected.has(asset.id)) newSelected.delete(asset.id);
+                                  else newSelected.add(asset.id);
+                                  setSelectedAssets(newSelected);
+                                }}
+                                className={`w-4 h-4 cursor-pointer accent-black ${theme === 'dark' ? 'bg-black border-[#333]' : ''}`}
+                              />
+                            </div>
                             <div 
                               onClick={() => {
                                 setViewingCover(asset);
@@ -1893,6 +1959,33 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
               <div className="flex gap-4">
                  <button onClick={() => setAssetToDelete(null)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
                  <button onClick={() => executeDeleteAsset(assetToDelete)} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Batch Deletion Confirmation Modal */}
+      <AnimatePresence>
+        {showBatchDeleteConfirm && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+             onClick={() => setShowBatchDeleteConfirm(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-[400px] border-4 p-6 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-black'} shadow-2xl`}
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="font-black uppercase tracking-widest mb-4">Purge Selected Assets</h3>
+              <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to permanently delete {selectedAssets.size} asset(s)? This action cannot be undone.</p>
+              <div className="flex gap-4">
+                 <button onClick={() => setShowBatchDeleteConfirm(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                 <button onClick={executeBatchDelete} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge All</button>
               </div>
             </motion.div>
           </motion.div>
