@@ -410,10 +410,21 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             operation = await genAI.operations.getVideosOperation({ operation });
           }
 
-          const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+          const genVideos = operation.response?.generatedVideos;
+          const downloadLink = genVideos?.[0]?.video?.uri 
+            || (genVideos?.[0]?.video as any)?.url 
+            || (genVideos?.[0] as any)?.uri 
+            || (genVideos?.[0] as any)?.url
+            || (operation.response as any)?.video?.uri
+            || (operation.response as any)?.video?.url
+            || (operation.response as any)?.uri
+            || (operation.response as any)?.url
+            || (operation as any)?.uri
+            || (operation as any)?.url;
+
           if (!downloadLink) {
              console.error("Video synthesis failed. Operation result:", JSON.stringify(operation));
-             const errMsg = (operation.error as any)?.message || "Video synthesis failed to return a valid stream URI.";
+             const errMsg = (operation.error as any)?.message || "Video synthesis failed to return a valid stream URI. Output was: " + JSON.stringify(operation);
              throw new Error(errMsg);
           }
 
@@ -1593,7 +1604,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   {viewingAssetDetails.type === 'audio' && <Music className="w-5 h-5 text-indigo-500" />}
                   {viewingAssetDetails.type === 'image' && <ImageIcon className="w-5 h-5 text-indigo-500" />}
                   {viewingAssetDetails.type === 'video' && <Video className="w-5 h-5 text-indigo-500" />}
-                  <h3 className="text-[9px] w-[236.688px] font-black uppercase tracking-widest italic">{viewingAssetDetails.name}</h3>
+                  <h3 className="text-xs font-black uppercase tracking-widest italic">{viewingAssetDetails.name}</h3>
                 </div>
                 <button onClick={() => setViewingAssetDetails(null)} className="p-1 hover:opacity-50 transition-opacity">
                   <X className="w-5 h-5" />
