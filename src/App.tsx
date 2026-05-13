@@ -258,7 +258,15 @@ const prepareGeminiParts = async (mediaFiles: any[]) => {
 
     // Otherwise (blob, firebase storage, external, or synthesis blob), convert to inlineData (Base64)
     try {
-      const response = await fetch(uri);
+      let response = await fetch(uri).catch(() => null);
+      if (!response || !response.ok) {
+        // Fallback to our own server proxy to bypass CORS
+        const proxyUrl = `/api/download?url=${encodeURIComponent(uri)}&filename=proxy`;
+        response = await fetch(proxyUrl);
+        if (!response || !response.ok) {
+          throw new Error("Proxy fetch failed");
+        }
+      }
       const blob = await response.blob();
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
