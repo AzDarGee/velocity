@@ -1092,32 +1092,46 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                           value={newImageStyle}
                           onChange={(e) => setNewImageStyle(e.target.value)}
                           disabled={isGenerating}
-                          placeholder="Custom style..."
+                          placeholder="Add custom styles (comma-separated)..."
                           className={`flex-1 p-2 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'} ${isGenerating ? 'cursor-not-allowed' : ''}`}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && newImageStyle.trim() && !isGenerating) {
                               e.preventDefault();
-                              const val = newImageStyle.trim();
-                              if (!customImageStyles.includes(val) && !DEFAULT_IMAGE_STYLES.includes(val)) {
-                                setCustomImageStyles([val, ...customImageStyles]);
-                              }
-                              if (!imageStyles.includes(val)) {
-                                setImageStyles([...imageStyles, val]);
-                              }
+                              const vals = newImageStyle.split(',').map(v => v.trim()).filter(Boolean);
+                              let addedStyles = [...customImageStyles];
+                              let selectedStyles = [...imageStyles];
+                              vals.forEach(val => {
+                                if (!addedStyles.includes(val) && !DEFAULT_IMAGE_STYLES.includes(val)) {
+                                  addedStyles = [val, ...addedStyles];
+                                }
+                                if (!selectedStyles.includes(val)) {
+                                  selectedStyles = [...selectedStyles, val];
+                                }
+                              });
+                              setCustomImageStyles(addedStyles);
+                              setImageStyles(selectedStyles);
                               setNewImageStyle("");
                             }
                           }}
                         />
                         <button 
                           onClick={() => {
-                            const val = newImageStyle.trim();
-                            if (!customImageStyles.includes(val) && !DEFAULT_IMAGE_STYLES.includes(val)) {
-                              setCustomImageStyles([val, ...customImageStyles]);
+                            if (newImageStyle.trim()) {
+                              const vals = newImageStyle.split(',').map(v => v.trim()).filter(Boolean);
+                              let addedStyles = [...customImageStyles];
+                              let selectedStyles = [...imageStyles];
+                              vals.forEach(val => {
+                                if (!addedStyles.includes(val) && !DEFAULT_IMAGE_STYLES.includes(val)) {
+                                  addedStyles = [val, ...addedStyles];
+                                }
+                                if (!selectedStyles.includes(val)) {
+                                  selectedStyles = [...selectedStyles, val];
+                                }
+                              });
+                              setCustomImageStyles(addedStyles);
+                              setImageStyles(selectedStyles);
+                              setNewImageStyle("");
                             }
-                            if (!imageStyles.includes(val)) {
-                              setImageStyles([...imageStyles, val]);
-                            }
-                            setNewImageStyle("");
                           }}
                           disabled={isGenerating || !newImageStyle.trim()}
                           className={`px-2 py-1 border text-[11px] font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] text-white hover:bg-white hover:text-black' : 'bg-white border-gray-300 text-black hover:bg-black hover:text-white'} ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1267,7 +1281,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                               value={newStyle}
                               onChange={(e) => setNewStyle(e.target.value)}
                               disabled={isGenerating}
-                              placeholder="Add custom style (comma-separated)..."
+                              placeholder="Add multiple custom styles (comma-separated)..."
                               className={`flex-1 p-2.5 border text-[11px] font-mono outline-none focus:border-current transition-colors ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333] placeholder-[#555]' : 'bg-white border-gray-300 placeholder-gray-400'} ${isGenerating ? 'cursor-not-allowed' : ''}`}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && newStyle.trim() && !isGenerating) {
