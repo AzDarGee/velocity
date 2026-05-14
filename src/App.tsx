@@ -115,7 +115,7 @@ interface AttachedFile {
 }
 
 import { AdminDashboard } from "./components/AdminDashboard";
-import { OnboardingWizard } from "./components/OnboardingWizard";
+import { OnboardingWizard, type Step } from "./components/OnboardingWizard";
 import { Header } from "./components/layout/Header";
 import { GenerationViewer } from "./components/GenerationViewer";
 import { MultiModalStudio, type MediaAsset as StudioMediaAsset } from "./components/MultiModalStudio";
@@ -1555,9 +1555,23 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     }
   };
 
+  const onboardingSteps: Step[] = useMemo(() => [
+    { targetId: 'onboarding-header', title: 'Welcome', content: 'Welcome message.', position: 'bottom' },
+    { targetId: 'onboarding-intake', title: 'Upload', content: 'Upload files.', position: 'right', appMode: 'narrative' },
+    { targetId: 'onboarding-config', title: 'Configure', content: 'Configure settings.', position: 'right', appMode: 'narrative' },
+    { targetId: 'onboarding-preview', title: 'Preview', content: 'Preview output.', position: 'left', appMode: 'media' },
+  ], []);
+
+  const handleStepChange = (stepIndex: number) => {
+    const step = onboardingSteps[stepIndex];
+    if (step.appMode && step.appMode !== appMode) {
+      setAppMode(step.appMode);
+    }
+  };
+
   return (
     <AuthGuard theme={theme}>
-      {showOnboarding && <OnboardingWizard theme={theme} onComplete={handleOnboardingComplete} />}
+      {showOnboarding && <OnboardingWizard theme={theme} steps={onboardingSteps} onStepChange={handleStepChange} onComplete={handleOnboardingComplete} />}
       <AnimatePresence>
         {viewerContent && (
           <GenerationViewer 
@@ -1764,6 +1778,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         handleNewPost={handleNewPost}
         appMode={appMode}
         setAppMode={setAppMode}
+        triggerOnboarding={() => setShowOnboarding(true)}
       />
 
       <main className={`mx-auto max-w-none w-full p-4 md:p-12 ${appMode === 'media' ? 'min-h-[calc(100vh-160px)]' : ''}`}>

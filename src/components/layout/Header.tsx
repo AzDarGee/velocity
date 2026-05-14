@@ -12,6 +12,7 @@ interface HeaderProps {
   handleNewPost: () => void;
   appMode: 'narrative' | 'media';
   setAppMode: (mode: 'narrative' | 'media') => void;
+  triggerOnboarding: () => void;
 }
 
 export function Header({
@@ -24,7 +25,8 @@ export function Header({
   mediaFilesCount,
   handleNewPost,
   appMode,
-  setAppMode
+  setAppMode,
+  triggerOnboarding
 }: HeaderProps) {
   return (
     <header id="onboarding-header" className={`border-b ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-[#141414] bg-white'} sticky top-0 z-[60] transition-colors duration-300`}>
@@ -97,6 +99,7 @@ export function Header({
             setIsHistoryOpen={setIsHistoryOpen}
             setIsAdminModalOpen={setIsAdminModalOpen}
             isAdmin={isAdmin}
+            triggerOnboarding={triggerOnboarding}
           />
         </div>
       </div>

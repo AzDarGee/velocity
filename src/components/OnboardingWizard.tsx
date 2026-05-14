@@ -2,58 +2,63 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronRight, Sparkles, Check } from 'lucide-react';
 
-interface Step {
+export interface Step {
   targetId: string;
   title: string;
   content: string;
   position: 'bottom' | 'top' | 'left' | 'right';
+  appMode?: 'narrative' | 'media';
 }
 
-const steps: Step[] = [
-  {
-    targetId: 'onboarding-header',
-    title: 'Welcome to Velocity',
-    content: 'Experience high-capacity content synthesis. This protocol transforms raw media into professional editorial pieces.',
-    position: 'bottom',
-  },
-  {
-    targetId: 'onboarding-intake',
-    title: 'Source Intake',
-    content: 'Upload videos, audio, documents, or images. Our system extracts the core narrative context from any format.',
-    position: 'right',
-  },
-  {
-    targetId: 'onboarding-config',
-    title: 'Protocol Configuration',
-    content: 'Define your target audience, tone, and strategic focus. Fine-tune the synthesis parameters for your specific needs.',
-    position: 'right',
-  },
-  {
-    targetId: 'onboarding-preview',
-    title: 'Output & Refining',
-    content: 'Preview your synthesized content, edit in real-time, and download your ready-to-publish post.',
-    position: 'left',
-  }
-];
-
-export function OnboardingWizard({ onComplete, theme }: { onComplete: () => void, theme: 'light' | 'dark' }) {
+export function OnboardingWizard({ 
+  onComplete,
+  onStepChange,
+  theme, 
+  steps 
+}: { 
+  onComplete: () => void,
+  onStepChange?: (step: number) => void,
+  theme: 'light' | 'dark',
+  steps: Step[] 
+}) {
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   
   useEffect(() => {
-    const updatePosition = () => {
-      const step = steps[currentStep];
+    const step = steps[currentStep];
+    if (onStepChange) onStepChange(currentStep);
+
+    let timeout: NodeJS.Timeout;
+    let removeListener: () => void;
+
+    const setup = () => {
       const element = document.getElementById(step.targetId);
       if (element) {
-        setTargetRect(element.getBoundingClientRect());
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.scrollIntoView({ behavior: 'auto', block: 'center' });
+        setTimeout(() => {
+          setTargetRect(element.getBoundingClientRect());
+        }, 500);
       }
+
+      const updatePosition = () => {
+        const element = document.getElementById(step.targetId);
+        if (element) {
+          setTargetRect(element.getBoundingClientRect());
+        }
+      };
+      
+      window.addEventListener('resize', updatePosition);
+      removeListener = () => window.removeEventListener('resize', updatePosition);
     };
 
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
-  }, [currentStep]);
+    // Small delay for DOM updates (e.g. appMode change)
+    timeout = setTimeout(setup, 150);
+
+    return () => {
+      clearTimeout(timeout);
+      if (removeListener) removeListener();
+    };
+  }, [currentStep, steps, onStepChange]);
 
   const next = () => {
     if (currentStep < steps.length - 1) {

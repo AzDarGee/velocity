@@ -374,6 +374,7 @@ interface UserButtonProps {
   setIsHistoryOpen?: (open: boolean) => void;
   setIsAdminModalOpen?: (open: boolean) => void;
   isAdmin?: boolean;
+  triggerOnboarding?: () => void;
 }
 
 export function UserButton({ 
@@ -381,7 +382,8 @@ export function UserButton({
   setTheme, 
   setIsHistoryOpen, 
   setIsAdminModalOpen, 
-  isAdmin: isAdminProp 
+  isAdmin: isAdminProp,
+  triggerOnboarding
 }: UserButtonProps) {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(isAdminProp || false);
@@ -808,6 +810,15 @@ export function UserButton({
                       >
                         <Clock className="w-4 h-4" />
                         <span className="text-[8px] uppercase font-bold tracking-widest">History</span>
+                      </button>
+                    )}
+                    {triggerOnboarding && (
+                      <button 
+                         onClick={() => { setShowProfile(false); triggerOnboarding(); }}
+                         className={`p-3 border-2 flex flex-col gap-2 items-center justify-center border-yellow-500/30 text-yellow-500 hover:bg-yellow-500 hover:text-white transition-all`}
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span className="text-[8px] uppercase font-bold tracking-widest">Wizard</span>
                       </button>
                     )}
                     {setIsAdminModalOpen && isAdmin && (
