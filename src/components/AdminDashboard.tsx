@@ -115,7 +115,11 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
       await deleteDoc(doc(db, 'files', assetToDelete.id));
       if (assetToDelete.storageUrl) {
         const fileRef = ref(storage, assetToDelete.storageUrl);
-        await deleteObject(fileRef).catch(console.error);
+        await deleteObject(fileRef).catch((e: any) => {
+          if (e?.code !== 'storage/object-not-found') {
+            console.error('Storage delete fail', e);
+          }
+        });
       }
       setUserAssets(prev => prev.filter(a => a.id !== assetToDelete.id));
       setAssetToDelete(null);
@@ -981,7 +985,7 @@ export function AdminDashboard({ theme, isAdmin, onClose }: AdminDashboardProps)
                       <div>
                         <div className="h-24 bg-black/5 flex items-center justify-center mb-2 overflow-hidden">
                           {(asset.mimeType?.startsWith('image')) ? (
-                            <img src={asset.storageUrl || asset.previewUrl} className="h-full w-full object-cover" alt={asset.name} />
+                            <img src={asset.storageUrl || asset.previewUrl || undefined} className="h-full w-full object-cover" alt={asset.name} />
                           ) : (asset.mimeType?.startsWith('video')) ? (
                             <FileVideo className="w-8 h-8 opacity-50" />
                           ) : (

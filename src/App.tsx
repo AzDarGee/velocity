@@ -150,7 +150,7 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
       <div className="group my-12 space-y-4">
         <div className="relative overflow-hidden">
           <img 
-            src={displayUrl} 
+            src={displayUrl || undefined} 
             alt={alt || name} 
             referrerPolicy="no-referrer"
             className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02] ${isAI ? 'ring-4 ring-indigo-500/30' : ''}`} 
@@ -171,7 +171,7 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
     return (
       <div className="my-14 space-y-4">
         <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] ${isAI ? 'ring-4 ring-teal-500/30' : ''}`}>
-          <video src={displayUrl} controls className="w-full aspect-video" />
+          <video src={displayUrl || undefined} controls className="w-full aspect-video" />
           <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${isAI ? 'bg-teal-600' : 'bg-red-600'} text-white`}>
             {isAI ? 'AI_Generated_Sequence' : 'Live_Context'}
           </div>
@@ -218,7 +218,7 @@ function MediaAsset({ theme, media, alt, isAdmin }: { theme: 'light' | 'dark', m
             <Download className="w-4 h-4" />
           </a>
         </div>
-        <audio src={displayUrl} controls className="w-full h-12" />
+        <audio src={displayUrl || undefined} controls className="w-full h-12" />
       </div>
     );
   }
@@ -1807,7 +1807,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                         <div className="flex items-center gap-3 overflow-hidden flex-1">
                           <div className={`w-10 h-10 shrink-0 flex items-center justify-center border-2 ${theme === 'dark' ? 'bg-black/60 border-white/10 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]' : 'bg-gray-100 border-black/10 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.05)]'} overflow-hidden rounded-sm group-hover:scale-110 transition-transform duration-300`}>
                             {(v.mimeType?.includes('image') || (v.file && v.file.type.includes('image'))) && (v.previewUrl || v.storageUrl) ? (
-                              <img src={v.previewUrl || v.storageUrl} className="w-full h-full object-cover" alt="" />
+                              <img src={v.previewUrl || v.storageUrl || undefined} className="w-full h-full object-cover" alt="" />
                             ) : v.mimeType?.includes('video') || (v.file && v.file.type.includes('video')) ? (
                               <div className="relative w-full h-full flex items-center justify-center">
                                 <FileVideo className="w-4 h-4 opacity-60" />
@@ -2772,7 +2772,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                                   return <div className="p-4 border border-dashed opacity-50 text-center font-mono text-[10px]">Reference_Lost {isAdmin && `: ${foundId}`}</div>;
                                 }
                                 
-                                return <img src={src} alt={alt} referrerPolicy="no-referrer" className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
+                                return <img src={src || undefined} alt={alt} referrerPolicy="no-referrer" className={`max-w-full h-auto rounded-sm border ${theme === 'dark' ? 'border-white/10' : 'border-black/10'}`} {...props} />;
                               }
                             }}
                           >
@@ -2877,7 +2877,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               <div className="flex-1 bg-black/95 flex items-center justify-center overflow-hidden min-h-[500px]">
                 {(previewMedia.mimeType?.includes('video') || previewMedia.file?.type.includes('video')) && (
                   <video 
-                    src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri} 
+                    src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri || undefined} 
                     controls 
                     className="max-w-full max-h-[75vh] shadow-[0_0_100px_rgba(0,0,0,0.5)]"
                     autoPlay
@@ -2890,7 +2890,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           <FileAudio className="w-10 h-10 text-white/40" />
                           <div className="absolute inset-0 rounded-full border-b-2 border-white/20 animate-spin" />
                        </div>
-                       <audio src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri} controls className="w-full" autoPlay />
+                       <audio src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri || undefined} controls className="w-full" autoPlay />
                        <div className="text-center space-y-2">
                          <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.3em]">Temporal_Data_Source</p>
                        </div>
@@ -2899,7 +2899,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 )}
                 {(previewMedia.mimeType?.includes('image') || previewMedia.file?.type.includes('image')) && (
                   <img 
-                    src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri} 
+                    src={previewMedia.previewUrl || previewMedia.storageUrl || previewMedia.uri || undefined} 
                     alt={previewMedia.name} 
                     referrerPolicy="no-referrer"
                     className="max-w-full max-h-[80vh] object-contain shadow-2xl"
@@ -2908,7 +2908,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 {/* Robust PDF Support */}
                 {(previewMedia.mimeType?.includes('pdf') || (previewMedia.file?.type === 'application/pdf')) && (
                   <iframe 
-                    src={previewMedia.storageUrl || previewMedia.previewUrl} 
+                    src={previewMedia.storageUrl || previewMedia.previewUrl || undefined} 
                     className="w-full h-full border-none bg-white"
                     title="PDF Preview"
                     referrerPolicy="no-referrer"

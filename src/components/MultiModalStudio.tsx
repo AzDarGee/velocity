@@ -161,13 +161,21 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           try {
             const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
             await deleteObject(storageRef);
-          } catch (e) { console.error("Storage delete fail", e); }
+          } catch (e: any) {
+            if (e?.code !== 'storage/object-not-found') {
+              console.error("Storage delete fail", e);
+            }
+          }
           
           if (asset.metadata?.coverUrl || asset.type === 'audio') {
             try {
               const coverRef = ref(storage, `uploads/generated/${userId}/${asset.id}_cover.png`);
               await deleteObject(coverRef);
-            } catch (e) { }
+            } catch (e: any) { 
+              if (e?.code !== 'storage/object-not-found') {
+                console.error("Storage delete fail", e);
+              }
+            }
           }
         }
       });
@@ -960,15 +968,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         try {
           const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
           await deleteObject(storageRef);
-        } catch (storageErr) {
-          console.error("Failed to delete main asset from storage.", storageErr);
+        } catch (storageErr: any) {
+          if (storageErr?.code !== 'storage/object-not-found') {
+            console.error("Failed to delete main asset from storage.", storageErr);
+          }
         }
         if (asset.metadata?.coverUrl || asset.type === 'audio') {
           try {
             const coverRef = ref(storage, `uploads/generated/${userId}/${asset.id}_cover.png`);
             await deleteObject(coverRef);
-          } catch (storageErr) {
-            console.error("Failed to delete cover art from storage.", storageErr);
+          } catch (storageErr: any) {
+            if (storageErr?.code !== 'storage/object-not-found') {
+              console.error("Failed to delete cover art from storage.", storageErr);
+            }
           }
         }
       }
@@ -1651,7 +1663,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                className={`w-[72px] h-[72px] sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
                              >
                               {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
-                                <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url || undefined} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
                               )}
                               {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
                                 <>
@@ -1765,7 +1777,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                <div className={`w-full p-4 border-l-2 rounded-r-md ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
                                  {asset.type === 'audio' && asset.url && (
                                   <div className="mb-3 w-full">
-                                    <audio src={asset.url} controls className="w-full max-w-[400px] h-8 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
+                                    <audio src={asset.url || undefined} controls className="w-full max-w-[400px] h-8 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
                                   </div>
                                  )}
                                  {asset.source === 'generated' && asset.metadata ? (
@@ -1826,7 +1838,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             >
               <div className="relative aspect-square w-full">
                 <img 
-                  src={viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl} 
+                  src={viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl || undefined} 
                   alt={viewingCover.name}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
@@ -1933,7 +1945,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                   <div className={`w-24 h-24 shrink-0 border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} relative overflow-hidden bg-black/5`}>
                     {(viewingAssetDetails.metadata?.coverUrl || viewingAssetDetails.metadata?.imageUrl || viewingAssetDetails.url) ? (
                       <img 
-                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl || viewingAssetDetails.url} 
+                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl || viewingAssetDetails.url || undefined} 
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                         alt=""

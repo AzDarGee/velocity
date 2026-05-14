@@ -79,7 +79,7 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
       <div className="group my-8 space-y-4">
         <div className="relative overflow-hidden">
           <img 
-            src={displayUrl} 
+            src={displayUrl || undefined} 
             alt={alt || name} 
             className={`w-full rounded-sm border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] transition-transform duration-700 group-hover:scale-[1.02] ${isAI ? 'ring-4 ring-indigo-500/30' : ''}`} 
           />
@@ -97,7 +97,7 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
     return (
       <div className="my-10 space-y-4">
         <div className={`relative border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} bg-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] ${isAI ? 'ring-4 ring-teal-500/30' : ''}`}>
-          <video src={displayUrl} controls className="w-full aspect-video" crossOrigin="anonymous" />
+          <video src={displayUrl || undefined} controls className="w-full aspect-video" crossOrigin="anonymous" />
           <div className={`absolute top-2 left-2 px-2 py-1 text-[8px] font-mono uppercase tracking-widest ${isAI ? 'bg-teal-600' : 'bg-red-600'} text-white`}>
             {isAI ? 'AI_Synthesized_Sequence' : 'Motion_Data_Stream'}
           </div>
@@ -133,7 +133,7 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
             <Download className="w-4 h-4" />
           </button>
         </div>
-        <audio src={displayUrl} controls className="w-full h-12" crossOrigin="anonymous" />
+        <audio src={displayUrl || undefined} controls className="w-full h-12" crossOrigin="anonymous" />
       </div>
     );
   }
@@ -158,7 +158,7 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
              </button>
           </div>
           <iframe 
-            src={displayUrl} 
+            src={displayUrl || undefined} 
             className="w-full flex-1 border-none" 
             title={name} 
           />
@@ -186,7 +186,7 @@ function MediaAsset({ theme, media, alt, onDownloadAsset }: { theme: 'light' | '
              </button>
           </div>
           <iframe 
-            src={viewerUrl} 
+            src={viewerUrl || undefined} 
             className="w-full flex-1 border-none" 
             title={name} 
           />
