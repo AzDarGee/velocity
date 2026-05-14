@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import ffmpeg from 'fluent-ffmpeg';
+import tmp from 'tmp';
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
@@ -644,6 +646,69 @@ async function startServer() {
     } catch (error: any) {
       console.error("Download Proxy Error:", error);
       res.status(500).send("Error downloading file: " + error.message);
+    }
+  });
+
+  // API Route: Convert Audio to WAV
+  app.post("/api/audio/convert-to-wav", async (req, res) => {
+    try {
+      const { audioUrl, userId, assetId, filename } = req.body;
+      if (!audioUrl || !userId) return res.status(400).json({ error: "Missing required fields" });
+
+      const tmpMP3 = tmp.fileSync({ postfix: '.mp3' });
+      const tmpWAV = tmp.fileSync({ postfix: '.wav' });
+
+      // Download file to temp
+      console.log("Fetching audio from:", audioUrl);
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+      const buffer = await response.arrayBuffer();
+      fs.writeFileSync(tmpMP3.name, Buffer.from(buffer));
+      console.log("Audio downloaded to:", tmpMP3.name);
+
+      // Convert
+      console.log("Starting conversion to WAV...");
+      await new Promise((resolve, reject) => {
+        ffmpeg(tmpMP3.name)
+          .toFormat('wav')
+          .on('error', (err) => {                
+              console.error("FFMPEG error:", err);
+              reject(err);
+          })
+          .on('end', () => {                
+              console.log("Conversion ended successfully");
+              resolve(void 0);
+          })
+          .save(tmpWAV.name);
+      });
+      console.log("Conversion saved to:", tmpWAV.name);
+
+      // Upload to Firebase Storage
+      if (!firebaseConfig.storageBucket) {
+         throw new Error("No storageBucket configured");
+      }
+      const bucket = admin.storage().bucket(firebaseConfig.storageBucket);
+      const destination = `uploads/generated/${userId}/${assetId || Date.now()}_converted.wav`;
+      const uploadResult = await bucket.upload(tmpWAV.name, {
+        destination: destination,
+        metadata: { contentType: 'audio/wav' }
+      });
+      // Try making public. Sometimes this fails if permissions are not set correctly.
+      try {
+        await uploadResult[0].makePublic();
+      } catch (publicErr) {
+        console.warn("Failed to make public, check storage rules:", publicErr);
+      }
+      const storageUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+
+      // Cleanup
+      tmpMP3.removeCallback();
+      tmpWAV.removeCallback();
+
+      res.json({ success: true, url: storageUrl });
+    } catch (error: any) {
+      console.error("Audio conversion error:", error);
+      res.status(500).json({ error: error.message || "Unknown error during conversion" });
     }
   });
 

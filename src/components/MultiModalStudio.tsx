@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -114,6 +114,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   });
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [coverGeneratingAssets, setCoverGeneratingAssets] = useState<Set<string>>(new Set());
+  const [wavGeneratingAssets, setWavGeneratingAssets] = useState<Set<string>>(new Set());
   const [lyricsLoadingAssets, setLyricsLoadingAssets] = useState<Set<string>>(new Set());
   const [viewingCover, setViewingCover] = useState<MediaAsset | null>(null);
   const [viewingAssetDetails, setViewingAssetDetails] = useState<MediaAsset | null>(null);
@@ -521,7 +522,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     const audioBuffer = await blob.arrayBuffer();
                     
                     const ID3WriterModule = await import('browser-id3-writer');
-                    const ID3Writer = ID3WriterModule.default || (ID3WriterModule as any);
+                    const ID3Writer = ID3WriterModule.default && typeof ID3WriterModule.default === 'function' ? ID3WriterModule.default : ID3WriterModule;
                     const titleToUse = sunoTitle || sunoItem.title || "Generated Track";
                     
                     const writer = new (ID3Writer as any)(audioBuffer);
@@ -804,7 +805,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             const imageBuffer = bytes.buffer;
 
             const ID3WriterModule = await import('browser-id3-writer');
-            const ID3Writer = ID3WriterModule.default || (ID3WriterModule as any);
+            const ID3Writer = ID3WriterModule.default && typeof ID3WriterModule.default === 'function' ? ID3WriterModule.default : ID3WriterModule;
             const titleToUse = asset.metadata?.title || asset.name.replace('.mp3', '') || "Generated Track";
             
             const writer = new (ID3Writer as any)(audioBuffer);
@@ -819,7 +820,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
             const taggedBuffer = writer.arrayBuffer;
             const taggedBlob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
 
-            await uploadBytes(audioStorageRef, taggedBlob, { contentType: 'audio/mpeg' });
+            // Define a simple retry helper
+            const uploadWithRetry = async (ref: any, data: any, metadata: any, retries = 3): Promise<any> => {
+              for (let i = 0; i < retries; i++) {
+                try {
+                  return await uploadBytes(ref, data, metadata);
+                } catch (e: any) {
+                  if (i === retries - 1 || e?.code !== 'storage/retry-limit-exceeded') throw e;
+                  await new Promise(r => setTimeout(r, 1000 * (i + 1))); 
+                }
+              }
+            };
+
+            await uploadWithRetry(audioStorageRef, taggedBlob, { contentType: 'audio/mpeg' });
             // Note: The URL might not change visually but it's safe to keep using the existing one.
         } catch (id3Err) {
             console.error("Failed to write ID3 metadata for updated cover:", id3Err);
@@ -854,6 +867,44 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
       setError(err.message || "Failed to generate cover.");
     } finally {
       setCoverGeneratingAssets(prev => {
+        const next = new Set(prev);
+        next.delete(asset.id);
+        return next;
+      });
+    }
+  };
+
+  const handleConvertToWav = async (asset: MediaAsset) => {
+    if (asset.type !== 'audio' || !asset.url) return;
+    
+    setWavGeneratingAssets(prev => new Set(prev).add(asset.id));
+    setError(null);
+
+    try {
+      const response = await fetch('/api/audio/convert-to-wav', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioUrl: asset.url,
+          userId,
+          assetId: asset.id,
+          filename: asset.name
+        })
+      });
+      if (!response.ok) throw new Error("Conversion failed");
+      const { url } = await response.json();
+      
+      // Notify
+      setError("WAV generated! Download available in track details.");
+      // In a real app we might update the asset metadata here but we can rely on the download URL
+      // just opening in a new tab for now as requested.
+      window.open(url, '_blank');
+      setTimeout(() => setError(null), 3000);
+    } catch (err: any) {
+      console.error("WAV conversion error:", err);
+      setError(err.message || "Failed to convert to WAV.");
+    } finally {
+      setWavGeneratingAssets(prev => {
         const next = new Set(prev);
         next.delete(asset.id);
         return next;
@@ -1725,6 +1776,22 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                        <RefreshCw className="w-4 h-4 animate-spin" />
                                      ) : (
                                        <Sparkles className="w-4 h-4" />
+                                     )}
+                                   </button>
+                                 )}
+                                 {asset.type === 'audio' && asset.source === 'generated' && (
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
+                                     disabled={wavGeneratingAssets.has(asset.id)}
+                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                       theme === 'dark' ? 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white' : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
+                                     } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                     title="Generate WAV"
+                                   >
+                                     {wavGeneratingAssets.has(asset.id) ? (
+                                       <RefreshCw className="w-4 h-4 animate-spin" />
+                                     ) : (
+                                       <FileAudio className="w-4 h-4" />
                                      )}
                                    </button>
                                  )}
