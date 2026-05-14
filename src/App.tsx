@@ -572,37 +572,6 @@ export default function App() {
     };
   }, []);
 
-  // Background Process Recovery Logic
-  useEffect(() => {
-    const activeId = localStorage.getItem('velocity_active_generation');
-    if (activeId && !currentGenerationId) {
-      setCurrentGenerationId(activeId);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!currentGenerationId) return;
-
-    const currentGen = history.find(g => g.id === currentGenerationId);
-    if (!currentGen) return;
-
-    if (currentGen.status === 'processing') {
-      if (!isProcessing) setIsProcessing(true);
-    } else if (currentGen.status === 'completed') {
-      setIsProcessing(false);
-      // Only update if content changed or we are coming from a reload
-      if (blogPost !== currentGen.content) {
-        setBlogPost(currentGen.content);
-        setOriginalContent(currentGen.content);
-      }
-      localStorage.removeItem('velocity_active_generation');
-    } else if (currentGen.status === 'failed') {
-      setIsProcessing(false);
-      setError(currentGen.error || "Synthesis protocol interrupted or failed. Check console for decryption errors.");
-      localStorage.removeItem('velocity_active_generation');
-    }
-  }, [currentGenerationId, history, blogPost, isProcessing]);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -1123,35 +1092,110 @@ Tone: ${preferences.tone.join(", ")}`;
       setGeneratingIds(prev => new Set(prev).add(tempGenId));
       setCurrentGenerationId(tempGenId);
       setBlogPost(""); // Clear current view for new one
-      
-      // Persist current generation ID to localStorage so we can recover it on refresh
-      localStorage.setItem('velocity_active_generation', tempGenId);
+      // REMOVED setIsProcessing(false) here to keep loading state visible during synthesis
 
-      // 2. Trigger Server-Side Synthesis (Background Process)
-      const response = await fetch("/api/ai/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          generationId: tempGenId,
-          userId: user.uid,
-          preferences,
-          readyVideos: readyVideos.map(v => ({
-            id: v.id,
-            firestoreId: (v as any).firestoreId,
-            name: v.name,
-            extractedText: v.extractedText
-          }))
-        })
-      });
+      // 2. Perform Generation
+      const isOpenRouter = preferences.model.includes("/");
+      let generatedContent = "";
 
-      if (!response.ok) {
+      if (isOpenRouter) {
+        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
+        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+        if (!apiKey) throw new Error("OpenRouter API Key is missing");
+
+        const prompt = `${preferences.systemPrompt}
+Transform provided media context into a high-quality, professional blog post.
+
+CRITICAL ARCHITECTURE REQUIREMENTS:
+1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
+2. STRUCTURAL_HIERARCHY: Organize the article into clear logical sections using H2 (##) and H3 (###) headers. Never output a flat wall of text.
+3. NARRATIVE_QUOTES: Include at least TWO insightful blockquotes (>) synthesizing key takeaways or "voice" captured from the source media.
+4. COHESIVE_FLOW: Create a compelling narrative arc, not just a clinical description of the provided files.
+
+TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
+TONE: ${preferences.tone.join(", ")}
+LENGTH: ${preferences.length}
+SPECIFIC FOCUS: ${preferences.specificFocus}
+
+IMPORTANT: You MUST embed the provided media assets at relevant points in the article using standard Markdown image syntax with the specific Media IDs provided below.
+Syntax: ![Description](MEDIA_ID_ID)
+Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA_ID_abc)
+
+AVAILABLE MEDIA ASSETS (IDs and Names):
+${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
+
+Synthesize the content from these assets into a cohesive narrative. Do not just list them.`;
+
+        let additionalText = "";
+        readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
+        
+        const response = await fetch("/api/ai/openrouter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: preferences.model,
+            apiKey,
+            messages: [{ role: "user", content: prompt + additionalText }]
+          })
+        });
+
         const data = await response.json();
-        throw new Error(data.error || "Failed to initialize synthesis protocol");
+        if (!response.ok) throw new Error(data.error || "Generation Failed");
+        generatedContent = data.text;
+      } else {
+        const fileParts = await prepareGeminiParts(readyVideos);
+        const prompt = `${preferences.systemPrompt}\nTransform provided media into a high-quality, professional blog post.
+
+CRITICAL ARCHITECTURE REQUIREMENTS:
+1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
+2. STRUCTURAL_HIERARCHY: Organize the article into clear logical sections using H2 (##) and H3 (###) headers. Never output a flat wall of text.
+3. NARRATIVE_QUOTES: Include at least TWO insightful blockquotes (>) synthesizing key takeaways or "voice" captured from the source media.
+4. COHESIVE_FLOW: Create a compelling narrative arc, not just a clinical description of the provided files.
+
+TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
+TONE: ${preferences.tone.join(", ")}
+LENGTH: ${preferences.length}
+SPECIFIC FOCUS: ${preferences.specificFocus}
+
+IMPORTANT: You MUST embed the provided media assets at relevant points in the article using standard Markdown image syntax with the specific Media IDs provided below.
+Syntax: ![Description](MEDIA_ID_ID)
+Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA_ID_abc)
+
+AVAILABLE MEDIA ASSETS (IDs and Names):
+${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
+
+Synthesize the content from these assets into a cohesive narrative. Do not just list them.`;
+
+        let additionalText = "";
+        readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
+
+        const response = await ai.models.generateContent({
+          model: preferences.model,
+          contents: [...(fileParts as any), prompt + additionalText]
+        });
+
+        if (!response.text) throw new Error("Model failed");
+        generatedContent = response.text;
       }
 
-      // We don't need to await the full generation here anymore 
-      // because the UI will listen to the Firestore document.
-      // However, we'll keep the processing UI active.
+      // 3. Finalize Generation Record
+      await updateDoc(doc(db, "generations", tempGenId), {
+        content: generatedContent,
+        title: generatedContent.split('\n')[0].replace(/^#+\s*/, '').substring(0, 100) || "Untitled Blog Post",
+        status: "completed",
+        updatedAt: serverTimestamp()
+      });
+
+      setIsProcessing(false); // FINALLY set to false after completion
+
+      // Update current view if this was the latest
+      setCurrentGenerationId(prev => {
+        if (prev === tempGenId) {
+          setBlogPost(generatedContent);
+          setOriginalContent(generatedContent);
+        }
+        return prev;
+      });
 
     } catch (err: any) {
       console.error("Synthesis Error:", err);
@@ -1168,11 +1212,14 @@ Tone: ${preferences.tone.join(", ")}`;
       }
       setError(errorMsg);
     } finally {
-      // If a generation was successfully initialized, we keep the processing state active.
-      // The monitoring useEffect handles transitioning isProcessing to false when the document updates.
-      if (!tempGenId) {
-        setIsProcessing(false);
+      if (tempGenId) {
+        setGeneratingIds(prev => {
+          const next = new Set(prev);
+          next.delete(tempGenId);
+          return next;
+        });
       }
+      setIsProcessing(false);
     }
   };
 
