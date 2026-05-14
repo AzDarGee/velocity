@@ -877,6 +877,12 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const handleConvertToWav = async (asset: MediaAsset) => {
     if (asset.type !== 'audio' || !asset.url) return;
     
+    // If WAV URL already exists, download it
+    if (asset.metadata?.wavUrl) {
+      window.open(asset.metadata.wavUrl, '_blank');
+      return;
+    }
+
     setWavGeneratingAssets(prev => new Set(prev).add(asset.id));
     setError(null);
 
@@ -888,17 +894,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
           audioUrl: asset.url,
           userId,
           assetId: asset.id,
-          filename: asset.name
+          filename: asset.name,
+          sunoAudioId: asset.metadata?.id || asset.metadata?.audioId || asset.metadata?.task_id || asset.metadata?.taskId,
+          sunoTaskId: asset.metadata?.task_id || asset.metadata?.taskId
         })
       });
       if (!response.ok) throw new Error("Conversion failed");
-      const { url } = await response.json();
       
-      // Notify
-      setError("WAV generated! Download available in track details.");
-      // In a real app we might update the asset metadata here but we can rely on the download URL
-      // just opening in a new tab for now as requested.
-      window.open(url, '_blank');
+      setError("WAV generation requested! It may take a few moments.");
+      
+      // We don't open in a new tab here anymore. 
+      // The Firestore document should be updated by the callback which 
+      // will trigger an update in the asset state.
+      
       setTimeout(() => setError(null), 3000);
     } catch (err: any) {
       console.error("WAV conversion error:", err);
@@ -1784,12 +1792,20 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                      onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
                                      disabled={wavGeneratingAssets.has(asset.id)}
                                      className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white' : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
+                                       theme === 'dark' 
+                                         ? asset.metadata?.wavUrl 
+                                           ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
+                                           : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
+                                         : asset.metadata?.wavUrl
+                                           ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
+                                           : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
                                      } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                     title="Generate WAV"
+                                     title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
                                    >
                                      {wavGeneratingAssets.has(asset.id) ? (
                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                     ) : asset.metadata?.wavUrl ? (
+                                       <Download className="w-4 h-4" />
                                      ) : (
                                        <FileAudio className="w-4 h-4" />
                                      )}
