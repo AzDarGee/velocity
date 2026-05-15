@@ -491,9 +491,34 @@ export default function App() {
       if (user) {
         if (user.email === 'ashdarji1@gmail.com' || user.email === 'ashishdarji88@gmail.com' || user.email === 'saanskarastudios@gmail.com') {
           setIsAdmin(true);
+          // TEMPORARY CLEAN PROCESSING GENERATIONS
+          import('firebase/firestore').then(({ collection, query, where, getDocs, deleteDoc, doc, writeBatch }) => {
+            const q = query(collection(db, "generations"), where("userId", "==", user.uid), where("status", "==", "processing"));
+            getDocs(q).then(snapshot => {
+              console.log(`Found ${snapshot.size} processing generations. Cleaning up...`);
+              if (snapshot.size === 0) return;
+              const batch = writeBatch(db);
+              snapshot.docs.forEach(d => batch.delete(d.ref));
+              batch.commit().then(() => console.log('Cleanup complete.')).catch(console.error);
+            }).catch(console.error);
+          });
         } else {
           getDoc(doc(db, 'admins', user.uid))
-            .then(adminDoc => setIsAdmin(adminDoc.exists()))
+            .then(adminDoc => {
+              const adminExists = adminDoc.exists();
+              setIsAdmin(adminExists);
+              // TEMPORARY CLEAN PROCESSING GENERATIONS
+              import('firebase/firestore').then(({ collection, query, where, getDocs, deleteDoc, doc, writeBatch }) => {
+                const q = query(collection(db, "generations"), where("userId", "==", user.uid), where("status", "==", "processing"));
+                getDocs(q).then(snapshot => {
+                  console.log(`Found ${snapshot.size} processing generations. Cleaning up...`);
+                  if (snapshot.size === 0) return;
+                  const batch = writeBatch(db);
+                  snapshot.docs.forEach(d => batch.delete(d.ref));
+                  batch.commit().then(() => console.log('Cleanup complete.')).catch(console.error);
+                }).catch(console.error);
+              });
+            })
             .catch(() => setIsAdmin(false));
         }
         // Fetch credits
