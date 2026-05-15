@@ -395,10 +395,6 @@ export function UserButton({
   const [showTopUp, setShowTopUp] = useState(false);
   
   const [topUpMode, setTopUpMode] = useState<'packs' | 'subs' | 'tier' | 'media'>('packs');
-  const [openRouterKey, setOpenRouterKey] = useState('');
-  const [isSavingKey, setIsSavingKey] = useState(false);
-  const [keyError, setKeyError] = useState<string | null>(null);
-  const [keySuccess, setKeySuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -434,32 +430,7 @@ export function UserButton({
   useEffect(() => {
     if (!user || !showProfile) return;
     
-    // Fetch private keys
-    getDoc(doc(db, 'users', user.uid, 'private', 'keys')).then(docSnap => {
-      if (docSnap.exists()) {
-        setOpenRouterKey(docSnap.data().openRouterKey || '');
-      }
-    }).catch(console.error);
   }, [user, showProfile]);
-
-  const handleSaveKeys = async () => {
-    if (!user) return;
-    setIsSavingKey(true);
-    setKeyError(null);
-    setKeySuccess(false);
-    try {
-      await setDoc(doc(db, 'users', user.uid, 'private', 'keys'), {
-        openRouterKey: openRouterKey.trim()
-      }, { merge: true });
-      setKeySuccess(true);
-      setTimeout(() => setKeySuccess(false), 3000);
-    } catch (err: any) {
-      console.error(err);
-      setKeyError(err.message || "Failed to update keys");
-    } finally {
-      setIsSavingKey(false);
-    }
-  };
 
   useEffect(() => {
     if (!user) return;
@@ -948,45 +919,6 @@ export function UserButton({
                   </div>
                 </div>
 
-                {/* Third Party Keys */}
-                <div className="space-y-3 pt-4 border-t border-dashed border-current/10">
-                   <div className="text-[10px] uppercase font-bold tracking-widest opacity-60">Provider_Integrations</div>
-                   <div className="space-y-1">
-                      <label className="text-[9px] uppercase font-mono opacity-50">OpenRouter_API_Key</label>
-                      <input 
-                        type="password"
-                        placeholder="sk-or-v1-..."
-                        value={openRouterKey}
-                        onChange={(e) => setOpenRouterKey(e.target.value)}
-                        className={`w-full px-3 py-2 border font-mono text-[10px] outline-none transition-all
-                          ${theme === 'dark' 
-                            ? 'bg-[#1A1A1A] border-[#333] text-white focus:border-white' 
-                            : 'bg-white border-black text-black'}`}
-                      />
-                   </div>
-                   {keyError && <p className="text-[9px] text-red-500 font-mono italic">{keyError}</p>}
-                   <button
-                    onClick={handleSaveKeys}
-                    disabled={isSavingKey}
-                    className={`w-full py-2 border-2 font-mono text-[10px] uppercase tracking-widest transition-all
-                      ${theme === 'dark' 
-                        ? 'border-white text-white hover:bg-white hover:text-black' 
-                        : 'border-black text-black hover:bg-black hover:text-white'}`}
-                   >
-                     {isSavingKey ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Commit_Protocol_Keys'}
-                   </button>
-                   {keySuccess && (
-                     <motion.div 
-                       initial={{ opacity: 0, y: -10 }}
-                       animate={{ opacity: 1, y: 0 }}
-                       className="p-2 bg-green-500/10 border border-green-500 text-green-500 text-[9px] font-mono uppercase tracking-widest flex items-center justify-center gap-2"
-                     >
-                       <Check className="w-3 h-3" />
-                       Keys_Sync_Successful
-                      </motion.div>
-                    )}
-                 </div>
-                 
                   <div className="pt-4 border-t border-dashed border-current/10 flex flex-col gap-3 mt-4">
                     <button
                       onClick={() => setShowPurgeConfirm(true)}

@@ -362,9 +362,7 @@ export default function App() {
   const [newAudience, setNewAudience] = useState("");
   const [newTone, setNewTone] = useState("");
 
-  const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
-  const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false);
   const [isGeneratingSystemPrompt, setIsGeneratingSystemPrompt] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
@@ -414,22 +412,6 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [isProcessing]);
-
-  useEffect(() => {
-    fetch("/api/ai/openrouter/models")
-      .then(res => res.json())
-      .then(data => {
-        if (data.data) {
-          // Deduplicate by model id
-          const uniqueModelsMap = new Map();
-          data.data.forEach((m: any) => uniqueModelsMap.set(m.id, m));
-          const uniqueModels = Array.from(uniqueModelsMap.values());
-          const sorted = uniqueModels.sort((a: any, b: any) => a.name.localeCompare(b.name));
-          setOpenRouterModels(sorted);
-        }
-      })
-      .catch(console.error);
-  }, []);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -510,13 +492,6 @@ export default function App() {
           handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
         });
 
-        // Fetch keys 
-        unsubscribeKeys = onSnapshot(doc(db, 'users', user.uid, 'private', 'keys'), (doc) => {
-           setHasOpenRouterKey(doc.exists() && !!doc.data().openRouterKey);
-        }, (err) => {
-           console.error("Error fetching keys:", err);
-        });
-
         // Fetch generation history
         const q = query(
           collection(db, "generations"),
@@ -538,7 +513,6 @@ export default function App() {
         unsubscribeDoc = null;
         unsubscribeHistory = null;
         unsubscribeKeys = null;
-        setHasOpenRouterKey(false);
         
         setCredits(null);
         hasLoadedInitialGen.current = false;
@@ -666,7 +640,7 @@ export default function App() {
             }
             const finalFile = await ai.files.get({ name: uploadResult.name });
             console.log(`Gemini Success for ${file.name}: ${finalFile.uri}`);
-            return { uri: finalFile.uri, mimeType: finalFile.mimeType };
+            return { uri: finalFile.uri || "", mimeType: finalFile.mimeType || file.type || "application/octet-stream" };
           } catch (gErr: any) {
             console.error(`Gemini Upload Error (${file.name}):`, gErr);
             // If it's a small image/audio, we might be able to use inlineData later, 
@@ -700,8 +674,8 @@ export default function App() {
         console.warn("Gemini upload failed, will attempt to use storage URL if possible:", geminiResult.reason);
       }
 
-      uri = gRes.uri;
-      mimeType = gRes.mimeType || file.type || "application/octet-stream";
+      uri = gRes?.uri || "";
+      mimeType = gRes?.mimeType || file.type || "application/octet-stream";
 
       if (!uri && !isDocx) {
         console.warn(`No URI obtained for ${file.name}. AI generation might fail for this file.`);
@@ -879,7 +853,6 @@ export default function App() {
     setIsGeneratingFocus(true);
     try {
       const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
-      const isOpenRouter = preferences.model.includes("/");
 
       const promptText = `You are a content strategy expert. Generate a short, compelling strategic focus (1-2 sentences) for a blog post based on these parameters and the provided media:
 Theme: General professional content
@@ -897,48 +870,23 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
 
       const fullPromptText = promptText + (additionalText ? "\n\nSource Content:\n" + additionalText : "");
 
-      if (isOpenRouter) {
-        const user = auth.currentUser;
-        if (!user) throw new Error("Authentication Required");
-        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
-        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+      const fileParts = await prepareGeminiParts(readyVideos);
 
-        if (!apiKey) {
-          throw new Error("OpenRouter Key Missing");
-        }
+      const result = await ai.models.generateContent({
+        model: preferences.model,
+        contents: [
+          ...fileParts as any,
+          fullPromptText
+        ]
+      });
 
-        const response = await fetch("/api/ai/openrouter", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: preferences.model,
-            apiKey,
-            messages: [{ role: "user", content: fullPromptText }]
-          })
-        });
-
-        const data = await response.json();
-        if (data.text) {
-          setPreferences(prev => ({ ...prev, specificFocus: data.text.trim() }));
-        }
-      } else {
-        const fileParts = await prepareGeminiParts(readyVideos);
-
-        const result = await ai.models.generateContent({
-          model: preferences.model,
-          contents: [
-            ...fileParts as any,
-            fullPromptText
-          ]
-        });
-
-        if (result.text) {
-          setPreferences(prev => ({ ...prev, specificFocus: result.text.trim() }));
-        }
+      const textOutput = result.text;
+      if (textOutput) {
+        setPreferences(prev => ({ ...prev, specificFocus: textOutput.trim() }));
       }
     } catch (err: any) {
       console.error("Focus generation error:", err);
-      setError(`The selected LLM provider could not handle this request. Please choose another LLM provider. Details: ${err.message || "Unknown error."}`);
+      setError(`The selected LLM provider could not handle this request. Details: ${err.message || "Unknown error."}`);
     } finally {
       setIsGeneratingFocus(false);
     }
@@ -949,7 +897,6 @@ Make it sound like a unique narrative angle or specific topic focus derived dire
     setIsGeneratingSystemPrompt(true);
     try {
       const readyVideos = mediaFiles.filter(v => v.status === 'ACTIVE');
-      const isOpenRouter = preferences.model.includes("/");
 
       const promptText = `You are an expert prompt engineer. Based on the provided source media, target audience, and tone parameters, design a comprehensive system prompt directed at an AI blog writer. The system prompt should explicitly define the AI's persona, writing style, formatting constraints, and the key thematic elements it needs to extract and synthesize from the source material to create a high-quality professional and creative blog post. Do not include preambles, just output the system prompt text.
 Theme: General professional content
@@ -965,48 +912,23 @@ Tone: ${preferences.tone.join(", ")}`;
 
       const fullPromptText = promptText + (additionalText ? "\\n\\nSource Content:\\n" + additionalText : "");
 
-      if (isOpenRouter) {
-        const user = auth.currentUser;
-        if (!user) throw new Error("Authentication Required");
-        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
-        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
+      const fileParts = await prepareGeminiParts(readyVideos);
 
-        if (!apiKey) {
-          throw new Error("OpenRouter Key Missing");
-        }
+      const result = await ai.models.generateContent({
+        model: preferences.model,
+        contents: [
+          ...fileParts as any,
+          fullPromptText
+        ]
+      });
 
-        const response = await fetch("/api/ai/openrouter", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: preferences.model,
-            apiKey,
-            messages: [{ role: "user", content: fullPromptText }]
-          })
-        });
-
-        const data = await response.json();
-        if (data.text) {
-          setPreferences(prev => ({ ...prev, systemPrompt: data.text.trim() }));
-        }
-      } else {
-        const fileParts = await prepareGeminiParts(readyVideos);
-
-        const result = await ai.models.generateContent({
-          model: preferences.model,
-          contents: [
-            ...fileParts as any,
-            fullPromptText
-          ]
-        });
-
-        if (result.text) {
-          setPreferences(prev => ({ ...prev, systemPrompt: result.text.trim() }));
-        }
+      const textOutput = result.text;
+      if (textOutput) {
+        setPreferences(prev => ({ ...prev, systemPrompt: textOutput.trim() }));
       }
     } catch (err: any) {
       console.error("System prompt generation error:", err);
-      setError(`The selected LLM provider could not handle this request. Please choose another LLM provider. Details: ${err.message || "Unknown error."}`);
+      setError(`The selected LLM provider could not handle this request. Details: ${err.message || "Unknown error."}`);
     } finally {
       setIsGeneratingSystemPrompt(false);
     }
@@ -1095,16 +1017,10 @@ Tone: ${preferences.tone.join(", ")}`;
       // REMOVED setIsProcessing(false) here to keep loading state visible during synthesis
 
       // 2. Perform Generation
-      const isOpenRouter = preferences.model.includes("/");
       let generatedContent = "";
 
-      if (isOpenRouter) {
-        const keyDoc = await getDoc(doc(db, "users", user.uid, "private", "keys"));
-        const apiKey = keyDoc.exists() ? keyDoc.data().openRouterKey : null;
-        if (!apiKey) throw new Error("OpenRouter API Key is missing");
-
-        const prompt = `${preferences.systemPrompt}
-Transform provided media context into a high-quality, professional blog post.
+      const fileParts = await prepareGeminiParts(readyVideos);
+      const prompt = `${preferences.systemPrompt}\nTransform provided media into a high-quality, professional blog post.
 
 CRITICAL ARCHITECTURE REQUIREMENTS:
 1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
@@ -1126,57 +1042,16 @@ ${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name
 
 Synthesize the content from these assets into a cohesive narrative. Do not just list them.`;
 
-        let additionalText = "";
-        readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
-        
-        const response = await fetch("/api/ai/openrouter", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: preferences.model,
-            apiKey,
-            messages: [{ role: "user", content: prompt + additionalText }]
-          })
-        });
+      let additionalText = "";
+      readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Generation Failed");
-        generatedContent = data.text;
-      } else {
-        const fileParts = await prepareGeminiParts(readyVideos);
-        const prompt = `${preferences.systemPrompt}\nTransform provided media into a high-quality, professional blog post.
+      const response = await ai.models.generateContent({
+        model: preferences.model,
+        contents: [...(fileParts as any), prompt + additionalText]
+      });
 
-CRITICAL ARCHITECTURE REQUIREMENTS:
-1. H1_TITLE: ALWAYS start with a compelling H1 title (e.g., # The Future of Synthesis).
-2. STRUCTURAL_HIERARCHY: Organize the article into clear logical sections using H2 (##) and H3 (###) headers. Never output a flat wall of text.
-3. NARRATIVE_QUOTES: Include at least TWO insightful blockquotes (>) synthesizing key takeaways or "voice" captured from the source media.
-4. COHESIVE_FLOW: Create a compelling narrative arc, not just a clinical description of the provided files.
-
-TARGET AUDIENCE: ${preferences.targetAudience.join(", ")}
-TONE: ${preferences.tone.join(", ")}
-LENGTH: ${preferences.length}
-SPECIFIC FOCUS: ${preferences.specificFocus}
-
-IMPORTANT: You MUST embed the provided media assets at relevant points in the article using standard Markdown image syntax with the specific Media IDs provided below.
-Syntax: ![Description](MEDIA_ID_ID)
-Example: If you want to place a video with ID 'abc', use: ![Video Context](MEDIA_ID_abc)
-
-AVAILABLE MEDIA ASSETS (IDs and Names):
-${readyVideos.map(v => `- ID: ${(v as any).firestoreId || v.id} | Name: ${v.name}`).join('\n')}
-
-Synthesize the content from these assets into a cohesive narrative. Do not just list them.`;
-
-        let additionalText = "";
-        readyVideos.forEach(v => { if (v.extractedText) additionalText += `\n\n[Content ${v.name}]:\n${v.extractedText}`; });
-
-        const response = await ai.models.generateContent({
-          model: preferences.model,
-          contents: [...(fileParts as any), prompt + additionalText]
-        });
-
-        if (!response.text) throw new Error("Model failed");
-        generatedContent = response.text;
-      }
+      if (!response.text) throw new Error("Model failed");
+      generatedContent = response.text;
 
       // 3. Finalize Generation Record
       await updateDoc(doc(db, "generations", tempGenId), {
@@ -1773,7 +1648,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         setIsHistoryOpen={setIsHistoryOpen}
         setIsAdminModalOpen={setIsAdminModalOpen}
         isAdmin={isAdmin}
-        userPlan={userPlan}
+        userPlan={userPlan || undefined}
         mediaFilesCount={mediaFiles.length}
         handleNewPost={handleNewPost}
         appMode={appMode}
@@ -2011,57 +1886,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     }`}
                   >
                     <option value="gemini-3.1-pro-preview" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3.1 Pro (Analytical & Deep)</option>
-                    <option value="gemini-3-flash-preview" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3 Flash (Fast & Balanced)</option>
-                    <option value="gemini-3.1-flash-lite" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3.1 Flash-Lite (High Speed)</option>
-                    {hasOpenRouterKey && openRouterModels.length > 0 && (
-                      (() => {
-                        const categories = ["1. Text", "2. Image", "3. Embeddings", "4. Audio", "5. Video", "6. Rerank", "7. Speech", "8. Transcription"];
-                        const groupedModels: Record<string, any[]> = {};
-                        openRouterModels.forEach(m => {
-                          const cat = getOpenRouterCategory(m);
-                          if (!groupedModels[cat]) groupedModels[cat] = [];
-                          groupedModels[cat].push(m);
-                        });
-
-                        return (
-                          <>
-                            <option disabled className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-100 text-black'}`}>-- Dynamic OpenRouter Models --</option>
-                            {categories.map(cat => {
-                              if (!groupedModels[cat] || groupedModels[cat].length === 0) return null;
-                              return (
-                                <optgroup 
-                                  key={`optgroup-${cat}`} 
-                                  label={`-- ${cat.split('. ')[1]} --`} 
-                                  className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-50 text-black'}`}
-                                >
-                                  {groupedModels[cat].map((m, idx) => (
-                                    <option 
-                                      key={`model-opt-${m.id}`} 
-                                      value={m.id} 
-                                      className={`font-normal ${theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}`}
-                                    >
-                                      {m.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              );
-                            })}
-                          </>
-                        );
-                      })()
-                    )}
-                    {hasOpenRouterKey && (
-                      <>
-                        <option disabled className={`font-bold border-t ${theme === 'dark' ? 'bg-[#222] text-[#F8F8F7]' : 'bg-gray-100 text-black'}`}>-- OpenRouter Presets --</option>
-                        <option value="openai/gpt-4o" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>OpenAI: GPT-4o</option>
-                        <option value="anthropic/claude-3.5-sonnet" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Anthropic: Claude 3.5 Sonnet</option>
-                        <option value="meta-llama/llama-3.1-405b-instruct" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Meta: Llama 3.1 405B</option>
-                        <option value="google/gemini-2.0-flash-exp:free" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Google: Gemini 2.0 Flash (via OR)</option>
-                      </>
-                    )}
                   </select>
                   <p className="text-[9px] font-mono opacity-40 uppercase leading-tight mt-1">
-                    {preferences.model.includes("/") ? "→ Routing priority: OpenRouter multi-provider relay." : (preferences.model.includes("pro") ? "→ Extraction priority: Maximum complexity & reasoning depth." : "→ Extraction priority: Speed & efficient token consumption.")}
+                    → Extraction priority: Maximum complexity & reasoning depth.
                   </p>
                 </div>
 
@@ -2858,7 +2685,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 md:pt-24 bg-black/90 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
             onClick={() => setPreviewMedia(null)}
           >
             <motion.div 
@@ -3106,8 +2933,8 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         </div>
       </div>
     </div>
-    <AnimatePresence>
-      {showClearConfirmation && (
+      <AnimatePresence>
+        {showClearConfirmation && (
           <motion.div 
              initial={{ opacity: 0 }}
              animate={{ opacity: 1 }}
