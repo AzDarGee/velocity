@@ -138,7 +138,7 @@ async function startServer() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  // Debug Config (Admin Only)
+  // API Route: Debug Config (Admin Only)
   app.get("/api/admin/debug-config", async (req, res) => {
     try {
       const { adminId } = req.query;
