@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -259,6 +259,37 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      const target = entries[0];
+      if (target.isIntersecting && visibleCount < assets.length && !isLoadingMore) {
+        setIsLoadingMore(true);
+        setTimeout(() => {
+          setVisibleCount(prev => prev + 10);
+          setIsLoadingMore(false);
+        }, 800);
+      }
+    }, { root: null, rootMargin: '200px', threshold: 0.1 });
+
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+    return () => {
+      if (loaderRef.current) observer.unobserve(loaderRef.current);
+    };
+  }, [visibleCount, assets.length, isLoadingMore]);
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const toggleSelectAsset = (id: string) => {
     setSelectedAssets(prev => {
@@ -1827,7 +1858,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                 </div>
                 <div className="flex flex-col">
                   <AnimatePresence>
-                    {assets.map((asset) => (
+                    {assets.slice(0, visibleCount).map((asset) => (
                       <motion.div
                         key={asset.id}
                         initial={{ opacity: 0, y: 10 }}
@@ -2134,14 +2165,28 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                {/* Details and Metadata */}
                                <div className={`w-full p-4 border-l-2 opacity-69 rounded-3xl ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
                                  {asset.source === 'generated' && asset.metadata ? (
-                                  <div className="flex flex-col gap-2 w-full relative">
+                                  <div className="flex flex-col gap-2 w-full relative group/details">
                                     {asset.metadata.prompt && (
-                                      <p 
-                                        className={`text-xs font-mono italic leading-relaxed whitespace-pre-wrap break-words ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} 
-                                        title={asset.metadata.prompt}
-                                      >
-                                        "{asset.metadata.prompt.length > 300 ? `${asset.metadata.prompt.substring(0, 300)}...` : asset.metadata.prompt}"
-                                      </p>
+                                      <div className="relative">
+                                        <p 
+                                          className={`text-xs font-mono italic leading-relaxed whitespace-pre-wrap break-words pr-8 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} 
+                                          title={asset.metadata.prompt}
+                                        >
+                                          "{asset.metadata.prompt.length > 300 ? `${asset.metadata.prompt.substring(0, 300)}...` : asset.metadata.prompt}"
+                                        </p>
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); copyToClipboard(asset.metadata.prompt, asset.id); }}
+                                          className={`absolute top-0 right-0 p-1.5 rounded-md transition-all opacity-0 group-hover/details:opacity-100 ${theme === 'dark' ? 'hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-black/5 text-black/40 hover:text-black'}`}
+                                          title="Copy Prompt"
+                                        >
+                                          {copiedId === asset.id ? (
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[8px] font-bold uppercase tracking-tighter text-green-500">Copied</span>
+                                              <Check className="w-3 h-3 text-green-500" />
+                                            </div>
+                                          ) : <Copy className="w-3 h-3" />}
+                                        </button>
+                                      </div>
                                     )}
                                     {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
                                       <div className="flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60 mt-1">
@@ -2165,6 +2210,18 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       </motion.div>
                     ))}
                   </AnimatePresence>
+                  {visibleCount < assets.length && (
+                    <div ref={loaderRef} className="p-10 flex items-center justify-center">
+                      {isLoadingMore ? (
+                        <div className="flex flex-col items-center gap-3 transition-opacity duration-300">
+                          <RefreshCw className={`w-6 h-6 animate-spin ${theme === 'dark' ? 'text-white/40' : 'text-black/40'}`} />
+                          <span className="text-[10px] font-mono uppercase tracking-widest opacity-40">Expanding Syntheses...</span>
+                        </div>
+                      ) : (
+                        <div className="h-10 w-full" />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
