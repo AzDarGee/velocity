@@ -47,7 +47,7 @@ const DEFAULT_IMAGE_STYLES = [
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
-const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light' | 'dark' }) => {
+const CustomAudioPlayer = ({ asset, theme, badgeContent }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode }) => {
   const src = asset.url;
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -131,7 +131,9 @@ const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light'
         {/* Track Info */}
         <div className="flex-grow min-w-0 flex flex-col justify-center">
           <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{title}</h4>
-          <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
+          {badgeContent ? badgeContent : (
+            <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
+          )}
         </div>
         
         {/* Play Controls */}
@@ -1830,11 +1832,23 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors ${
+                        className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${
                           theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
                         } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
                       >
-                         <div className="flex items-start gap-3">
+                         {(() => {
+                           const bgUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' ? asset.url : undefined);
+                           if (!bgUrl) return null;
+                           return (
+                             <img 
+                               src={bgUrl} 
+                               alt="" 
+                               referrerPolicy="no-referrer"
+                               className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-opacity duration-300 blur-sm scale-105 ${theme === 'dark' ? 'opacity-[0.15] group-hover:opacity-[0.22]' : 'opacity-[0.08] group-hover:opacity-[0.12]'}`} 
+                             />
+                           );
+                         })()}
+                         <div className="relative z-10 flex items-start gap-3">
                            <button 
                              onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
                              className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
@@ -1873,37 +1887,68 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                </div>
                                
                                {/* Type and Source */}
-                               <div className="flex flex-wrap items-center gap-2 mb-3">
-                                  <div 
-                                    onClick={() => {
-                                      setViewingAssetDetails(asset);
-                                    }}
-                                    className={`px-1.5 py-0.5 text-[9px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
-                                  >
-                                    {asset.type}
-                                  </div>
-                                  {asset.source === 'uploaded' ? (
-                                    <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
-                                      USR_RAW
+                               {asset.type !== 'audio' && (
+                                 <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <div 
+                                      onClick={() => {
+                                        setViewingAssetDetails(asset);
+                                      }}
+                                      className={`px-1.5 py-0.5 text-[9px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
+                                    >
+                                      {asset.type}
                                     </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <div className={`text-[9px] w-max uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
-                                        {asset.model}
+                                    {asset.source === 'uploaded' ? (
+                                      <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                        USR_RAW
                                       </div>
-                                      {asset.metadata?.generationTimeMs && (
-                                        <div className="text-[9px] font-mono opacity-40 whitespace-nowrap">
-                                          | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <div className={`text-[9px] w-max uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                          {asset.model}
                                         </div>
-                                      )}
-                                    </div>
-                                  )}
-                               </div>
+                                        {asset.metadata?.generationTimeMs && (
+                                          <div className="text-[9px] font-mono opacity-40 whitespace-nowrap">
+                                            | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                 </div>
+                               )}
                                
                                {/* Custom Audio Player */}
                                {asset.type === 'audio' && asset.url && (
                                  <div className="mb-4 w-full">
-                                   <CustomAudioPlayer asset={asset} theme={theme} />
+                                   <CustomAudioPlayer 
+                                     asset={asset} 
+                                     theme={theme} 
+                                     badgeContent={
+                                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                          <div 
+                                            onClick={() => setViewingAssetDetails(asset)}
+                                            className={`px-1 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
+                                          >
+                                            {asset.type}
+                                          </div>
+                                          {asset.source === 'uploaded' ? (
+                                            <div className="text-[8px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                              USR_RAW
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1.5">
+                                              <div className={`text-[8px] w-max uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                                {asset.model}
+                                              </div>
+                                              {asset.metadata?.generationTimeMs && (
+                                                <div className="text-[8px] font-mono opacity-40 whitespace-nowrap">
+                                                  | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                       </div>
+                                     }
+                                   />
                                  </div>
                                )}
                                
