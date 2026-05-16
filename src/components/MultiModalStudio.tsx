@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil, Search } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -310,10 +310,21 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
 
+  const [librarySearchQuery, setLibrarySearchQuery] = useState("");
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<'all' | 'image' | 'video' | 'audio'>('all');
+
+  const filteredAssets = assets.filter(asset => {
+    const matchesSearch = asset.name.toLowerCase().includes(librarySearchQuery.toLowerCase()) || 
+                          (asset.metadata?.prompt?.toLowerCase().includes(librarySearchQuery.toLowerCase())) ||
+                          (asset.metadata?.title?.toLowerCase().includes(librarySearchQuery.toLowerCase()));
+    const matchesType = libraryTypeFilter === 'all' || asset.type === libraryTypeFilter;
+    return matchesSearch && matchesType;
+  });
+
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
       const target = entries[0];
-      if (target.isIntersecting && visibleCount < assets.length && !isLoadingMore) {
+      if (target.isIntersecting && visibleCount < filteredAssets.length && !isLoadingMore) {
         setIsLoadingMore(true);
         setTimeout(() => {
           setVisibleCount(prev => prev + 10);
@@ -1949,9 +1960,39 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     </>
                   )}
                 </div>
+
+                {/* Search and Filters */}
+                <div className={`border-b-2 p-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 transition-all ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-white'}`}>
+                  <div className="relative flex-1 group">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors ${theme === 'dark' ? 'text-gray-500 group-focus-within:text-white' : 'text-gray-400 group-focus-within:text-black'}`} />
+                    <input 
+                      type="text" 
+                      placeholder="Search library assets..."
+                      value={librarySearchQuery}
+                      onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                      className={`w-full pl-9 pr-4 py-2 text-[10px] uppercase font-mono tracking-widest bg-transparent outline-none transition-all ${theme === 'dark' ? 'text-white placeholder:text-gray-600' : 'text-black placeholder:text-gray-400'}`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 p-1 border-t sm:border-t-0 sm:border-l border-current/10">
+                    {(['all', 'image', 'video', 'audio'] as const).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => setLibraryTypeFilter(type)}
+                        className={`px-3 py-1.5 text-[9px] uppercase font-mono font-bold tracking-widest transition-all border ${
+                          libraryTypeFilter === type
+                            ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black')
+                            : (theme === 'dark' ? 'bg-transparent text-gray-500 border-transparent hover:text-white' : 'bg-transparent text-gray-400 border-transparent hover:text-black')
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex flex-col">
                   <AnimatePresence>
-                    {assets.slice(0, visibleCount).map((asset) => (
+                    {filteredAssets.slice(0, visibleCount).map((asset) => (
                       <motion.div
                         key={asset.id}
                         initial={{ opacity: 0, y: 10, height: 160 }}
