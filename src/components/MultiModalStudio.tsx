@@ -2434,7 +2434,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                            </div>
                          </div>
                       </motion.div>
-                    ))}
+                    );
+                  })}
                   </AnimatePresence>
                   {visibleCount < assets.length && (
                     <div ref={loaderRef} className="p-10 flex items-center justify-center">
