@@ -48,6 +48,16 @@ const DEFAULT_IMAGE_STYLES = [
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
+const FOCUS_QUOTES = [
+  "Scanning content nodes...",
+  "Aligning narrative vectors...",
+  "Calibrating strategic intent...",
+  "Synthesizing unique angles...",
+  "Decoding audience resonance...",
+  "Optimizing hook frequency...",
+  "Mapping key thematic clusters..."
+];
+
 const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode, onRename?: (asset: MediaAsset, newName: string) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(asset.name);
@@ -536,15 +546,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     localStorage.setItem("sunoAudioWeight", sunoAudioWeight.toString());
   }, [sunoAudioWeight]);
 
-  const FOCUS_QUOTES = [
-    "Scanning content nodes...",
-    "Aligning narrative vectors...",
-    "Calibrating strategic intent...",
-    "Synthesizing unique angles...",
-    "Decoding audience resonance...",
-    "Optimizing hook frequency...",
-    "Mapping key thematic clusters..."
-  ];
+
 
   useEffect(() => {
     if (!userId) return;
