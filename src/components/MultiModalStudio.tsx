@@ -323,6 +323,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
 
   const [librarySearchQuery, setLibrarySearchQuery] = useState("");
   const [libraryTypeFilter, setLibraryTypeFilter] = useState<'all' | 'image' | 'video' | 'audio'>('all');
+  const [tappedAssetId, setTappedAssetId] = useState<string | null>(null);
 
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = asset.name.toLowerCase().includes(librarySearchQuery.toLowerCase()) || 
@@ -2019,53 +2020,70 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
 
                 <div className="flex flex-col">
                   <AnimatePresence>
-                    {filteredAssets.slice(0, visibleCount).map((asset) => (
-                      <motion.div
-                        key={asset.id}
-                        initial={{ opacity: 0, y: 10, height: 160 }}
-                        animate={{ opacity: 1, y: 0, height: 160 }}
-                        whileHover={{ height: 'auto' }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ 
-                          height: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
-                          opacity: { duration: 0.3 },
-                          y: { duration: 0.3 }
-                        }}
-                        className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${
-                          theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
-                        } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
-                      >
-                         {(() => {
-                           const bgUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' ? asset.url : undefined);
-                           if (!bgUrl) return null;
-                           return (
-                             <img 
-                               src={bgUrl} 
-                               alt="" 
-                               referrerPolicy="no-referrer"
-                               className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-all duration-500 blur-[2px] group-hover:blur-sm scale-105 ${theme === 'dark' ? 'opacity-40 group-hover:opacity-[0.15]' : 'opacity-30 group-hover:opacity-[0.08]'}`} 
-                             />
-                           );
-                         })()}
+                    {filteredAssets.slice(0, visibleCount).map((asset) => {
+                      const isTapped = tappedAssetId === asset.id;
+                      return (
+                        <motion.div
+                          key={asset.id}
+                          initial={{ opacity: 0, y: 10, height: 160 }}
+                          animate={{ 
+                            opacity: 1, 
+                            y: 0, 
+                            height: isTapped ? 'auto' : 160 
+                          }}
+                          whileHover={{ height: 'auto' }}
+                          exit={{ opacity: 0, y: -10 }}
+                          onClick={() => {
+                            if (window.innerWidth <= 1024) {
+                              setTappedAssetId(prev => prev === asset.id ? null : asset.id);
+                            }
+                          }}
+                          transition={{ 
+                            height: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
+                            opacity: { duration: 0.3 },
+                            y: { duration: 0.3 }
+                          }}
+                          className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${
+                            theme === 'dark' 
+                              ? `border-[#222] ${isTapped ? 'bg-[#141414]' : 'hover:bg-[#141414]'}` 
+                              : `border-gray-100 ${isTapped ? 'bg-gray-50' : 'hover:bg-gray-50'}`
+                          } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
+                        >
+                           {(() => {
+                             const bgUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' ? asset.url : undefined);
+                             if (!bgUrl) return null;
+                             return (
+                               <img 
+                                 src={bgUrl} 
+                                 alt="" 
+                                 referrerPolicy="no-referrer"
+                                 className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-all duration-500 ${isTapped ? 'blur-sm' : 'blur-[2px] group-hover:blur-sm'} scale-105 ${
+                                   theme === 'dark' 
+                                     ? `${isTapped ? 'opacity-[0.15]' : 'opacity-40 group-hover:opacity-[0.15]'}` 
+                                     : `${isTapped ? 'opacity-[0.08]' : 'opacity-30 group-hover:opacity-[0.08]'}`
+                                 }`} 
+                               />
+                             );
+                           })()}
 
-                         {/* Unhovered State Content */}
-                         <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-all duration-500 ${selectedAssets.has(asset.id) ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0 group-hover:pointer-events-none'}`}>
-                            <div className={`p-4 rounded-full border-2 ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/40' : 'bg-white/40 border-black/5 text-black/40'} backdrop-blur-md`}>
-                              {asset.type === 'image' && <ImageIcon className="w-8 h-8" />}
-                              {asset.type === 'video' && <Video className="w-8 h-8" />}
-                              {asset.type === 'audio' && <Music className="w-8 h-8" />}
-                            </div>
-                         </div>
+                           {/* Unhovered State Content */}
+                           <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-all duration-500 ${selectedAssets.has(asset.id) ? 'opacity-0 pointer-events-none' : (isTapped ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0 group-hover:pointer-events-none')}`}>
+                              <div className={`p-4 rounded-full border-2 ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/40' : 'bg-white/40 border-black/5 text-black/40'} backdrop-blur-md`}>
+                                {asset.type === 'image' && <ImageIcon className="w-8 h-8" />}
+                                {asset.type === 'video' && <Video className="w-8 h-8" />}
+                                {asset.type === 'audio' && <Music className="w-8 h-8" />}
+                              </div>
+                           </div>
 
-                         <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
-                             className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
-                               selectedAssets.has(asset.id) 
-                                 ? 'opacity-100' 
-                                 : 'opacity-0 group-hover:opacity-100'
-                             }`}
-                           >
+                           <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : (isTapped ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}`}>
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
+                               className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
+                                 selectedAssets.has(asset.id) 
+                                   ? 'opacity-100' 
+                                   : (isTapped ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+                               }`}
+                             >
                              {selectedAssets.has(asset.id) ? <CheckSquare className="w-5 h-5 text-indigo-500" /> : <Square className="w-5 h-5" />}
                            </button>
                            <div className="flex-1 flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6 min-w-0">
