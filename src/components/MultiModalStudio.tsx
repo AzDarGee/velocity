@@ -47,7 +47,7 @@ const DEFAULT_IMAGE_STYLES = [
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
-const CustomAudioPlayer = ({ asset, theme, badgeContent }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode }) => {
+const CustomAudioPlayer = ({ asset, theme, badgeContent, children }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode }) => {
   const src = asset.url;
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -108,7 +108,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent }: { asset: MediaAsset, 
   if (!src) return null;
 
   return (
-    <div className={`flex flex-col w-full max-w-[500px] rounded-xl overflow-hidden transition-all duration-300 shadow-sm hover:shadow-md ${theme === 'dark' ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+    <div className={`flex flex-col w-full rounded-xl overflow-hidden transition-all duration-300 shadow-sm hover:shadow-md ${theme === 'dark' ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
       <div className="flex items-center p-3 gap-4">
         {/* Cover Art */}
         <div className={`w-14 h-14 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center relative shadow-sm ${theme === 'dark' ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
@@ -134,6 +134,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent }: { asset: MediaAsset, 
           {badgeContent ? badgeContent : (
             <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
           )}
+          {children && <div className="mt-2">{children}</div>}
         </div>
         
         {/* Play Controls */}
@@ -1844,11 +1845,11 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                src={bgUrl} 
                                alt="" 
                                referrerPolicy="no-referrer"
-                               className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-opacity duration-300 blur-sm scale-105 ${theme === 'dark' ? 'opacity-[0.15] group-hover:opacity-[0.22]' : 'opacity-[0.08] group-hover:opacity-[0.12]'}`} 
+                               className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-all duration-500 blur-[2px] group-hover:blur-sm scale-105 ${theme === 'dark' ? 'opacity-40 group-hover:opacity-[0.15]' : 'opacity-30 group-hover:opacity-[0.08]'}`} 
                              />
                            );
                          })()}
-                         <div className="relative z-10 flex items-start gap-3">
+                         <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                            <button 
                              onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
                              className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
@@ -1879,8 +1880,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
                                {/* Asset Name and Timestamp */}
-                               <div className="flex items-start justify-between gap-4 mb-1">
-                                 <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
+                               <div className={`flex items-start gap-4 mb-1 ${asset.type === 'audio' ? 'justify-end' : 'justify-between'}`}>
+                                 {asset.type !== 'audio' && (
+                                   <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
+                                 )}
                                  <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest whitespace-nowrap hidden sm:block">
                                    {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                  </span>
@@ -1948,11 +1951,99 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                           )}
                                        </div>
                                      }
-                                   />
+                                   >
+                                     {/* Asset Actions inside Audio Player */}
+                                     <div className="flex flex-wrap gap-2 mt-2">
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
+                                           disabled={coverGeneratingAssets.has(asset.id)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
+                                           } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                           title="Generate Song Cover"
+                                         >
+                                           {coverGeneratingAssets.has(asset.id) ? (
+                                             <RefreshCw className="w-4 h-4 animate-spin" />
+                                           ) : (
+                                             <Sparkles className="w-4 h-4" />
+                                           )}
+                                         </button>
+                                       )}
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
+                                           disabled={wavGeneratingAssets.has(asset.id)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' 
+                                               ? asset.metadata?.wavUrl 
+                                                 ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
+                                                 : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
+                                               : asset.metadata?.wavUrl
+                                                 ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
+                                                 : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
+                                           } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                           title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
+                                         >
+                                           {wavGeneratingAssets.has(asset.id) ? (
+                                             <RefreshCw className="w-4 h-4 animate-spin" />
+                                           ) : asset.metadata?.wavUrl ? (
+                                             <Download className="w-4 h-4" />
+                                           ) : (
+                                             <FileAudio className="w-4 h-4" />
+                                           )}
+                                         </button>
+                                       )}
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
+                                           disabled={lyricsLoadingAssets.has(asset.id)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
+                                           } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                           title="View Temporal Lyrics"
+                                         >
+                                           {lyricsLoadingAssets.has(asset.id) ? (
+                                             <RefreshCw className="w-4 h-4 animate-spin" />
+                                           ) : (
+                                             <Wand2 className="w-4 h-4" />
+                                           )}
+                                         </button>
+                                       )}
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={() => onAddAssetToNarrative?.(asset)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
+                                           }`}
+                                           title="Add to Narrative Context"
+                                         >
+                                           <BookOpen className="w-4 h-4" />
+                                         </button>
+                                       )}
+                                       <button 
+                                         onClick={() => {
+                                           if (asset.url) {
+                                             window.open(asset.url, '_blank');
+                                           }
+                                         }}
+                                         className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                           theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                                         }`} title="Download / Open">
+                                           <Download className="w-4 h-4" />
+                                       </button>
+                                       <button 
+                                         onClick={() => setAssetToDelete(asset)}
+                                         className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0" title="Purge Record">
+                                           <Trash2 className="w-4 h-4" />
+                                       </button>
+                                     </div>
+                                   </CustomAudioPlayer>
                                  </div>
                                )}
                                
                                {/* Asset Actions */}
+                               {asset.type !== 'audio' && (
                                <div className="flex flex-wrap gap-2 mb-4">
                                  {asset.type === 'audio' && asset.source === 'generated' && (
                                    <button 
@@ -2038,7 +2129,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                      <Trash2 className="w-4 h-4" />
                                  </button>
                                </div>
-
+                               )}
+                               
                                {/* Details and Metadata */}
                                <div className={`w-full p-4 border-l-2 opacity-69 rounded-3xl ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
                                  {asset.source === 'generated' && asset.metadata ? (
