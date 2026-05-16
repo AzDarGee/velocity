@@ -998,27 +998,8 @@ Tone: ${preferences.tone.join(", ")}`;
 
       const cost = getCreditsForLength(preferences.length);
       if (!isAdmin) {
-        await runTransaction(db, async (transaction) => {
-          const userDoc = await transaction.get(userRef);
-          if (!userDoc.exists()) throw new Error("User record not found");
-          const currentCredits = userDoc.data().credits || 0;
-          if (currentCredits < cost) throw new Error(`Insufficient credits`);
-          transaction.update(userRef, { credits: currentCredits - cost });
-          
-          // Log activity
-          const activityRef = doc(collection(db, 'users', user.uid, 'activity'));
-          transaction.set(activityRef, {
-            type: 'narrative_synthesis',
-            description: `Narrative Synthesis [${preferences.length}]`,
-            cost: cost,
-            timestamp: serverTimestamp(),
-            metadata: {
-              model: preferences.model,
-              length: preferences.length,
-              audience: preferences.targetAudience
-            }
-          });
-        });
+        const currentCredits = userCheck.exists() ? (userCheck.data().credits || 0) : 50;
+        if (currentCredits < cost) throw new Error(`Insufficient credits`);
       }
 
       // 1. Create Placeholder Generation
@@ -1085,6 +1066,29 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         status: "completed",
         updatedAt: serverTimestamp()
       });
+
+      if (!isAdmin) {
+        await runTransaction(db, async (transaction) => {
+          const userDoc = await transaction.get(userRef);
+          if (!userDoc.exists()) throw new Error("User record not found");
+          const currentCredits = userDoc.data().credits || 0;
+          transaction.update(userRef, { credits: currentCredits - cost });
+          
+          // Log activity
+          const activityRef = doc(collection(db, 'users', user.uid, 'activity'));
+          transaction.set(activityRef, {
+            type: 'narrative_synthesis',
+            description: `Narrative Synthesis [${preferences.length}]`,
+            cost: cost,
+            timestamp: serverTimestamp(),
+            metadata: {
+              model: preferences.model,
+              length: preferences.length,
+              audience: preferences.targetAudience
+            }
+          });
+        });
+      }
 
       setIsProcessing(false); // FINALLY set to false after completion
 

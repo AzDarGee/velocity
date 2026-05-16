@@ -377,37 +377,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     let finalMetadata: any = { prompt };
 
     try {
-      if (!isAdmin) {
-        // Deduct credits via Firestore transaction
-        // Importing db here to avoid dependency issues if needed, but it's better to expect it in lib/firebase
-        const { db, handleFirestoreError, OperationType } = await import('../lib/firebase');
-        const { doc, runTransaction, collection, serverTimestamp } = await import('firebase/firestore');
-        
-        await runTransaction(db, async (transaction) => {
-          const userRef = doc(db, 'users', userId);
-          const userDoc = await transaction.get(userRef);
-          if (!userDoc.exists()) throw new Error("User record not found");
-          const currentCredits = userDoc.data().credits || 0;
-          if (currentCredits < cost) throw new Error(`Insufficient credits`);
-          
-          transaction.update(userRef, { credits: currentCredits - cost });
-          
-          // Log activity
-          const activityRef = doc(collection(db, 'users', userId, 'activity'));
-          transaction.set(activityRef, {
-            type: `${activeMode}_generation`,
-            description: `${activeMode.charAt(0).toUpperCase() + activeMode.slice(1)} Synthesis`,
-            cost: cost,
-            timestamp: serverTimestamp(),
-            metadata: {
-              prompt: prompt.substring(0, 500)
-            }
-          });
-        }).catch(err => {
-          handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
-          throw err;
-        });
-      }
+      // Credit deduction moved to after successful generation and save.
 
       if (activeMode === 'music') {
         const apiKey = (import.meta as any).env.VITE_SUNO_API_KEY;
@@ -715,6 +685,34 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
         const assetRef = doc(db, 'users', userId, 'media_assets', newAsset.id);
         const assetData = { ...newAsset, userId };
         await setDoc(assetRef, assetData);
+
+        if (!isAdmin) {
+          const { handleFirestoreError, OperationType } = await import('../lib/firebase');
+          const { runTransaction, collection, serverTimestamp } = await import('firebase/firestore');
+          
+          await runTransaction(db, async (transaction) => {
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists()) throw new Error("User record not found");
+            const currentCredits = userDoc.data().credits || 0;
+            
+            transaction.update(userRef, { credits: currentCredits - cost });
+            
+            const activityRef = doc(collection(db, 'users', userId, 'activity'));
+            transaction.set(activityRef, {
+              type: `${activeMode}_generation`,
+              description: `${activeMode.charAt(0).toUpperCase() + activeMode.slice(1)} Synthesis`,
+              cost: cost,
+              timestamp: serverTimestamp(),
+              metadata: {
+                prompt: prompt.substring(0, 500)
+              }
+            });
+          }).catch(err => {
+            handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+            console.error("Failed to deduct credits:", err);
+          });
+        }
       } catch (err) {
         console.error("Failed to save asset to database:", err);
       }
