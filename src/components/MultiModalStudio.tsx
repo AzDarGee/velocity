@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil, Search } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil, Search, Layout } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
   onAddAssetToNarrative?: (asset: MediaAsset) => void;
+  onBulkAddAssetsToNarrative?: (assets: MediaAsset[]) => void;
   credits: number;
   userId: string;
   isAdmin: boolean;
@@ -239,7 +240,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   );
 };
 
-export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin, setAppMode }: MultiModalStudioProps) {
+export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssetsToNarrative, credits, userId, isAdmin, setAppMode }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
     return (localStorage.getItem("studioActiveMode") as GenerationMode) || 'image';
   });
@@ -420,6 +421,19 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
   const deselectAllAssets = () => {
     setSelectedAssets(new Set());
+  };
+
+  const handleBulkIntake = () => {
+    const selectedList = assets.filter(a => selectedAssets.has(a.id));
+    if (selectedList.length === 0) return;
+    
+    if (onBulkAddAssetsToNarrative) {
+      onBulkAddAssetsToNarrative(selectedList);
+    } else if (onAddAssetToNarrative) {
+      selectedList.forEach(asset => onAddAssetToNarrative(asset));
+    }
+    
+    deselectAllAssets();
   };
 
   const executeBulkDelete = async () => {
@@ -1941,6 +1955,17 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     <>
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-bold uppercase font-mono tracking-widest">{selectedAssets.size} Selected</span>
+                        {selectedAssets.size > 1 && (
+                          <button 
+                            onClick={handleBulkIntake}
+                            className={`px-3 py-1 border-2 text-[10px] uppercase font-mono font-bold tracking-widest flex items-center gap-2 transition-colors ${
+                              theme === 'dark' ? 'border-white text-white hover:bg-white hover:text-black' : 'border-black text-black hover:bg-black hover:text-white'
+                            }`}
+                          >
+                            <Layout className="w-3 h-3" />
+                            Intake Selected
+                          </button>
+                        )}
                         <button onClick={deselectAllAssets} className="px-2 py-1 border text-[10px] uppercase font-mono tracking-widest hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                           Deselect All
                         </button>

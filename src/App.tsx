@@ -1484,6 +1484,73 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     }
   };
 
+  const handleBulkAddAssetsToNarrative = async (assets: StudioMediaAsset[]) => {
+    const user = auth.currentUser;
+    if (!user) {
+      setError("Authentication required to link assets.");
+      return;
+    }
+
+    const newFiles: MediaFile[] = assets.map(asset => {
+      const assetUrl = asset.url || "";
+      const mimeType = asset.type === 'image' ? 'image/png' : asset.type === 'video' ? 'video/mp4' : 'audio/mpeg';
+      return {
+        id: `syn-${asset.id}`,
+        name: asset.name,
+        status: 'PROCESSING',
+        type: asset.type,
+        uri: assetUrl,
+        previewUrl: assetUrl,
+        storageUrl: assetUrl,
+        mimeType: mimeType,
+        source: 'ai',
+        size: asset.metadata?.fileSize || 0,
+        progress: 50
+      };
+    });
+
+    setMediaFiles(prev => {
+      const existingIds = new Set(prev.map(f => f.id));
+      const filteredNew = newFiles.filter(f => !existingIds.has(f.id));
+      return [...prev, ...filteredNew];
+    });
+
+    setAppMode('narrative');
+
+    // Process all assets in parallel
+    await Promise.all(assets.map(async (asset) => {
+      try {
+        const fileRef = doc(db, "files", asset.id);
+        const fileSnap = await getDoc(fileRef);
+        
+        if (!fileSnap.exists()) {
+          const mimeType = asset.type === 'image' ? 'image/png' : asset.type === 'video' ? 'video/mp4' : 'audio/mpeg';
+          const fileDoc = {
+            userId: user.uid,
+            name: asset.name,
+            type: mimeType,
+            size: asset.metadata?.fileSize || 0,
+            storageUrl: asset.url || "",
+            createdAt: serverTimestamp(),
+            uri: asset.url || "",
+            mimeType: mimeType,
+            source: 'ai'
+          };
+          await setDoc(fileRef, fileDoc);
+        }
+
+        setMediaFiles(prev => prev.map(f => f.id === `syn-${asset.id}` ? { 
+          ...f, 
+          status: 'ACTIVE', 
+          firestoreId: asset.id,
+          progress: 100 
+        } : f));
+      } catch (err) {
+        console.error(`Bulk link error for ${asset.id}:`, err);
+      }
+    }));
+  };
+
   const onboardingSteps: Step[] = useMemo(() => [
     { targetId: 'onboarding-header', title: 'Welcome', content: 'Welcome message.', position: 'bottom' },
     { targetId: 'onboarding-intake', title: 'Upload', content: 'Upload files.', position: 'right', appMode: 'narrative' },
@@ -1717,6 +1784,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               key={studioResetKey}
               theme={theme} 
               onAddAssetToNarrative={handleAddAssetToNarrative} 
+              onBulkAddAssetsToNarrative={handleBulkAddAssetsToNarrative}
               credits={credits || 0}
               userId={auth.currentUser?.uid || ''}
               isAdmin={isAdmin}
@@ -1828,9 +1896,10 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              setMediaFileToDelete(v);
+                              if (!isProcessing) setMediaFileToDelete(v);
                             }}
-                            className={`p-1 transition-colors ${theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white'}`}
+                            disabled={isProcessing}
+                            className={`p-1 transition-colors ${isProcessing ? 'opacity-30 cursor-not-allowed' : (theme === 'dark' ? 'hover:bg-white hover:text-black' : 'hover:bg-black hover:text-white')}`}
                             title="Remove File"
                           >
                             <X className="w-3 h-3" />
@@ -1885,9 +1954,10 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                 </AnimatePresence>
 
                 <div 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`relative border p-12 transition-all cursor-pointer group flex flex-col items-center gap-4
+                  onClick={() => !isProcessing && fileInputRef.current?.click()}
+                  className={`relative border p-12 transition-all group flex flex-col items-center gap-4
                     ${theme === 'dark' ? 'border-[#333]' : 'border-[#141414]'}
+                    ${isProcessing ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
                     ${mediaFiles.length === 0 ? (theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-[#F8F8F7]') : `border-dashed opacity-60 hover:opacity-100 ${theme === 'dark' ? 'hover:bg-[#1A1A1A]' : 'hover:bg-[#F8F8F7]'}`}`}
                 >
                   <input 
@@ -1896,9 +1966,10 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     className="hidden" 
                     accept="video/*,audio/*,image/*,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,.md,.mkv,.flac,.csv,.rtf"
                     multiple
+                    disabled={isProcessing}
                     onChange={handleFileChange}
                   />
-                  <div className={`p-4 border ${theme === 'dark' ? 'border-[#F8F8F7]' : 'border-[#141414]'} transition-all group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black ${mediaFiles.length > 0 ? 'scale-75' : ''}`}>
+                  <div className={`p-4 border ${theme === 'dark' ? 'border-[#F8F8F7]' : 'border-[#141414]'} transition-all ${!isProcessing && 'group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black'} ${mediaFiles.length > 0 ? 'scale-75' : ''}`}>
                     <Plus className="w-8 h-8" />
                   </div>
                   <div className="text-center">
@@ -1934,12 +2005,13 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                   <select 
                     value={preferences.model}
                     onChange={(e) => setPreferences({ ...preferences, model: e.target.value })}
+                    disabled={isProcessing}
                     style={{ colorScheme: theme }}
-                    className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
+                    className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none transition-colors ${
                       theme === 'dark' 
                         ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                         : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                    }`}
+                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     <option value="gemini-3.1-pro-preview" className={theme === 'dark' ? 'bg-[#1A1A1A] text-[#F8F8F7]' : 'bg-white text-[#141414]'}>Gemini 3.1 Pro (Analytical & Deep)</option>
                   </select>
@@ -1954,8 +2026,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <div className="flex items-center gap-4">
                       {preferences.targetAudience.length > 0 && (
                         <button 
-                          onClick={() => setPreferences({ ...preferences, targetAudience: [] })}
-                          className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                          onClick={() => !isProcessing && setPreferences({ ...preferences, targetAudience: [] })}
+                          disabled={isProcessing}
+                          className={`text-[9px] font-mono uppercase transition-opacity ${isProcessing ? 'opacity-20 cursor-not-allowed' : 'hover:opacity-100 opacity-60'} ${theme === 'dark' ? 'text-white' : 'text-black'}`}
                         >
                           De-select All
                         </button>
@@ -1968,8 +2041,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       type="text"
                       value={newAudience}
                       onChange={(e) => setNewAudience(e.target.value)}
+                      disabled={isProcessing}
                       placeholder="Add custom segment (comma-separated for multiple)..."
-                      className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
+                      className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none transition-opacity ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''} ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && newAudience.trim()) {
                           e.preventDefault();
@@ -1992,6 +2066,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     />
                     <button 
                       onClick={() => {
+                        if (isProcessing) return;
                         if (newAudience.trim()) {
                           const vals = newAudience.split(',').map(v => v.trim()).filter(Boolean);
                           let addedAudiences = [...customAudiences];
@@ -2009,7 +2084,8 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           setNewAudience("");
                         }
                       }}
-                      className={`px-3 py-2 border text-[10px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]' : 'border-[#141414]/10 hover:bg-[#141414]/10 text-[#141414]'}`}
+                      disabled={isProcessing}
+                      className={`px-3 py-2 border text-[10px] font-mono uppercase tracking-widest transition-all ${isProcessing ? 'opacity-30 cursor-not-allowed' : (theme === 'dark' ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]' : 'border-[#141414]/10 hover:bg-[#141414]/10 text-[#141414]')}`}
                     >
                       Add
                     </button>
@@ -2025,13 +2101,14 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           <input 
                             type="checkbox"
                             checked={preferences.targetAudience.includes(audience)}
+                            disabled={isProcessing}
                             onChange={(e) => {
                               const newAudienceList = e.target.checked 
                                 ? [...preferences.targetAudience, audience]
                                 : preferences.targetAudience.filter(a => a !== audience);
                               setPreferences({ ...preferences, targetAudience: newAudienceList });
                             }}
-                            className={`peer appearance-none w-4 h-4 border transition-colors ${
+                            className={`peer appearance-none w-4 h-4 border transition-colors ${isProcessing ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'} ${
                               theme === 'dark' 
                                 ? 'border-[#333] bg-[#0A0A0A] checked:bg-[#F8F8F7]' 
                                 : 'border-[#141414] bg-white checked:bg-black'
@@ -2059,8 +2136,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <div className="flex items-center gap-4">
                       {preferences.tone.length > 0 && (
                         <button 
-                          onClick={() => setPreferences({ ...preferences, tone: [] })}
-                          className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                          onClick={() => !isProcessing && setPreferences({ ...preferences, tone: [] })}
+                          disabled={isProcessing}
+                          className={`text-[9px] font-mono uppercase transition-opacity ${isProcessing ? 'opacity-20 cursor-not-allowed' : 'hover:opacity-100 opacity-60'} ${theme === 'dark' ? 'text-white' : 'text-black'}`}
                         >
                           De-select All
                         </button>
@@ -2073,8 +2151,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       type="text"
                       value={newTone}
                       onChange={(e) => setNewTone(e.target.value)}
+                      disabled={isProcessing}
                       placeholder="Add custom tone (comma-separated for multiple)..."
-                      className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
+                      className={`flex-1 border px-3 py-2 text-[10px] font-mono outline-none transition-opacity ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''} ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7]' : 'bg-[#F8F8F7] border-[#141414]/10 text-[#141414]'}`}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && newTone.trim()) {
                           e.preventDefault();
@@ -2097,6 +2176,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     />
                     <button 
                       onClick={() => {
+                        if (isProcessing) return;
                         if (newTone.trim()) {
                           const vals = newTone.split(',').map(v => v.trim()).filter(Boolean);
                           let addedTones = [...customTones];
@@ -2114,7 +2194,8 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           setNewTone("");
                         }
                       }}
-                      className={`px-3 py-2 border text-[10px] font-mono uppercase tracking-widest ${theme === 'dark' ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]' : 'border-[#141414]/10 hover:bg-[#141414]/10 text-[#141414]'}`}
+                      disabled={isProcessing}
+                      className={`px-3 py-2 border text-[10px] font-mono uppercase tracking-widest transition-all ${isProcessing ? 'opacity-30 cursor-not-allowed' : (theme === 'dark' ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]' : 'border-[#141414]/10 hover:bg-[#141414]/10 text-[#141414]')}`}
                     >
                       Add
                     </button>
@@ -2128,13 +2209,14 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                           <input 
                             type="checkbox"
                             checked={preferences.tone.includes(tone)}
+                            disabled={isProcessing}
                             onChange={(e) => {
                               const newToneList = e.target.checked 
                                 ? [...preferences.tone, tone]
                                 : preferences.tone.filter(t => t !== tone);
                               setPreferences({ ...preferences, tone: newToneList });
                             }}
-                            className={`peer appearance-none w-3 h-3 border transition-colors ${
+                            className={`peer appearance-none w-3 h-3 border transition-colors ${isProcessing ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'} ${
                               theme === 'dark' 
                                 ? 'border-[#333] bg-[#0A0A0A] checked:bg-[#F8F8F7]' 
                                 : 'border-[#141414] bg-white checked:bg-black'
@@ -2163,8 +2245,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       {preferences.systemPrompt.length > 200 && (
                         <button
                           type="button"
-                          onClick={() => setShowClearConfirmation({ type: 'systemPrompt' })}
-                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'}`}
+                          onClick={() => !isProcessing && setShowClearConfirmation({ type: 'systemPrompt' })}
+                          disabled={isProcessing}
+                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${isProcessing ? 'opacity-30 cursor-not-allowed' : (theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white')}`}
                         >
                           <Trash2 className="w-3 h-3 shrink-0" />
                           Clear
@@ -2173,12 +2256,12 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       <button
                         type="button"
                         onClick={handleGenerateSystemPrompt}
-                        disabled={isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                        disabled={isProcessing || isGeneratingSystemPrompt || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                         className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
                           theme === 'dark'
                             ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
                             : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                         } ${(!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         } ${(isProcessing || !isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         {isGeneratingSystemPrompt ? (
                           <>
@@ -2198,14 +2281,14 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <textarea 
                       value={preferences.systemPrompt}
                       onChange={(e) => setPreferences({ ...preferences, systemPrompt: e.target.value })}
-                      disabled={!isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                      disabled={isProcessing || !isFilesReady || isGeneratingSystemPrompt || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                       rows={6}
                       placeholder="Enter a custom system prompt to guide the AI's behavior, style, and persona... *"
                       className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
                         theme === 'dark' 
                           ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                           : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                      } ${(!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingSystemPrompt ? 'text-transparent selection:text-transparent' : ''}`}
+                      } ${(isProcessing || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingSystemPrompt ? 'text-transparent selection:text-transparent' : ''}`}
                     />
                     
                     <AnimatePresence>
@@ -2235,11 +2318,12 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <select 
                       value={preferences.length}
                       onChange={(e) => setPreferences({ ...preferences, length: e.target.value })}
-                      className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none cursor-pointer transition-colors ${
+                      disabled={isProcessing}
+                      className={`w-full border px-4 py-3 font-mono text-sm outline-none appearance-none transition-colors ${
                         theme === 'dark' 
                           ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                           : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                      }`}
+                      } ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <option>Short (approx. 300 words)</option>
                       <option>Medium (approx. 600 words)</option>
@@ -2261,8 +2345,9 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                        {preferences.specificFocus.length > 200 && (
                         <button
                           type="button"
-                          onClick={() => setShowClearConfirmation({ type: 'specificFocus' })}
-                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white'}`}
+                          onClick={() => !isProcessing && setShowClearConfirmation({ type: 'specificFocus' })}
+                          disabled={isProcessing}
+                          className={`flex items-center gap-1.5 px-2 py-1 border text-[9px] font-mono tracking-widest uppercase transition-colors ${isProcessing ? 'opacity-30 cursor-not-allowed' : (theme === 'dark' ? 'bg-[#1A1A1A] border-[#333] hover:bg-red-500/20 hover:text-red-500 border-red-500/30' : 'bg-gray-50 border-gray-200 hover:bg-black hover:text-white')}`}
                         >
                           <Trash2 className="w-3 h-3 shrink-0" />
                           Clear
@@ -2271,12 +2356,12 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                       <button
                         type="button"
                         onClick={handleGenerateFocus}
-                        disabled={isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
+                        disabled={isProcessing || isGeneratingFocus || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0}
                         className={`flex items-center gap-1 text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-1 border transition-colors ${
                           theme === 'dark'
                             ? 'border-[#333] hover:bg-[#333] text-[#F8F8F7]'
                             : 'border-[#141414] hover:bg-[#141414] hover:text-white text-[#141414]'
-                        } ${!isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } ${isProcessing || !isFilesReady || isGeneratingFocus || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         {isGeneratingFocus ? (
                           <>
@@ -2296,14 +2381,14 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                     <textarea 
                       value={preferences.specificFocus}
                       onChange={(e) => setPreferences({ ...preferences, specificFocus: e.target.value })}
-                      disabled={!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || isGeneratingFocus}
+                      disabled={isProcessing || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 || isGeneratingFocus}
                       rows={4}
                       placeholder="Define the core objective or specific angle for this narrative (e.g., 'Focus on the technical implementation of the new synthesis engine' or 'Highlight the emotional journey of the creator'). Use Auto-Generate for a suggestion based on your media context. *"
                       className={`w-full border px-4 py-3 font-mono text-sm outline-none resize-none transition-colors ${
                         theme === 'dark' 
                           ? 'bg-[#1A1A1A] border-[#333] text-[#F8F8F7] focus:bg-black hover:border-[#F8F8F7]' 
                           : 'bg-[#F8F8F7] border-[#141414] text-[#141414] focus:bg-white hover:border-black'
-                      } ${!isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0 ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingFocus ? 'text-transparent selection:text-transparent' : ''}`}
+                      } ${(isProcessing || !isFilesReady || preferences.targetAudience.length === 0 || preferences.tone.length === 0) ? 'opacity-50 cursor-not-allowed' : ''} ${isGeneratingFocus ? 'text-transparent selection:text-transparent' : ''}`}
                     />
                     
                     <AnimatePresence>
