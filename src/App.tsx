@@ -1437,6 +1437,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       storageUrl: assetUrl,
       mimeType: mimeType,
       source: 'ai',
+      size: asset.metadata?.fileSize || 0,
       progress: 50
     };
 
@@ -1457,7 +1458,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
           userId: user.uid,
           name: asset.name,
           type: mimeType,
-          size: 0, // placeholder
+          size: asset.metadata?.fileSize || 0,
           storageUrl: assetUrl,
           createdAt: serverTimestamp(),
           uri: assetUrl,
