@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -48,7 +48,24 @@ const DEFAULT_IMAGE_STYLES = [
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
-const CustomAudioPlayer = ({ asset, theme, badgeContent, children }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode }) => {
+const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode, onRename?: (id: string, newName: string) => void }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(asset.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleSubmit = () => {
+    setIsEditing(false);
+    if (editValue.trim() && editValue !== asset.name) {
+      onRename?.(asset.id, editValue);
+    }
+  };
   const src = asset.url;
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -130,8 +147,36 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children }: { asset: Me
         </div>
         
         {/* Track Info */}
-        <div className="flex-grow min-w-0 flex flex-col justify-center">
-          <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{title}</h4>
+        <div className="flex-grow min-w-0 flex flex-col justify-center group/track">
+          {isEditing ? (
+            <div className="relative inline-flex max-w-full overflow-hidden">
+              <input
+                ref={inputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={handleSubmit}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                className={`text-sm font-bold bg-transparent border-b outline-none absolute inset-0 w-full h-full ${theme === 'dark' ? 'text-white border-white/20' : 'text-gray-900 border-black/20'}`}
+              />
+              <span className="text-sm font-bold invisible whitespace-pre min-w-[20px] pr-2">
+                {editValue || " "}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{asset.name}</h4>
+              <button 
+                onClick={() => {
+                  setEditValue(asset.name);
+                  setIsEditing(true);
+                }}
+                className={`opacity-0 group-hover/track:opacity-40 hover:opacity-100 transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+          )}
           {badgeContent ? badgeContent : (
             <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
           )}
@@ -290,6 +335,31 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [editingId]);
+
+  const handleRename = async (id: string, newName: string) => {
+    if (!userId || !newName.trim()) return;
+    try {
+      const { db } = await import('../lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const assetRef = doc(db, 'users', userId, 'media_assets', id);
+      await updateDoc(assetRef, { name: newName.trim() });
+      setEditingId(null);
+    } catch (err) {
+      console.error("Failed to rename asset:", err);
+      setError("Failed to rename asset.");
+    }
   };
 
   const toggleSelectAsset = (id: string) => {
@@ -1926,16 +1996,46 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                 </>
                               )}
                             </div>
-                            <div className="flex flex-col min-w-0 flex-1">
-                               {/* Asset Name and Timestamp */}
-                               <div className={`flex items-start gap-4 mb-1 ${asset.type === 'audio' ? 'justify-end' : 'justify-between'}`}>
-                                 {asset.type !== 'audio' && (
-                                   <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
-                                 )}
-                                 <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest whitespace-nowrap hidden sm:block">
-                                   {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                 </span>
-                               </div>
+                             <div className="flex flex-col min-w-0 flex-1 group/title">
+                                {/* Asset Name and Timestamp */}
+                                <div className={`flex items-start gap-4 mb-1 ${asset.type === 'audio' ? 'justify-end' : 'justify-between'}`}>
+                                  {asset.type !== 'audio' && (
+                                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                                      {editingId === asset.id ? (
+                                        <div className="relative inline-flex max-w-full overflow-hidden">
+                                          <input
+                                            ref={renameInputRef}
+                                            type="text"
+                                            value={editValue}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            onBlur={() => handleRename(asset.id, editValue)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleRename(asset.id, editValue)}
+                                            className={`text-sm sm:text-base font-bold uppercase tracking-tight bg-transparent border-b outline-none absolute inset-0 w-full h-full ${theme === 'dark' ? 'text-white border-white/20' : 'text-black border-black/20'}`}
+                                          />
+                                          <span className="text-sm sm:text-base font-bold uppercase tracking-tight invisible whitespace-pre min-w-[30px] pr-2">
+                                            {editValue || " "}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
+                                          <button 
+                                            onClick={() => {
+                                              setEditValue(asset.name);
+                                              setEditingId(asset.id);
+                                            }}
+                                            className={`opacity-0 group-hover/title:opacity-40 hover:opacity-100 transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                  <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest whitespace-nowrap hidden sm:block">
+                                    {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                  </span>
+                                </div>
                                
                                {/* Type and Source */}
                                {asset.type !== 'audio' && (
@@ -1973,6 +2073,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                    <CustomAudioPlayer 
                                      asset={asset} 
                                      theme={theme} 
+                                     onRename={handleRename} 
                                      badgeContent={
                                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                           <div 

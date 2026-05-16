@@ -317,6 +317,7 @@ export default function App() {
   const [blogPost, setBlogPost] = useState<string | null>(null);
   const [originalContent, setOriginalContent] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [studioResetKey, setStudioResetKey] = useState(0);
   const [genToDelete, setGenToDelete] = useState<string | null>(null);
   const [mediaFileToDelete, setMediaFileToDelete] = useState<MediaFile | null>(null);
   const [viewMode, setViewMode] = useState<"preview" | "raw" | "html">("preview");
@@ -1232,6 +1233,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
   const sanitizedPost = blogPost ? blogPost.replace(/^```markdown\n?/, "").replace(/\n?```$/, "") : "";
 
   const handleNewPost = () => {
+    // Narrative Resets
     setBlogPost(null);
     setOriginalContent(null);
     setCurrentGenerationId(null);
@@ -1245,6 +1247,21 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       systemPrompt: "",
       model: "gemini-3.1-pro-preview",
     });
+
+    // Media Studio Resets
+    setStudioResetKey(prev => prev + 1);
+
+    // Clear Persistence
+    const keysToClear = [
+      "narrativeMediaFiles", "blogPreferences", "currentGenerationId",
+      "studioActiveMode", "studioPrompts", "studioImageStyles", "studioImageStyle",
+      "customImageStyles", "studioAspectRatio", "studioResolution",
+      "sunoCustomMode", "sunoInstrumental", "sunoModel", "sunoStyles", "customStyles",
+      "sunoTitle", "sunoPersonaId", "sunoPersonaModel", "sunoNegativeTags",
+      "sunoVocalGender", "sunoStyleWeight", "sunoWeirdnessConstraint", "sunoAudioWeight"
+    ];
+    keysToClear.forEach(key => localStorage.removeItem(key));
+    
     setIsHistoryOpen(false);
   };
 
@@ -1696,6 +1713,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
         {appMode === 'media' ? (
           <div className={`h-full border-2 ${theme === 'dark' ? 'border-[#333] shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]' : 'border-[#141414] shadow-[12px_12px_0px_0px_rgba(20,20,20,1)]'}`}>
             <MultiModalStudio 
+              key={studioResetKey}
               theme={theme} 
               onAddAssetToNarrative={handleAddAssetToNarrative} 
               credits={credits || 0}
