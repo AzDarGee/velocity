@@ -162,9 +162,9 @@ service cloud.firestore {
       match /media_assets/{assetId} {
         allow list, get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
         allow create: if isSignedIn() && request.auth.uid == userId && isValidMediaAsset(incoming());
-        allow update: if isSignedIn() && request.auth.uid == userId && isValidMediaAsset(incoming()) && 
+        allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && isValidMediaAsset(incoming()) && 
                       incoming().userId == existing().userId &&
-                      incoming().id == existing().id;
+                      incoming().id == existing().id);
         allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       }
     }
@@ -186,7 +186,7 @@ service cloud.firestore {
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow get: if isAdmin() || (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid));
       allow create: if isSignedIn() && isValidFile(incoming()) && incoming().createdAt == request.time;
-      allow update: if isSignedIn() && isValidFile(incoming()) && resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && isValidFile(incoming()) && resource.data.userId == request.auth.uid);
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 

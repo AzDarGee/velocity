@@ -48,7 +48,7 @@ const DEFAULT_IMAGE_STYLES = [
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
-const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode, onRename?: (id: string, newName: string) => void }) => {
+const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode, onRename?: (asset: MediaAsset, newName: string) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(asset.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +63,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   const handleSubmit = () => {
     setIsEditing(false);
     if (editValue.trim() && editValue !== asset.name) {
-      onRename?.(asset.id, editValue);
+      onRename?.(asset, editValue);
     }
   };
   const src = asset.url;
@@ -348,13 +348,35 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     }
   }, [editingId]);
 
-  const handleRename = async (id: string, newName: string) => {
+  const handleRename = async (asset: MediaAsset, newName: string) => {
     if (!userId || !newName.trim()) return;
     try {
       const { db } = await import('../lib/firebase');
       const { doc, updateDoc } = await import('firebase/firestore');
-      const assetRef = doc(db, 'users', userId, 'media_assets', id);
-      await updateDoc(assetRef, { name: newName.trim() });
+      
+      const updateData = { name: newName.trim() };
+      
+      // Update user-specific media asset record
+      const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+      await updateDoc(assetRef, updateData);
+      
+      // Also update the global files collection for consistency across the app
+      // We only do this if the asset is 'uploaded' or has been linked to the narrative intake
+      // as purely generated assets live only in the user's media_assets collection until intake.
+      if (asset.source === 'uploaded' || asset.metadata?.fileId) {
+        const fileId = asset.metadata?.fileId || asset.id;
+        try {
+          const fileRef = doc(db, 'files', fileId);
+          await updateDoc(fileRef, updateData);
+        } catch (fileErr: any) {
+          // If it fails, it might be because the global record hasn't been created yet
+          // (e.g. if it was never added to the narrative intake)
+          if (fileErr.code !== 'permission-denied' && fileErr.code !== 'not-found') {
+            console.warn("Global files record update skipped:", fileErr.message);
+          }
+        }
+      }
+      
       setEditingId(null);
     } catch (err) {
       console.error("Failed to rename asset:", err);
@@ -2008,8 +2030,8 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                             type="text"
                                             value={editValue}
                                             onChange={(e) => setEditValue(e.target.value)}
-                                            onBlur={() => handleRename(asset.id, editValue)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleRename(asset.id, editValue)}
+                                            onBlur={() => handleRename(asset, editValue)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleRename(asset, editValue)}
                                             className={`text-sm sm:text-base font-bold uppercase tracking-tight bg-transparent border-b outline-none absolute inset-0 w-full h-full ${theme === 'dark' ? 'text-white border-white/20' : 'text-black border-black/20'}`}
                                           />
                                           <span className="text-sm sm:text-base font-bold uppercase tracking-tight invisible whitespace-pre min-w-[30px] pr-2">
