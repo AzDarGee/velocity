@@ -405,7 +405,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   };
 
   const selectAllAssets = () => {
-    setSelectedAssets(new Set(assets.map(a => a.id)));
+    setSelectedAssets(new Set(filteredAssets.map(a => a.id)));
   };
 
   const deselectAllAssets = () => {
