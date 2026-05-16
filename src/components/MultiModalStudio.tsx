@@ -9,6 +9,7 @@ interface MultiModalStudioProps {
   credits: number;
   userId: string;
   isAdmin: boolean;
+  setAppMode?: (mode: 'narrative' | 'media') => void;
 }
 
 const GENERATION_COSTS: Record<GenerationMode, number> = {
@@ -183,7 +184,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children }: { asset: Me
   );
 };
 
-export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
+export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin, setAppMode }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
     return (localStorage.getItem("studioActiveMode") as GenerationMode) || 'image';
   });
@@ -1861,9 +1862,15 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     {assets.slice(0, visibleCount).map((asset) => (
                       <motion.div
                         key={asset.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        initial={{ opacity: 0, y: 10, height: 160 }}
+                        animate={{ opacity: 1, y: 0, height: 160 }}
+                        whileHover={{ height: 'auto' }}
                         exit={{ opacity: 0, y: -10 }}
+                        transition={{ 
+                          height: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
+                          opacity: { duration: 0.3 },
+                          y: { duration: 0.3 }
+                        }}
                         className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${
                           theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
                         } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
@@ -1880,6 +1887,16 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                              />
                            );
                          })()}
+
+                         {/* Unhovered State Content */}
+                         <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-all duration-500 ${selectedAssets.has(asset.id) ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0 group-hover:pointer-events-none'}`}>
+                            <div className={`p-4 rounded-full border-2 ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/40' : 'bg-white/40 border-black/5 text-black/40'} backdrop-blur-md`}>
+                              {asset.type === 'image' && <ImageIcon className="w-8 h-8" />}
+                              {asset.type === 'video' && <Video className="w-8 h-8" />}
+                              {asset.type === 'audio' && <Music className="w-8 h-8" />}
+                            </div>
+                         </div>
+
                          <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                            <button 
                              onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}

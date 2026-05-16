@@ -1701,6 +1701,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               credits={credits || 0}
               userId={auth.currentUser?.uid || ''}
               isAdmin={isAdmin}
+              setAppMode={setAppMode}
             />
           </div>
         ) : (
