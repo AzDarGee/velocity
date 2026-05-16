@@ -339,6 +339,9 @@ export default function App() {
         if (parsed.specificFocus === "Unique narrative stories.") {
           parsed.specificFocus = "";
         }
+        if (parsed.model === "gemini-3-flash-preview" || !parsed.model) {
+          parsed.model = "gemini-3.1-pro-preview";
+        }
         return parsed;
       } catch (e) {}
     }
@@ -347,7 +350,7 @@ export default function App() {
       tone: [],
       length: "Medium (approx. 600 words)",
       specificFocus: "",
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-pro-preview",
       systemPrompt: "",
     };
   });
@@ -558,7 +561,7 @@ export default function App() {
           length: "Medium (approx. 600 words)",
           specificFocus: "",
           systemPrompt: "",
-          model: "gemini-3-flash-preview",
+          model: "gemini-3.1-pro-preview",
         });
       }
     });
@@ -1240,7 +1243,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       length: "Medium (approx. 600 words)",
       specificFocus: "",
       systemPrompt: "",
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-pro-preview",
     });
     setIsHistoryOpen(false);
   };
@@ -1258,7 +1261,11 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       setCurrentGenerationId(gen.id);
       
       if (gen.preferences) {
-        setPreferences(gen.preferences);
+        const prefs = { ...gen.preferences };
+        if (prefs.model === "gemini-3-flash-preview" || !prefs.model) {
+          prefs.model = "gemini-3.1-pro-preview";
+        }
+        setPreferences(prefs);
       }
       
       let fetchedFiles: AttachedFile[] = [];
