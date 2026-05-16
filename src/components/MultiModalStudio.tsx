@@ -2040,7 +2040,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                </div>
 
                                {/* Details and Metadata */}
-                               <div className={`w-full p-4 border-l-2 rounded-r-md ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
+                               <div className={`w-full p-4 border-l-2 opacity-69 rounded-3xl ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
                                  {asset.source === 'generated' && asset.metadata ? (
                                   <div className="flex flex-col gap-2 w-full relative">
                                     {asset.metadata.prompt && (
