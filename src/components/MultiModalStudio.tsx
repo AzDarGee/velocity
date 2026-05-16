@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -46,6 +46,139 @@ const DEFAULT_IMAGE_STYLES = [
   "Street Art", "Pixel Art", "3D Render", "Isometric", "Macro Photography",
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
+
+const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light' | 'dark' }) => {
+  const src = asset.url;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+
+  const coverUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl;
+  // Use metadata title, or the file name without extension
+  const title = asset.metadata?.title || asset.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ") || 'Unknown Track';
+  const subtitle = asset.metadata?.tags || 'Media Studio AI';
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      const current = audioRef.current.currentTime;
+      const total = audioRef.current.duration;
+      setCurrentTime(current);
+      if (total > 0) {
+        setProgress((current / total) * 100);
+      }
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleScrub = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (progressBarRef.current && audioRef.current && duration > 0) {
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      audioRef.current.currentTime = pos * duration;
+      setProgress(pos * 100);
+    }
+  };
+
+  const formatTime = (time: number) => {
+    if (!time || isNaN(time)) return "0:00";
+    const min = Math.floor(time / 60);
+    const sec = Math.floor(time % 60);
+    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+  };
+
+  if (!src) return null;
+
+  return (
+    <div className={`flex flex-col w-full max-w-[500px] rounded-xl overflow-hidden transition-all duration-300 shadow-sm hover:shadow-md ${theme === 'dark' ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+      <div className="flex items-center p-3 gap-4">
+        {/* Cover Art */}
+        <div className={`w-14 h-14 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center relative shadow-sm ${theme === 'dark' ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+          {coverUrl ? (
+            <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
+          ) : (
+            <Music className={`w-6 h-6 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+          )}
+          {isPlaying && (
+            <div className="absolute inset-0 bg-black/20 flex items-center justify-center backdrop-blur-[1px]">
+               <div className="flex gap-[2px] items-end h-3">
+                 <motion.div animate={{ height: ["4px", "12px", "4px"] }} transition={{ duration: 0.5, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
+                 <motion.div animate={{ height: ["8px", "4px", "12px"] }} transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
+                 <motion.div animate={{ height: ["12px", "8px", "4px"] }} transition={{ duration: 0.7, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
+               </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Track Info */}
+        <div className="flex-grow min-w-0 flex flex-col justify-center">
+          <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{title}</h4>
+          <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
+        </div>
+        
+        {/* Play Controls */}
+        <div className="flex items-center gap-3 flex-shrink-0 pr-1">
+          <div className={`text-[10px] font-mono hidden sm:block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+          <button 
+            onClick={togglePlay}
+            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${theme === 'dark' ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'}`}
+          >
+            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
+          </button>
+        </div>
+      </div>
+      
+      {/* Progress Scrubber */}
+      <div 
+        ref={progressBarRef}
+        className="w-full relative h-1.5 group cursor-pointer" 
+        onClick={handleScrub}
+      >
+        {/* Background track */}
+        <div className={`absolute inset-0 transition-colors ${theme === 'dark' ? 'bg-[#27272a] group-hover:bg-[#3f3f46]' : 'bg-gray-100 group-hover:bg-gray-200'}`} />
+        {/* Progress fill */}
+        <div 
+          className={`absolute top-0 left-0 h-full transition-colors ${theme === 'dark' ? 'bg-white group-hover:bg-indigo-400' : 'bg-black group-hover:bg-indigo-600'}`} 
+          style={{ width: `${progress}%` }} 
+        />
+        {/* Thumb (visible on hover) */}
+        <div 
+          className={`absolute top-1/2 -mt-1.5 w-3 h-3 rounded-full opacity-0 group-hover:opacity-100 transition-all pointer-events-none shadow-sm scale-75 group-hover:scale-100 ${theme === 'dark' ? 'bg-white' : 'bg-black'}`}
+          style={{ left: `calc(${progress}% - 6px)` }}
+        />
+      </div>
+      
+      <audio 
+        ref={audioRef} 
+        src={src} 
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={() => setIsPlaying(false)}
+        className="hidden"
+      />
+    </div>
+  );
+};
 
 export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
@@ -1767,6 +1900,13 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                   )}
                                </div>
                                
+                               {/* Custom Audio Player */}
+                               {asset.type === 'audio' && asset.url && (
+                                 <div className="mb-4 w-full">
+                                   <CustomAudioPlayer asset={asset} theme={theme} />
+                                 </div>
+                               )}
+                               
                                {/* Asset Actions */}
                                <div className="flex flex-wrap gap-2 mb-4">
                                  {asset.type === 'audio' && asset.source === 'generated' && (
@@ -1856,11 +1996,6 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
 
                                {/* Details and Metadata */}
                                <div className={`w-full p-4 border-l-2 rounded-r-md ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
-                                 {asset.type === 'audio' && asset.url && (
-                                  <div className="mb-3 w-full">
-                                    <audio src={asset.url || undefined} controls className="w-full max-w-[400px] h-8 grayscale opacity-80 hover:opacity-100 transition-opacity mix-blend-luminosity" />
-                                  </div>
-                                 )}
                                  {asset.source === 'generated' && asset.metadata ? (
                                   <div className="flex flex-col gap-2 w-full relative">
                                     {asset.metadata.prompt && (
