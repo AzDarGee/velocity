@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil, Search, Layout } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
   onAddAssetToNarrative?: (asset: MediaAsset) => void;
+  onBulkAddAssetsToNarrative?: (assets: MediaAsset[]) => void;
   credits: number;
   userId: string;
   isAdmin: boolean;
+  setAppMode?: (mode: 'narrative' | 'media') => void;
 }
 
 const GENERATION_COSTS: Record<GenerationMode, number> = {
@@ -47,7 +49,34 @@ const DEFAULT_IMAGE_STYLES = [
   "Polaroid", "Vintage", "Gothic", "Art Deco"
 ];
 
-const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light' | 'dark' }) => {
+const FOCUS_QUOTES = [
+  "Scanning content nodes...",
+  "Aligning narrative vectors...",
+  "Calibrating strategic intent...",
+  "Synthesizing unique angles...",
+  "Decoding audience resonance...",
+  "Optimizing hook frequency...",
+  "Mapping key thematic clusters..."
+];
+
+const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: { asset: MediaAsset, theme: 'light' | 'dark', badgeContent?: React.ReactNode, children?: React.ReactNode, onRename?: (asset: MediaAsset, newName: string) => void }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(asset.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleSubmit = () => {
+    setIsEditing(false);
+    if (editValue.trim() && editValue !== asset.name) {
+      onRename?.(asset, editValue);
+    }
+  };
   const src = asset.url;
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -108,7 +137,7 @@ const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light'
   if (!src) return null;
 
   return (
-    <div className={`flex flex-col w-full max-w-[500px] rounded-xl overflow-hidden transition-all duration-300 shadow-sm hover:shadow-md ${theme === 'dark' ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+    <div className={`flex flex-col w-full rounded-xl overflow-hidden transition-all duration-300 shadow-sm hover:shadow-md ${theme === 'dark' ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
       <div className="flex items-center p-3 gap-4">
         {/* Cover Art */}
         <div className={`w-14 h-14 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center relative shadow-sm ${theme === 'dark' ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
@@ -129,9 +158,40 @@ const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light'
         </div>
         
         {/* Track Info */}
-        <div className="flex-grow min-w-0 flex flex-col justify-center">
-          <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{title}</h4>
-          <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
+        <div className="flex-grow min-w-0 flex flex-col justify-center group/track">
+          {isEditing ? (
+            <div className="relative inline-flex max-w-full overflow-hidden">
+              <input
+                ref={inputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={handleSubmit}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                className={`text-sm font-bold bg-transparent border-b outline-none absolute inset-0 w-full h-full ${theme === 'dark' ? 'text-white border-white/20' : 'text-gray-900 border-black/20'}`}
+              />
+              <span className="text-sm font-bold invisible whitespace-pre min-w-[20px] pr-2">
+                {editValue || " "}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{asset.name}</h4>
+              <button 
+                onClick={() => {
+                  setEditValue(asset.name);
+                  setIsEditing(true);
+                }}
+                className={`opacity-0 group-hover/track:opacity-40 hover:opacity-100 transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          {badgeContent ? badgeContent : (
+            <p className={`text-xs truncate mt-0.5 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
+          )}
+          {children && <div className="mt-2">{children}</div>}
         </div>
         
         {/* Play Controls */}
@@ -180,7 +240,7 @@ const CustomAudioPlayer = ({ asset, theme }: { asset: MediaAsset, theme: 'light'
   );
 };
 
-export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId, isAdmin }: MultiModalStudioProps) {
+export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssetsToNarrative, credits, userId, isAdmin, setAppMode }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
     return (localStorage.getItem("studioActiveMode") as GenerationMode) || 'image';
   });
@@ -257,6 +317,95 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
 
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loaderRef = useRef<HTMLDivElement>(null);
+
+  const [librarySearchQuery, setLibrarySearchQuery] = useState("");
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<'all' | 'image' | 'video' | 'audio'>('all');
+
+  const filteredAssets = assets.filter(asset => {
+    const matchesSearch = asset.name.toLowerCase().includes(librarySearchQuery.toLowerCase()) || 
+                          (asset.metadata?.prompt?.toLowerCase().includes(librarySearchQuery.toLowerCase())) ||
+                          (asset.metadata?.title?.toLowerCase().includes(librarySearchQuery.toLowerCase()));
+    const matchesType = libraryTypeFilter === 'all' || asset.type === libraryTypeFilter;
+    return matchesSearch && matchesType;
+  });
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      const target = entries[0];
+      if (target.isIntersecting && visibleCount < filteredAssets.length && !isLoadingMore) {
+        setIsLoadingMore(true);
+        setTimeout(() => {
+          setVisibleCount(prev => prev + 10);
+          setIsLoadingMore(false);
+        }, 800);
+      }
+    }, { root: null, rootMargin: '200px', threshold: 0.1 });
+
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+    return () => {
+      if (loaderRef.current) observer.unobserve(loaderRef.current);
+    };
+  }, [visibleCount, assets.length, isLoadingMore]);
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [editingId]);
+
+  const handleRename = async (asset: MediaAsset, newName: string) => {
+    if (!userId || !newName.trim()) return;
+    try {
+      const { db } = await import('../lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      
+      const updateData = { name: newName.trim() };
+      
+      // Update user-specific media asset record
+      const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+      await updateDoc(assetRef, updateData);
+      
+      // Also update the global files collection for consistency across the app
+      // We only do this if the asset is 'uploaded' or has been linked to the narrative intake
+      // as purely generated assets live only in the user's media_assets collection until intake.
+      if (asset.source === 'uploaded' || asset.metadata?.fileId) {
+        const fileId = asset.metadata?.fileId || asset.id;
+        try {
+          const fileRef = doc(db, 'files', fileId);
+          await updateDoc(fileRef, updateData);
+        } catch (fileErr: any) {
+          // If it fails, it might be because the global record hasn't been created yet
+          // (e.g. if it was never added to the narrative intake)
+          if (fileErr.code !== 'permission-denied' && fileErr.code !== 'not-found') {
+            console.warn("Global files record update skipped:", fileErr.message);
+          }
+        }
+      }
+      
+      setEditingId(null);
+    } catch (err) {
+      console.error("Failed to rename asset:", err);
+      setError("Failed to rename asset.");
+    }
+  };
+
   const toggleSelectAsset = (id: string) => {
     setSelectedAssets(prev => {
       const next = new Set(prev);
@@ -267,11 +416,24 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
   };
 
   const selectAllAssets = () => {
-    setSelectedAssets(new Set(assets.map(a => a.id)));
+    setSelectedAssets(new Set(filteredAssets.map(a => a.id)));
   };
 
   const deselectAllAssets = () => {
     setSelectedAssets(new Set());
+  };
+
+  const handleBulkIntake = () => {
+    const selectedList = assets.filter(a => selectedAssets.has(a.id));
+    if (selectedList.length === 0) return;
+    
+    if (onBulkAddAssetsToNarrative) {
+      onBulkAddAssetsToNarrative(selectedList);
+    } else if (onAddAssetToNarrative) {
+      selectedList.forEach(asset => onAddAssetToNarrative(asset));
+    }
+    
+    deselectAllAssets();
   };
 
   const executeBulkDelete = async () => {
@@ -398,15 +560,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
     localStorage.setItem("sunoAudioWeight", sunoAudioWeight.toString());
   }, [sunoAudioWeight]);
 
-  const FOCUS_QUOTES = [
-    "Scanning content nodes...",
-    "Aligning narrative vectors...",
-    "Calibrating strategic intent...",
-    "Synthesizing unique angles...",
-    "Decoding audience resonance...",
-    "Optimizing hook frequency...",
-    "Mapping key thematic clusters..."
-  ];
+
 
   useEffect(() => {
     if (!userId) return;
@@ -1801,6 +1955,17 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     <>
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-bold uppercase font-mono tracking-widest">{selectedAssets.size} Selected</span>
+                        {selectedAssets.size > 1 && (
+                          <button 
+                            onClick={handleBulkIntake}
+                            className={`px-3 py-1 border-2 text-[10px] uppercase font-mono font-bold tracking-widest flex items-center gap-2 transition-colors ${
+                              theme === 'dark' ? 'border-white text-white hover:bg-white hover:text-black' : 'border-black text-black hover:bg-black hover:text-white'
+                            }`}
+                          >
+                            <Layout className="w-3 h-3" />
+                            Intake Selected
+                          </button>
+                        )}
                         <button onClick={deselectAllAssets} className="px-2 py-1 border text-[10px] uppercase font-mono tracking-widest hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                           Deselect All
                         </button>
@@ -1822,19 +1987,77 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                     </>
                   )}
                 </div>
+
+                {/* Search and Filters */}
+                <div className={`border-b-2 p-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 transition-all ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-white'}`}>
+                  <div className="relative flex-1 group">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors ${theme === 'dark' ? 'text-gray-500 group-focus-within:text-white' : 'text-gray-400 group-focus-within:text-black'}`} />
+                    <input 
+                      type="text" 
+                      placeholder="Search library assets..."
+                      value={librarySearchQuery}
+                      onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                      className={`w-full pl-9 pr-4 py-2 text-[10px] uppercase font-mono tracking-widest bg-transparent outline-none transition-all ${theme === 'dark' ? 'text-white placeholder:text-gray-600' : 'text-black placeholder:text-gray-400'}`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 p-1 border-t sm:border-t-0 sm:border-l border-current/10">
+                    {(['all', 'image', 'video', 'audio'] as const).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => setLibraryTypeFilter(type)}
+                        className={`px-3 py-1.5 text-[9px] uppercase font-mono font-bold tracking-widest transition-all border ${
+                          libraryTypeFilter === type
+                            ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black')
+                            : (theme === 'dark' ? 'bg-transparent text-gray-500 border-transparent hover:text-white' : 'bg-transparent text-gray-400 border-transparent hover:text-black')
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex flex-col">
                   <AnimatePresence>
-                    {assets.map((asset) => (
+                    {filteredAssets.slice(0, visibleCount).map((asset) => (
                       <motion.div
                         key={asset.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        initial={{ opacity: 0, y: 10, height: 160 }}
+                        animate={{ opacity: 1, y: 0, height: 160 }}
+                        whileHover={{ height: 'auto' }}
                         exit={{ opacity: 0, y: -10 }}
-                        className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors ${
+                        transition={{ 
+                          height: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
+                          opacity: { duration: 0.3 },
+                          y: { duration: 0.3 }
+                        }}
+                        className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${
                           theme === 'dark' ? 'border-[#222] hover:bg-[#141414]' : 'border-gray-100 hover:bg-gray-50'
                         } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
                       >
-                         <div className="flex items-start gap-3">
+                         {(() => {
+                           const bgUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' ? asset.url : undefined);
+                           if (!bgUrl) return null;
+                           return (
+                             <img 
+                               src={bgUrl} 
+                               alt="" 
+                               referrerPolicy="no-referrer"
+                               className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-all duration-500 blur-[2px] group-hover:blur-sm scale-105 ${theme === 'dark' ? 'opacity-40 group-hover:opacity-[0.15]' : 'opacity-30 group-hover:opacity-[0.08]'}`} 
+                             />
+                           );
+                         })()}
+
+                         {/* Unhovered State Content */}
+                         <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-all duration-500 ${selectedAssets.has(asset.id) ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0 group-hover:pointer-events-none'}`}>
+                            <div className={`p-4 rounded-full border-2 ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/40' : 'bg-white/40 border-black/5 text-black/40'} backdrop-blur-md`}>
+                              {asset.type === 'image' && <ImageIcon className="w-8 h-8" />}
+                              {asset.type === 'video' && <Video className="w-8 h-8" />}
+                              {asset.type === 'audio' && <Music className="w-8 h-8" />}
+                            </div>
+                         </div>
+
+                         <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                            <button 
                              onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
                              className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
@@ -1863,51 +2086,203 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                 </>
                               )}
                             </div>
-                            <div className="flex flex-col min-w-0 flex-1">
-                               {/* Asset Name and Timestamp */}
-                               <div className="flex items-start justify-between gap-4 mb-1">
-                                 <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
-                                 <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest whitespace-nowrap hidden sm:block">
-                                   {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                 </span>
-                               </div>
-                               
-                               {/* Type and Source */}
-                               <div className="flex flex-wrap items-center gap-2 mb-3">
-                                  <div 
-                                    onClick={() => {
-                                      setViewingAssetDetails(asset);
-                                    }}
-                                    className={`px-1.5 py-0.5 text-[9px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
-                                  >
-                                    {asset.type}
-                                  </div>
-                                  {asset.source === 'uploaded' ? (
-                                    <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
-                                      USR_RAW
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <div className={`text-[9px] w-max uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
-                                        {asset.model}
-                                      </div>
-                                      {asset.metadata?.generationTimeMs && (
-                                        <div className="text-[9px] font-mono opacity-40 whitespace-nowrap">
-                                          | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                             <div className="flex flex-col min-w-0 flex-1 group/title">
+                                {/* Asset Name and Timestamp */}
+                                <div className={`flex items-start gap-4 mb-1 ${asset.type === 'audio' ? 'justify-end' : 'justify-between'}`}>
+                                  {asset.type !== 'audio' && (
+                                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                                      {editingId === asset.id ? (
+                                        <div className="relative inline-flex max-w-full overflow-hidden">
+                                          <input
+                                            ref={renameInputRef}
+                                            type="text"
+                                            value={editValue}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            onBlur={() => handleRename(asset, editValue)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleRename(asset, editValue)}
+                                            className={`text-sm sm:text-base font-bold uppercase tracking-tight bg-transparent border-b outline-none absolute inset-0 w-full h-full ${theme === 'dark' ? 'text-white border-white/20' : 'text-black border-black/20'}`}
+                                          />
+                                          <span className="text-sm sm:text-base font-bold uppercase tracking-tight invisible whitespace-pre min-w-[30px] pr-2">
+                                            {editValue || " "}
+                                          </span>
                                         </div>
+                                      ) : (
+                                        <>
+                                          <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
+                                          <button 
+                                            onClick={() => {
+                                              setEditValue(asset.name);
+                                              setEditingId(asset.id);
+                                            }}
+                                            className={`opacity-0 group-hover/title:opacity-40 hover:opacity-100 transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                        </>
                                       )}
                                     </div>
                                   )}
-                               </div>
+                                  <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest whitespace-nowrap hidden sm:block">
+                                    {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                  </span>
+                                </div>
+                               
+                               {/* Type and Source */}
+                               {asset.type !== 'audio' && (
+                                 <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <div 
+                                      onClick={() => {
+                                        setViewingAssetDetails(asset);
+                                      }}
+                                      className={`px-1.5 py-0.5 text-[9px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
+                                    >
+                                      {asset.type}
+                                    </div>
+                                    {asset.source === 'uploaded' ? (
+                                      <div className="text-[9px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                        USR_RAW
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <div className={`text-[9px] w-max uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                          {asset.model}
+                                        </div>
+                                        {asset.metadata?.generationTimeMs && (
+                                          <div className="text-[9px] font-mono opacity-40 whitespace-nowrap">
+                                            | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                 </div>
+                               )}
                                
                                {/* Custom Audio Player */}
                                {asset.type === 'audio' && asset.url && (
                                  <div className="mb-4 w-full">
-                                   <CustomAudioPlayer asset={asset} theme={theme} />
+                                   <CustomAudioPlayer 
+                                     asset={asset} 
+                                     theme={theme} 
+                                     onRename={handleRename} 
+                                     badgeContent={
+                                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                          <div 
+                                            onClick={() => setViewingAssetDetails(asset)}
+                                            className={`px-1 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
+                                          >
+                                            {asset.type}
+                                          </div>
+                                          {asset.source === 'uploaded' ? (
+                                            <div className="text-[8px] uppercase font-mono font-bold tracking-widest opacity-40">
+                                              USR_RAW
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1.5">
+                                              <div className={`text-[8px] w-max uppercase font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${getModelBadgeColors(asset.type as GenerationMode)}`}>
+                                                {asset.model}
+                                              </div>
+                                              {asset.metadata?.generationTimeMs && (
+                                                <div className="text-[8px] font-mono opacity-40 whitespace-nowrap">
+                                                  | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                       </div>
+                                     }
+                                   >
+                                     {/* Asset Actions inside Audio Player */}
+                                     <div className="flex flex-wrap gap-2 mt-2">
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
+                                           disabled={coverGeneratingAssets.has(asset.id)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
+                                           } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                           title="Generate Song Cover"
+                                         >
+                                           {coverGeneratingAssets.has(asset.id) ? (
+                                             <RefreshCw className="w-4 h-4 animate-spin" />
+                                           ) : (
+                                             <Sparkles className="w-4 h-4" />
+                                           )}
+                                         </button>
+                                       )}
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
+                                           disabled={wavGeneratingAssets.has(asset.id)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' 
+                                               ? asset.metadata?.wavUrl 
+                                                 ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
+                                                 : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
+                                               : asset.metadata?.wavUrl
+                                                 ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
+                                                 : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
+                                           } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                           title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
+                                         >
+                                           {wavGeneratingAssets.has(asset.id) ? (
+                                             <RefreshCw className="w-4 h-4 animate-spin" />
+                                           ) : asset.metadata?.wavUrl ? (
+                                             <Download className="w-4 h-4" />
+                                           ) : (
+                                             <FileAudio className="w-4 h-4" />
+                                           )}
+                                         </button>
+                                       )}
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
+                                           disabled={lyricsLoadingAssets.has(asset.id)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
+                                           } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                           title="View Temporal Lyrics"
+                                         >
+                                           {lyricsLoadingAssets.has(asset.id) ? (
+                                             <RefreshCw className="w-4 h-4 animate-spin" />
+                                           ) : (
+                                             <Wand2 className="w-4 h-4" />
+                                           )}
+                                         </button>
+                                       )}
+                                       {asset.source === 'generated' && (
+                                         <button 
+                                           onClick={() => onAddAssetToNarrative?.(asset)}
+                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                             theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
+                                           }`}
+                                           title="Add to Narrative Context"
+                                         >
+                                           <BookOpen className="w-4 h-4" />
+                                         </button>
+                                       )}
+                                       <button 
+                                         onClick={() => {
+                                           if (asset.url) {
+                                             window.open(asset.url, '_blank');
+                                           }
+                                         }}
+                                         className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
+                                           theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                                         }`} title="Download / Open">
+                                           <Download className="w-4 h-4" />
+                                       </button>
+                                       <button 
+                                         onClick={() => setAssetToDelete(asset)}
+                                         className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0" title="Purge Record">
+                                           <Trash2 className="w-4 h-4" />
+                                       </button>
+                                     </div>
+                                   </CustomAudioPlayer>
                                  </div>
                                )}
                                
                                {/* Asset Actions */}
+                               {asset.type !== 'audio' && (
                                <div className="flex flex-wrap gap-2 mb-4">
                                  {asset.type === 'audio' && asset.source === 'generated' && (
                                    <button 
@@ -1993,18 +2368,33 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                                      <Trash2 className="w-4 h-4" />
                                  </button>
                                </div>
-
+                               )}
+                               
                                {/* Details and Metadata */}
-                               <div className={`w-full p-4 border-l-2 rounded-r-md ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
+                               <div className={`w-full p-4 border-l-2 opacity-69 rounded-3xl ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
                                  {asset.source === 'generated' && asset.metadata ? (
-                                  <div className="flex flex-col gap-2 w-full relative">
+                                  <div className="flex flex-col gap-2 w-full relative group/details">
                                     {asset.metadata.prompt && (
-                                      <p 
-                                        className={`text-xs font-mono italic leading-relaxed whitespace-pre-wrap break-words ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} 
-                                        title={asset.metadata.prompt}
-                                      >
-                                        "{asset.metadata.prompt.length > 300 ? `${asset.metadata.prompt.substring(0, 300)}...` : asset.metadata.prompt}"
-                                      </p>
+                                      <div className="relative">
+                                        <p 
+                                          className={`text-xs font-mono italic leading-relaxed whitespace-pre-wrap break-words pr-8 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} 
+                                          title={asset.metadata.prompt}
+                                        >
+                                          "{asset.metadata.prompt.length > 300 ? `${asset.metadata.prompt.substring(0, 300)}...` : asset.metadata.prompt}"
+                                        </p>
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); copyToClipboard(asset.metadata.prompt, asset.id); }}
+                                          className={`absolute top-0 right-0 p-1.5 rounded-md transition-all opacity-0 group-hover/details:opacity-100 ${theme === 'dark' ? 'hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-black/5 text-black/40 hover:text-black'}`}
+                                          title="Copy Prompt"
+                                        >
+                                          {copiedId === asset.id ? (
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[8px] font-bold uppercase tracking-tighter text-green-500">Copied</span>
+                                              <Check className="w-3 h-3 text-green-500" />
+                                            </div>
+                                          ) : <Copy className="w-3 h-3" />}
+                                        </button>
+                                      </div>
                                     )}
                                     {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
                                       <div className="flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60 mt-1">
@@ -2028,6 +2418,18 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, credits, userId
                       </motion.div>
                     ))}
                   </AnimatePresence>
+                  {visibleCount < assets.length && (
+                    <div ref={loaderRef} className="p-10 flex items-center justify-center">
+                      {isLoadingMore ? (
+                        <div className="flex flex-col items-center gap-3 transition-opacity duration-300">
+                          <RefreshCw className={`w-6 h-6 animate-spin ${theme === 'dark' ? 'text-white/40' : 'text-black/40'}`} />
+                          <span className="text-[10px] font-mono uppercase tracking-widest opacity-40">Expanding Syntheses...</span>
+                        </div>
+                      ) : (
+                        <div className="h-10 w-full" />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

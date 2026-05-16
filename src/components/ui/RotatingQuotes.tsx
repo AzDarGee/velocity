@@ -7,7 +7,7 @@ interface RotatingQuotesProps {
   theme?: 'light' | 'dark';
 }
 
-export function RotatingQuotes({ quotes, interval = 2500, theme = 'dark' }: RotatingQuotesProps) {
+export const RotatingQuotes = React.memo(({ quotes, interval = 2500, theme = 'dark' }: RotatingQuotesProps) => {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -20,13 +20,13 @@ export function RotatingQuotes({ quotes, interval = 2500, theme = 'dark' }: Rota
   return (
     <div className="flex flex-col items-center justify-center gap-4 text-center px-6">
       <div className="relative h-12 w-full flex items-center justify-center">
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           <motion.p
             key={index}
             initial={{ opacity: 0, y: 10, filter: 'blur(10px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -10, filter: 'blur(10px)' }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
             className={`text-[10px] uppercase font-mono font-bold tracking-[0.2em] ${theme === 'dark' ? 'text-white' : 'text-black'}`}
           >
             {quotes[index]}
@@ -47,4 +47,4 @@ export function RotatingQuotes({ quotes, interval = 2500, theme = 'dark' }: Rota
       </div>
     </div>
   );
-}
+});
