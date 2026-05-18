@@ -11,6 +11,7 @@ interface MultiModalStudioProps {
   userId: string;
   isAdmin: boolean;
   setAppMode?: (mode: 'narrative' | 'media') => void;
+  onRenameAsset?: (assetId: string, newName: string) => void;
 }
 
 const GENERATION_COSTS: Record<GenerationMode, number> = {
@@ -240,7 +241,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   );
 };
 
-export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssetsToNarrative, credits, userId, isAdmin, setAppMode }: MultiModalStudioProps) {
+export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssetsToNarrative, credits, userId, isAdmin, setAppMode, onRenameAsset }: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
     return (localStorage.getItem("studioActiveMode") as GenerationMode) || 'image';
   });
@@ -398,6 +399,10 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
             console.warn("Global files record update skipped:", fileErr.message);
           }
         }
+      }
+      
+      if (onRenameAsset) {
+        onRenameAsset(asset.id, newName.trim());
       }
       
       setEditingId(null);
