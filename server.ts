@@ -70,7 +70,7 @@ const getDb = () => {
     
     // If we have a named database ID from config, use it.
     if (firebaseConfig && firebaseConfig.firestoreDatabaseId) {
-      return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      return (getFirestore as any)(app, firebaseConfig.firestoreDatabaseId);
     }
     return getFirestore(app);
   } catch (err) {

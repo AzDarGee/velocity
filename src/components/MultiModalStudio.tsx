@@ -12,6 +12,8 @@ interface MultiModalStudioProps {
   isAdmin: boolean;
   setAppMode?: (mode: 'narrative' | 'media') => void;
   onRenameAsset?: (assetId: string, newName: string) => void;
+  generations?: any[];
+  onLoadGeneration?: (gen: any) => void;
 }
 
 const GENERATION_COSTS: Record<GenerationMode, number> = {
@@ -241,7 +243,18 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   );
 };
 
-export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssetsToNarrative, credits, userId, isAdmin, setAppMode, onRenameAsset }: MultiModalStudioProps) {
+export function MultiModalStudio({ 
+  theme, 
+  onAddAssetToNarrative, 
+  onBulkAddAssetsToNarrative, 
+  credits, 
+  userId, 
+  isAdmin, 
+  setAppMode, 
+  onRenameAsset,
+  generations = [],
+  onLoadGeneration
+}: MultiModalStudioProps) {
   const [activeMode, setActiveMode] = useState<GenerationMode>(() => {
     return (localStorage.getItem("studioActiveMode") as GenerationMode) || 'image';
   });
@@ -2307,7 +2320,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                                {/* Asset Actions */}
                                {asset.type !== 'audio' && (
                                <div className="flex flex-wrap gap-2 mb-4">
-                                 {asset.type === 'audio' && asset.source === 'generated' && (
+                                 {false && (
                                    <button 
                                      onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
                                      disabled={coverGeneratingAssets.has(asset.id)}
@@ -2323,7 +2336,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                                      )}
                                    </button>
                                  )}
-                                 {asset.type === 'audio' && asset.source === 'generated' && (
+                                 {false && (
                                    <button 
                                      onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
                                      disabled={wavGeneratingAssets.has(asset.id)}
@@ -2347,7 +2360,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                                      )}
                                    </button>
                                  )}
-                                 {asset.type === 'audio' && asset.source === 'generated' && (
+                                 {false && (
                                    <button 
                                      onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
                                      disabled={lyricsLoadingAssets.has(asset.id)}
@@ -2432,6 +2445,38 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                                  )}
                                </div>
                                
+                                {/* Associated Generations (Narrative Links) */}
+                                {(() => {
+                                  const linkedGenerations = generations?.filter(gen => gen.fileIds?.includes(asset.id)) || [];
+                                  if (linkedGenerations.length === 0) return null;
+                                  return (
+                                    <div className="mt-4 space-y-2">
+                                      <span className="text-[9px] uppercase font-mono tracking-widest opacity-50 block font-bold">
+                                        Associated Narratives ({linkedGenerations.length})
+                                      </span>
+                                      <div className="flex flex-wrap gap-2">
+                                        {linkedGenerations.map(gen => (
+                                          <button
+                                            key={gen.id}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onLoadGeneration?.(gen);
+                                            }}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-mono font-bold tracking-tight transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md cursor-pointer ${
+                                              theme === 'dark'
+                                                ? 'bg-[#1e1e1e]/60 border-[#333] text-gray-300 hover:border-yellow-500 hover:text-white hover:bg-yellow-500/10'
+                                                : 'bg-white border-gray-200 text-gray-700 hover:border-yellow-600 hover:text-yellow-600 hover:bg-yellow-50/50'
+                                            }`}
+                                          >
+                                            <BookOpen className="w-3 h-3 text-yellow-500 shrink-0" />
+                                            <span className="truncate max-w-[150px]">{gen.title || "Untitled Post"}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                                
                                <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest mt-4 block sm:hidden">
                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                </span>
