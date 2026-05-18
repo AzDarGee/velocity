@@ -117,7 +117,7 @@ interface AttachedFile {
 import { AdminDashboard } from "./components/AdminDashboard";
 import { OnboardingWizard, type Step } from "./components/OnboardingWizard";
 import { Header } from "./components/layout/Header";
-import { GenerationViewer } from "./components/GenerationViewer";
+
 import { MultiModalStudio, type MediaAsset as StudioMediaAsset } from "./components/MultiModalStudio";
 import { RotatingQuotes } from './components/ui/RotatingQuotes';
 
@@ -382,7 +382,7 @@ export default function App() {
   });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
-  const [viewerContent, setViewerContent] = useState<{ content: string; title: string } | null>(null);
+
   const [showClearConfirmation, setShowClearConfirmation] = useState<{ type: 'systemPrompt' | 'specificFocus' } | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const hasLoadedInitialGen = useRef(false);
@@ -827,14 +827,6 @@ export default function App() {
       localStorage.removeItem("currentGenerationId");
     }
   }, [currentGenerationId]);
-
-  useEffect(() => {
-    if (viewerContent) {
-      localStorage.setItem("isViewerOpenPersisted", "true");
-    } else {
-      localStorage.setItem("isViewerOpenPersisted", "false");
-    }
-  }, [viewerContent]);
 
   useEffect(() => {
     if (history.length > 0 && !hasLoadedInitialGen.current) {
@@ -1416,6 +1408,15 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     });
   }, [history, historySortBy]);
 
+  const handleRenameAsset = (assetId: string, newName: string) => {
+    setMediaFiles(prev => {
+      const updated = prev.map(f => (f.id === `syn-${assetId}` || f.firestoreId === assetId) ? { ...f, name: newName } : f);
+      // Also sync it to localStorage immediately to persist the change locally
+      localStorage.setItem("narrativeMediaFiles", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const handleAddAssetToNarrative = async (asset: StudioMediaAsset) => {
     const user = auth.currentUser;
     if (!user) {
@@ -1569,69 +1570,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
     <AuthGuard theme={theme}>
       {showOnboarding && <OnboardingWizard theme={theme} steps={onboardingSteps} onStepChange={handleStepChange} onComplete={handleOnboardingComplete} />}
       <AnimatePresence>
-        {viewerContent && (
-          <GenerationViewer 
-            content={viewerContent.content}
-            title={viewerContent.title}
-            theme={theme}
-            isAdmin={isAdmin}
-            mediaFiles={mediaFiles}
-            generationId={currentGenerationId || undefined}
-            onSave={async (newHtml) => {
-               if (currentGenerationId) {
-                  try {
-                    await updateDoc(doc(db, "generations", currentGenerationId), {
-                      content: newHtml,
-                      updatedAt: serverTimestamp()
-                    });
-                    // Because user is previewing an already loaded generation (this doesn't affect `blogPost` state, unless it's the current one)
-                    if (blogPost) {
-                      setBlogPost(newHtml);
-                      setOriginalContent(newHtml);
-                    }
-                    setViewerContent({ content: newHtml, title: viewerContent.title });
-                  } catch (e) {
-                     handleFirestoreError(e, OperationType.UPDATE, `generations/${currentGenerationId}`);
-                     throw e;
-                  }
-               }
-            }}
-            onClose={() => setViewerContent(null)}
-            onDownload={exportToPDF}
-            onCopy={copyToClipboard}
-            onDownloadAsset={async (m) => {
-              if (m.file) {
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(m.file);
-                link.download = m.name || 'download';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              } else if (m.storageUrl || (m.previewUrl && m.previewUrl.startsWith('http'))) {
-                 const downloadUrl = m.storageUrl || m.previewUrl;
-                 if (downloadUrl) {
-                   await downloadFile({
-                    id: m.id,
-                    name: m.name || 'download',
-                    type: m.mimeType || 'application/octet-stream',
-                    size: m.size || 0,
-                    storageUrl: downloadUrl,
-                    uri: m.uri,
-                    mimeType: m.mimeType,
-                    extractedText: m.extractedText
-                  });
-                 }
-              } else if (m.previewUrl) {
-                const link = document.createElement("a");
-                link.href = m.previewUrl;
-                link.download = m.name || 'download';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }
-            }}
-          />
-        )}
+
       </AnimatePresence>
       {/* History Sidebar */}
       <AnimatePresence>
@@ -1789,6 +1728,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               userId={auth.currentUser?.uid || ''}
               isAdmin={isAdmin}
               setAppMode={setAppMode}
+              onRenameAsset={handleRenameAsset}
             />
           </div>
         ) : (
@@ -2540,13 +2480,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
                <div className="flex items-center gap-4">
                  {blogPost && (
                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => setViewerContent({ content: blogPost, title: blogPost.split('\n')[0].replace(/^#+\s*/, '') || "Untitled Synthesis" })}
-                        className={`p-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-[#141414] hover:bg-black hover:text-white'} transition-all`}
-                        title="Enter Reading Mode"
-                      >
-                        <BookOpen className="w-4 h-4" />
-                      </button>
+
 
                       <div className={`flex items-center border p-1 ${theme === 'dark' ? 'bg-[#0A0A0A] border-[#333]' : 'bg-[#F8F8F7] border-[#141414]'}`}>
                       <button 
@@ -3055,7 +2989,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       </AnimatePresence>
 
       {/* Metric Overlay (Bottom Right) */}
-      <div className="fixed bottom-8 right-8 pointer-events-none hidden xl:block transition-all duration-300">
+      <div className="fixed bottom-8 right-8 z-[9999] pointer-events-none hidden xl:block transition-all duration-300">
         <div className={`border-2 p-4 transition-colors duration-300 ${
           theme === 'dark' 
             ? 'bg-[#141414] border-[#333] shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
