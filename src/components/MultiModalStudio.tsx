@@ -2214,22 +2214,31 @@ export function MultiModalStudio({
                                         </div>
                                       }
                                     >
-                                      {/* Tags under the audio badge and above the action buttons */}
-                                      {asset.metadata?.tags && (
-                                        <div className="flex flex-wrap gap-1 mt-1.5 mb-1">
-                                          {asset.metadata.tags.split(',').map((tag: string, i: number) => (
-                                            <span
-                                              key={`${tag}-${i}`}
-                                              className={`px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm ${theme === 'dark'
-                                                ? 'bg-zinc-800/50 border border-zinc-700/40 text-gray-300'
-                                                : 'bg-gray-100 border border-gray-200 text-gray-600'
-                                                }`}
-                                            >
-                                              {tag.trim()}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
+                                      {/* Associated Generations (Narrative Links) inside Audio Player */}
+                                      {(() => {
+                                        const linkedGenerations = generations?.filter(gen => gen.fileIds?.includes(asset.id)) || [];
+                                        if (linkedGenerations.length === 0) return null;
+                                        return (
+                                          <div className="mt-2 mb-2 flex flex-wrap gap-1.5">
+                                            {linkedGenerations.map(gen => (
+                                              <button
+                                                key={gen.id}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  onLoadGeneration?.(gen);
+                                                }}
+                                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-mono font-bold tracking-tight transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md cursor-pointer ${theme === 'dark'
+                                                  ? 'bg-[#1e1e1e]/60 border-[#333] text-gray-300 hover:border-yellow-500 hover:text-white hover:bg-yellow-500/10'
+                                                  : 'bg-white border-gray-200 text-gray-700 hover:border-yellow-600 hover:text-yellow-600 hover:bg-yellow-50/50'
+                                                  }`}
+                                              >
+                                                <BookOpen className="w-2.5 h-2.5 text-yellow-500 shrink-0" />
+                                                <span className="truncate max-w-[120px]">{gen.title || "Untitled Post"}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
 
                                       {/* Asset Actions inside Audio Player */}
                                       <div className="flex flex-wrap gap-2 mt-2">
@@ -2312,6 +2321,23 @@ export function MultiModalStudio({
                                           <Trash2 className="w-4 h-4" />
                                         </button>
                                       </div>
+
+                                      {/* Tags under the action buttons and still within the audio player */}
+                                      {asset.metadata?.tags && (
+                                        <div className="flex flex-wrap gap-1 mt-2.5 mb-1">
+                                          {asset.metadata.tags.split(',').map((tag: string, i: number) => (
+                                            <span
+                                              key={`${tag}-${i}`}
+                                              className={`px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm ${theme === 'dark'
+                                                ? 'bg-zinc-800/50 border border-zinc-700/40 text-gray-300'
+                                                : 'bg-gray-100 border border-gray-200 text-gray-600'
+                                                }`}
+                                            >
+                                              {tag.trim()}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </CustomAudioPlayer>
                                   </div>
                                 )}
@@ -2401,7 +2427,7 @@ export function MultiModalStudio({
                                 )}
 
                                 {/* Associated Generations (Narrative Links) */}
-                                {(() => {
+                                {asset.type !== 'audio' && (() => {
                                   const linkedGenerations = generations?.filter(gen => gen.fileIds?.includes(asset.id)) || [];
                                   if (linkedGenerations.length === 0) return null;
                                   return (
@@ -2492,8 +2518,8 @@ export function MultiModalStudio({
               <div className="p-5 md:p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg md:text-xl font-black uppercase italic leading-none">{viewingCover.metadata.title || viewingCover.name}</h3>
-                    <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.2em] mt-2">Music Cover Artifact</p>
+                    <h3 className="text-md xs:text-sm md:text-md font-black uppercase italic leading-none">{viewingCover.metadata.title || viewingCover.name}</h3>
+                    <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.2em] mt-2">Artifact</p>
                   </div>
                   < Music className="w-5 h-5 opacity-40 shrink-0" />
                 </div>
