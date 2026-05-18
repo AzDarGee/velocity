@@ -2989,7 +2989,7 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
       </AnimatePresence>
 
       {/* Metric Overlay (Bottom Right) */}
-      <div className="fixed bottom-8 right-8 pointer-events-none hidden xl:block transition-all duration-300">
+      <div className="fixed bottom-8 right-8 z-[9999] pointer-events-none hidden xl:block transition-all duration-300">
         <div className={`border-2 p-4 transition-colors duration-300 ${
           theme === 'dark' 
             ? 'bg-[#141414] border-[#333] shadow-[4px_4px_0px_0px_rgba(255,255,255,0.05)]' 
