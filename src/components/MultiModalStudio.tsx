@@ -2172,7 +2172,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                                         </div>
                                         {asset.metadata?.generationTimeMs && (
                                           <div className="text-[9px] font-mono opacity-40 whitespace-nowrap">
-                                            | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                            | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s | COST: {asset.type === 'image' ? GENERATION_COSTS.image : GENERATION_COSTS.video} credits
                                           </div>
                                         )}
                                       </div>
@@ -2206,7 +2206,7 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
                                               </div>
                                               {asset.metadata?.generationTimeMs && (
                                                 <div className="text-[8px] font-mono opacity-40 whitespace-nowrap">
-                                                  | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s
+                                                  | GEN: {(asset.metadata.generationTimeMs / 1000).toFixed(1)}s | COST: {GENERATION_COSTS.music} credits
                                                 </div>
                                               )}
                                             </div>
