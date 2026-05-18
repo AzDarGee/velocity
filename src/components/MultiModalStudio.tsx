@@ -36,7 +36,7 @@ export interface MediaAsset {
 }
 
 const DEFAULT_MUSIC_STYLES = [
-  "Pop", "Rock", "Hip Hop", "R&B", "Country", 
+  "Pop", "Rock", "Hip Hop", "R&B", "Country",
   "Jazz", "Classical", "Electronic", "Dance", "Folk",
   "Acoustic", "Blues", "Soul", "Funk", "Disco",
   "Reggae", "Latin", "Metal", "Punk", "Indie Rock",
@@ -151,15 +151,15 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
           )}
           {isPlaying && (
             <div className="absolute inset-0 bg-black/20 flex items-center justify-center backdrop-blur-[1px]">
-               <div className="flex gap-[2px] items-end h-3">
-                 <motion.div animate={{ height: ["4px", "12px", "4px"] }} transition={{ duration: 0.5, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
-                 <motion.div animate={{ height: ["8px", "4px", "12px"] }} transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
-                 <motion.div animate={{ height: ["12px", "8px", "4px"] }} transition={{ duration: 0.7, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
-               </div>
+              <div className="flex gap-[2px] items-end h-3">
+                <motion.div animate={{ height: ["4px", "12px", "4px"] }} transition={{ duration: 0.5, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
+                <motion.div animate={{ height: ["8px", "4px", "12px"] }} transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
+                <motion.div animate={{ height: ["12px", "8px", "4px"] }} transition={{ duration: 0.7, repeat: Infinity, ease: "easeInOut" }} className="w-1 bg-white rounded-t-sm" />
+              </div>
             </div>
           )}
         </div>
-        
+
         {/* Track Info */}
         <div className="flex-grow min-w-0 flex flex-col justify-center group/track">
           {isEditing ? (
@@ -180,7 +180,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
           ) : (
             <div className="flex items-center gap-2">
               <h4 className={`text-sm font-bold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{asset.name}</h4>
-              <button 
+              <button
                 onClick={() => {
                   setEditValue(asset.name);
                   setIsEditing(true);
@@ -196,13 +196,13 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
           )}
           {children && <div className="mt-2">{children}</div>}
         </div>
-        
+
         {/* Play Controls */}
         <div className="flex items-center gap-3 flex-shrink-0 pr-1">
           <div className={`text-[10px] font-mono hidden sm:block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </div>
-          <button 
+          <button
             onClick={togglePlay}
             className={`w-11 h-11 flex items-center justify-center rounded-full transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${theme === 'dark' ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'}`}
           >
@@ -210,30 +210,30 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
           </button>
         </div>
       </div>
-      
+
       {/* Progress Scrubber */}
-      <div 
+      <div
         ref={progressBarRef}
-        className="w-full relative h-1.5 group cursor-pointer" 
+        className="w-full relative h-1.5 group cursor-pointer"
         onClick={handleScrub}
       >
         {/* Background track */}
         <div className={`absolute inset-0 transition-colors ${theme === 'dark' ? 'bg-[#27272a] group-hover:bg-[#3f3f46]' : 'bg-gray-100 group-hover:bg-gray-200'}`} />
         {/* Progress fill */}
-        <div 
-          className={`absolute top-0 left-0 h-full transition-colors ${theme === 'dark' ? 'bg-white group-hover:bg-indigo-400' : 'bg-black group-hover:bg-indigo-600'}`} 
-          style={{ width: `${progress}%` }} 
+        <div
+          className={`absolute top-0 left-0 h-full transition-colors ${theme === 'dark' ? 'bg-white group-hover:bg-indigo-400' : 'bg-black group-hover:bg-indigo-600'}`}
+          style={{ width: `${progress}%` }}
         />
         {/* Thumb (visible on hover) */}
-        <div 
+        <div
           className={`absolute top-1/2 -mt-1.5 w-3 h-3 rounded-full opacity-0 group-hover:opacity-100 transition-all pointer-events-none shadow-sm scale-75 group-hover:scale-100 ${theme === 'dark' ? 'bg-white' : 'bg-black'}`}
           style={{ left: `calc(${progress}% - 6px)` }}
         />
       </div>
-      
-      <audio 
-        ref={audioRef} 
-        src={src} 
+
+      <audio
+        ref={audioRef}
+        src={src}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={() => setIsPlaying(false)}
@@ -243,14 +243,14 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   );
 };
 
-export function MultiModalStudio({ 
-  theme, 
-  onAddAssetToNarrative, 
-  onBulkAddAssetsToNarrative, 
-  credits, 
-  userId, 
-  isAdmin, 
-  setAppMode, 
+export function MultiModalStudio({
+  theme,
+  onAddAssetToNarrative,
+  onBulkAddAssetsToNarrative,
+  credits,
+  userId,
+  isAdmin,
+  setAppMode,
   onRenameAsset,
   generations = [],
   onLoadGeneration
@@ -261,7 +261,7 @@ export function MultiModalStudio({
   const [prompts, setPrompts] = useState(() => {
     const saved = localStorage.getItem("studioPrompts");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return {
       image: "",
@@ -273,7 +273,7 @@ export function MultiModalStudio({
   const [imageStyles, setImageStyles] = useState<string[]>(() => {
     const saved = localStorage.getItem("studioImageStyles");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     const legacy = localStorage.getItem("studioImageStyle");
     return legacy ? [legacy] : ["Photorealistic"];
@@ -340,9 +340,9 @@ export function MultiModalStudio({
   const [tappedAssetId, setTappedAssetId] = useState<string | null>(null);
 
   const filteredAssets = assets.filter(asset => {
-    const matchesSearch = asset.name.toLowerCase().includes(librarySearchQuery.toLowerCase()) || 
-                          (asset.metadata?.prompt?.toLowerCase().includes(librarySearchQuery.toLowerCase())) ||
-                          (asset.metadata?.title?.toLowerCase().includes(librarySearchQuery.toLowerCase()));
+    const matchesSearch = asset.name.toLowerCase().includes(librarySearchQuery.toLowerCase()) ||
+      (asset.metadata?.prompt?.toLowerCase().includes(librarySearchQuery.toLowerCase())) ||
+      (asset.metadata?.title?.toLowerCase().includes(librarySearchQuery.toLowerCase()));
     const matchesType = libraryTypeFilter === 'all' || asset.type === libraryTypeFilter;
     return matchesSearch && matchesType;
   });
@@ -390,13 +390,13 @@ export function MultiModalStudio({
     try {
       const { db } = await import('../lib/firebase');
       const { doc, updateDoc } = await import('firebase/firestore');
-      
+
       const updateData = { name: newName.trim() };
-      
+
       // Update user-specific media asset record
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
       await updateDoc(assetRef, updateData);
-      
+
       // Also update the global files collection for consistency across the app
       // We only do this if the asset is 'uploaded' or has been linked to the narrative intake
       // as purely generated assets live only in the user's media_assets collection until intake.
@@ -413,11 +413,11 @@ export function MultiModalStudio({
           }
         }
       }
-      
+
       if (onRenameAsset) {
         onRenameAsset(asset.id, newName.trim());
       }
-      
+
       setEditingId(null);
     } catch (err) {
       console.error("Failed to rename asset:", err);
@@ -445,33 +445,33 @@ export function MultiModalStudio({
   const handleBulkIntake = () => {
     const selectedList = assets.filter(a => selectedAssets.has(a.id));
     if (selectedList.length === 0) return;
-    
+
     if (onBulkAddAssetsToNarrative) {
       onBulkAddAssetsToNarrative(selectedList);
     } else if (onAddAssetToNarrative) {
       selectedList.forEach(asset => onAddAssetToNarrative(asset));
     }
-    
+
     deselectAllAssets();
   };
 
   const executeBulkDelete = async () => {
     if (!userId || selectedAssets.size === 0) return;
-    
+
     // We can do this with Promise.all for parallelism, or sequentially to avoid hitting rate limits.
     // Let's do a map to promise array and Promise.all.
     try {
       const { db, storage } = await import('../lib/firebase');
       const { doc, deleteDoc } = await import('firebase/firestore');
       const { ref, deleteObject } = await import('firebase/storage');
-      
+
       const deletions = Array.from(selectedAssets).map(async (assetId) => {
         const asset = assets.find(a => a.id === assetId);
         if (!asset) return;
 
         const assetRef = doc(db, 'users', userId, 'media_assets', assetId);
         await deleteDoc(assetRef);
-        
+
         if (asset.source === 'generated') {
           try {
             const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
@@ -481,12 +481,12 @@ export function MultiModalStudio({
               console.error("Storage delete fail", e);
             }
           }
-          
+
           if (asset.metadata?.coverUrl || asset.type === 'audio') {
             try {
               const coverRef = ref(storage, `uploads/generated/${userId}/${asset.id}_cover.png`);
               await deleteObject(coverRef);
-            } catch (e: any) { 
+            } catch (e: any) {
               if (e?.code !== 'storage/object-not-found') {
                 console.error("Storage delete fail", e);
               }
@@ -494,7 +494,7 @@ export function MultiModalStudio({
           }
         }
       });
-      
+
       await Promise.all(deletions);
       setSelectedAssets(new Set());
     } catch (err) {
@@ -583,17 +583,17 @@ export function MultiModalStudio({
 
   useEffect(() => {
     if (!userId) return;
-    
+
     let isMounted = true;
     let unsubscribe: (() => void) | undefined;
-    
+
     const fetchAssets = async () => {
       try {
         const { db, handleFirestoreError, OperationType } = await import('../lib/firebase');
         const { collection, query, orderBy, onSnapshot } = await import('firebase/firestore');
         const assetsRef = collection(db, 'users', userId, 'media_assets');
         const q = query(assetsRef, orderBy('timestamp', 'desc'));
-        
+
         unsubscribe = onSnapshot(q, (snapshot) => {
           if (!isMounted) return;
           const loaded: MediaAsset[] = [];
@@ -602,18 +602,18 @@ export function MultiModalStudio({
           });
           setAssets(loaded);
         }, (error) => {
-           // Provide a fallback silent error handle if permission initially denied, 
-           // though we should throw to the ErrorBoundary if intended. For assets we might just log and fail silently.
-           console.error("Firestore Error in Assets:", error);
-           // handleFirestoreError(error, OperationType.LIST, `users/${userId}/media_assets`);
+          // Provide a fallback silent error handle if permission initially denied, 
+          // though we should throw to the ErrorBoundary if intended. For assets we might just log and fail silently.
+          console.error("Firestore Error in Assets:", error);
+          // handleFirestoreError(error, OperationType.LIST, `users/${userId}/media_assets`);
         });
       } catch (err) {
         console.error("Failed to set up assets listener:", err);
       }
     };
-    
+
     fetchAssets();
-    
+
     return () => {
       isMounted = false;
       if (unsubscribe) unsubscribe();
@@ -630,9 +630,9 @@ export function MultiModalStudio({
       const { GoogleGenAI } = await import("@google/genai");
       const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
       if (!apiKey) throw new Error("Gemini API Key is required for auto-prompting.");
-      
+
       const genAI = new GoogleGenAI({ apiKey });
-      
+
       let systemPrompt = "You are a creative prompt engineer. ";
       if (executeMode === 'image') systemPrompt += "Generate a highly detailed and descriptive prompt for an image generation model. Focus on composition, lighting, subject matter, style, and mood.";
       else if (executeMode === 'video') systemPrompt += "Generate a highly detailed, cinematic prompt for a video generation model (like Veo). Describe the scene, the motion, the camera movement, the lighting, and the overall atmosphere.";
@@ -640,14 +640,14 @@ export function MultiModalStudio({
         if (sunoCustomMode) systemPrompt += "Generate creative lyrics with musical direction tags (like [Verse], [Chorus]) for a custom music generation model.";
         else systemPrompt += "Generate a creative and evocative prompt for a music generation model. Describe the genre, instrumentation, tempo, mood, and any lyrical themes.";
       }
-      
+
       systemPrompt += ` Only return the prompt text, nothing else. If the user already provided some text, enhance and expand upon it: "${currentPrompt || 'Surprise me'}"`;
 
       const response = await genAI.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
       });
-      
+
       const newPrompt = response.text?.trim() || "";
       if (newPrompt) setPrompts(prev => ({ ...prev, [executeMode]: newPrompt }));
     } catch (err: any) {
@@ -699,7 +699,7 @@ export function MultiModalStudio({
           title: sunoTitle || "Generated Track",
           style: sunoStyles.join(", ") || (sunoInstrumental ? "Instrumental" : ""),
           callBackUrl: window.location.origin + "/api/suno-callback",
-          wait_audio: true 
+          wait_audio: true
         };
 
         if (sunoPersonaId) payload.personaId = sunoPersonaId;
@@ -725,62 +725,62 @@ export function MultiModalStudio({
         }
 
         const jsonRes = await response.json();
-        
+
         if (jsonRes.code && jsonRes.code !== 200) {
-           throw new Error(`Suno AI Music Generation failed: ${jsonRes.msg || JSON.stringify(jsonRes)}`);
+          throw new Error(`Suno AI Music Generation failed: ${jsonRes.msg || JSON.stringify(jsonRes)}`);
         }
 
         let sunoItem = null;
-        
+
         // Check if initial response already contains audio data (since wait_audio: true was used)
         const initialItems = jsonRes?.data?.response?.sunoData || jsonRes?.data?.sunoData || jsonRes?.sunoData || (Array.isArray(jsonRes.data) ? jsonRes.data : null);
         if (Array.isArray(initialItems) && initialItems.length > 0) {
-            const potentialItem = initialItems[0];
-            if (potentialItem.audioUrl || potentialItem.streamAudioUrl || potentialItem.audio_url || potentialItem.url) {
-                sunoItem = potentialItem;
-            }
+          const potentialItem = initialItems[0];
+          if (potentialItem.audioUrl || potentialItem.streamAudioUrl || potentialItem.audio_url || potentialItem.url) {
+            sunoItem = potentialItem;
+          }
         }
 
         const taskId = jsonRes?.data?.taskId || jsonRes?.taskId || (Array.isArray(jsonRes.data) && jsonRes.data[0]?.task_id) || jsonRes?.data?.task_id || jsonRes?.data?.id || jsonRes?.id;
 
         if (!sunoItem && taskId) {
-            let attempts = 0;
-            while(attempts < 180) { // 6 minutes max (Suno can sometimes be slow for high quality)
-               await new Promise(r => setTimeout(r, 2000));
-               const statusRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
-                   headers: {
-                      'Authorization': `Bearer ${apiKey}`
-                   }
-               });
-               if (!statusRes.ok) {
-                   attempts++;
-                   continue;
-               }
-               const statusData = await statusRes.json();
-               const status = statusData?.data?.status || statusData?.status;
-               
-               if (status === 'SUCCESS' || status === 'COMPLETED') {
-                   const items = statusData?.data?.response?.sunoData || statusData?.data?.sunoData || statusData?.sunoData || (Array.isArray(statusData.data) ? statusData.data : null);
-                   if (Array.isArray(items) && items.length > 0) {
-                       sunoItem = items[0];
-                       // Ensure it has an audio URL before stopping
-                       if (sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url) {
-                           break;
-                       }
-                   }
-               } else if (status && (status.includes('FAIL') || status.includes('ERROR') || status.includes('EXCEPTION'))) {
-                   throw new Error(`Suno AI generation failed with status: ${status}. Message: ${statusData?.data?.errorMessage || statusData?.message || 'Unknown error'}`);
-               }
-               attempts++;
+          let attempts = 0;
+          while (attempts < 180) { // 6 minutes max (Suno can sometimes be slow for high quality)
+            await new Promise(r => setTimeout(r, 2000));
+            const statusRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+              headers: {
+                'Authorization': `Bearer ${apiKey}`
+              }
+            });
+            if (!statusRes.ok) {
+              attempts++;
+              continue;
             }
+            const statusData = await statusRes.json();
+            const status = statusData?.data?.status || statusData?.status;
+
+            if (status === 'SUCCESS' || status === 'COMPLETED') {
+              const items = statusData?.data?.response?.sunoData || statusData?.data?.sunoData || statusData?.sunoData || (Array.isArray(statusData.data) ? statusData.data : null);
+              if (Array.isArray(items) && items.length > 0) {
+                sunoItem = items[0];
+                // Ensure it has an audio URL before stopping
+                if (sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url) {
+                  break;
+                }
+              }
+            } else if (status && (status.includes('FAIL') || status.includes('ERROR') || status.includes('EXCEPTION'))) {
+              throw new Error(`Suno AI generation failed with status: ${status}. Message: ${statusData?.data?.errorMessage || statusData?.message || 'Unknown error'}`);
+            }
+            attempts++;
+          }
         }
 
         if (!sunoItem || (!sunoItem.audioUrl && !sunoItem.streamAudioUrl && !sunoItem.audio_url && !sunoItem.url)) {
-             throw new Error("Timeout or could not find audio metadata in Suno AI task results.");
+          throw new Error("Timeout or could not find audio metadata in Suno AI task results.");
         }
 
         const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url;
-        
+
         finalMetadata = { prompt, task_id: taskId, ...sunoItem };
 
         const audioRes = await fetch(audioUrl);
@@ -788,42 +788,42 @@ export function MultiModalStudio({
         let blob = await audioRes.blob();
 
         try {
-            const imageUrl = sunoItem.image_large_url || sunoItem.image_url || sunoItem.imageUrl || sunoItem.imageLargeUrl;
-            if (imageUrl) {
-                const imageRes = await fetch(imageUrl, {
-                    // Important for remote images that might not have CORS explicitly set for JS but wait, it's suno
+          const imageUrl = sunoItem.image_large_url || sunoItem.image_url || sunoItem.imageUrl || sunoItem.imageLargeUrl;
+          if (imageUrl) {
+            const imageRes = await fetch(imageUrl, {
+              // Important for remote images that might not have CORS explicitly set for JS but wait, it's suno
+            });
+            if (imageRes.ok) {
+              const imageBuffer = await imageRes.arrayBuffer();
+              const audioBuffer = await blob.arrayBuffer();
+
+              const ID3WriterModule = await import('browser-id3-writer');
+              const ID3Writer = ID3WriterModule.default && typeof ID3WriterModule.default === 'function' ? ID3WriterModule.default : ID3WriterModule;
+              const titleToUse = sunoTitle || sunoItem.title || "Generated Track";
+
+              const writer = new (ID3Writer as any)(audioBuffer);
+              writer.setFrame('TIT2', titleToUse)
+                .setFrame('TPE1', ['Media Studio AI'])
+                .setFrame('APIC', {
+                  type: 3,
+                  data: imageBuffer,
+                  description: 'Front cover'
                 });
-                if (imageRes.ok) {
-                    const imageBuffer = await imageRes.arrayBuffer();
-                    const audioBuffer = await blob.arrayBuffer();
-                    
-                    const ID3WriterModule = await import('browser-id3-writer');
-                    const ID3Writer = ID3WriterModule.default && typeof ID3WriterModule.default === 'function' ? ID3WriterModule.default : ID3WriterModule;
-                    const titleToUse = sunoTitle || sunoItem.title || "Generated Track";
-                    
-                    const writer = new (ID3Writer as any)(audioBuffer);
-                    writer.setFrame('TIT2', titleToUse)
-                          .setFrame('TPE1', ['Media Studio AI'])
-                          .setFrame('APIC', {
-                              type: 3,
-                              data: imageBuffer,
-                              description: 'Front cover'
-                          });
-                    writer.addTag();
-                    const taggedBuffer = writer.arrayBuffer;
-                    blob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
-                    
-                    finalMetadata.coverUrl = imageUrl;
-                }
+              writer.addTag();
+              const taggedBuffer = writer.arrayBuffer;
+              blob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
+
+              finalMetadata.coverUrl = imageUrl;
             }
+          }
         } catch (id3Err) {
-            console.error("Failed to write ID3 metadata:", id3Err);
+          console.error("Failed to write ID3 metadata:", id3Err);
         }
 
         finalUrl = URL.createObjectURL(blob);
       } else if (activeMode === 'image' || activeMode === 'video') {
         const { GoogleGenAI } = await import("@google/genai");
-        
+
         // Paid model check
         if (typeof (window as any).aistudio !== 'undefined') {
           const hasKey = await (window as any).aistudio.hasSelectedApiKey();
@@ -831,7 +831,7 @@ export function MultiModalStudio({
             await (window as any).aistudio.openSelectKey();
           }
         }
-        
+
         // Ensure we use the most up-to-date API key (often GEMINI_API_KEY or API_KEY in this env)
         const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
         if (!apiKey) throw new Error("Gemini API Key is required for synthesis.");
@@ -844,11 +844,11 @@ export function MultiModalStudio({
             contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Style: ${imageStyles.join(", ")}. Do not output text, only generate the image: ${prompt}` }] }],
             config: {
               imageConfig: {
-                 aspectRatio: aspectRatio as any,
+                aspectRatio: aspectRatio as any,
               }
             }
           });
-          
+
           console.log("Image generation response:", JSON.stringify(response));
           const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
           if (imagePart?.inlineData?.data) {
@@ -876,9 +876,9 @@ export function MultiModalStudio({
           }
 
           const genVideos = operation.response?.generatedVideos;
-          const downloadLink = genVideos?.[0]?.video?.uri 
-            || (genVideos?.[0]?.video as any)?.url 
-            || (genVideos?.[0] as any)?.uri 
+          const downloadLink = genVideos?.[0]?.video?.uri
+            || (genVideos?.[0]?.video as any)?.url
+            || (genVideos?.[0] as any)?.uri
             || (genVideos?.[0] as any)?.url
             || (operation.response as any)?.video?.uri
             || (operation.response as any)?.video?.url
@@ -888,9 +888,9 @@ export function MultiModalStudio({
             || (operation as any)?.url;
 
           if (!downloadLink) {
-             console.error("Video synthesis failed. Operation result:", JSON.stringify(operation));
-             const errMsg = (operation.error as any)?.message || "Video synthesis failed to return a valid stream URI. Output was: " + JSON.stringify(operation);
-             throw new Error(errMsg);
+            console.error("Video synthesis failed. Operation result:", JSON.stringify(operation));
+            const errMsg = (operation.error as any)?.message || "Video synthesis failed to return a valid stream URI. Output was: " + JSON.stringify(operation);
+            throw new Error(errMsg);
           }
 
           // Fetch video using API key in header as per skill guidelines
@@ -904,7 +904,7 @@ export function MultiModalStudio({
           if (!videoResponse.ok) throw new Error("Failed to secure kinetic stream from synthesized URI.");
           const blob = await videoResponse.blob();
           finalUrl = URL.createObjectURL(blob);
-          
+
           // Generate a cover image based on the video prompt
           try {
             const coverImageResponse = await genAI.models.generateContent({
@@ -918,14 +918,14 @@ export function MultiModalStudio({
             });
             const imagePart = coverImageResponse.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
             if (imagePart?.inlineData?.data) {
-               finalMetadata.coverBase64 = imagePart.inlineData.data;
+              finalMetadata.coverBase64 = imagePart.inlineData.data;
             }
           } catch (coverErr) {
             console.error("Failed to generate cover image for video:", coverErr);
           }
         }
       }
-      
+
       const endTime = Date.now();
       finalMetadata.generationTimeMs = endTime - startTime;
 
@@ -933,7 +933,7 @@ export function MultiModalStudio({
       if (activeMode === 'music') {
         const titleToUse = sunoTitle || finalMetadata.title;
         if (titleToUse && titleToUse !== 'Generated Track') {
-           assetName = `${titleToUse.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, "_")}.mp3`;
+          assetName = `${titleToUse.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, "_")}.mp3`;
         }
       }
 
@@ -947,45 +947,45 @@ export function MultiModalStudio({
         metadata: finalMetadata,
         url: finalUrl
       };
-      
+
       let storageUrl = finalUrl;
       const { db, storage } = await import('../lib/firebase');
       const { doc, setDoc } = await import('firebase/firestore');
       const { ref, uploadBytes, uploadString, getDownloadURL } = await import('firebase/storage');
-      
+
       try {
         if (finalUrl) {
           const fetchRes = await fetch(finalUrl);
           const finalBlob = await fetchRes.blob();
           const storageRef = ref(storage, `uploads/generated/${userId}/${newAsset.id}_${newAsset.name}`);
-          
+
           await uploadBytes(storageRef, finalBlob, { contentType: finalBlob.type });
           storageUrl = await getDownloadURL(storageRef);
-          
-      // Add size to metadata
+
+          // Add size to metadata
           newAsset.metadata = {
             ...newAsset.metadata,
             fileSize: finalBlob.size,
             imageUrl: storageUrl // Ensure imageUrl is added for image mode
           };
-          
+
           if (finalMetadata.coverBase64) {
-             const coverRef = ref(storage, `uploads/generated/${userId}/${newAsset.id}_cover.png`);
-             await uploadString(coverRef, finalMetadata.coverBase64, 'base64', { contentType: 'image/png' });
-             const coverUrl = await getDownloadURL(coverRef);
-             newAsset.metadata.coverUrl = coverUrl;
-             delete newAsset.metadata.coverBase64;
-             
-             // Optionally update finalMetadata as well so it's not saved to Firestore
-             delete finalMetadata.coverBase64;
+            const coverRef = ref(storage, `uploads/generated/${userId}/${newAsset.id}_cover.png`);
+            await uploadString(coverRef, finalMetadata.coverBase64, 'base64', { contentType: 'image/png' });
+            const coverUrl = await getDownloadURL(coverRef);
+            newAsset.metadata.coverUrl = coverUrl;
+            delete newAsset.metadata.coverBase64;
+
+            // Optionally update finalMetadata as well so it's not saved to Firestore
+            delete finalMetadata.coverBase64;
           }
 
           // Revoke the local object URL to prevent memory leaks now that we have it requested
           if (finalUrl.startsWith('blob:')) {
-             URL.revokeObjectURL(finalUrl);
+            URL.revokeObjectURL(finalUrl);
           }
         }
-        
+
         newAsset.url = storageUrl;
 
         const assetRef = doc(db, 'users', userId, 'media_assets', newAsset.id);
@@ -995,15 +995,15 @@ export function MultiModalStudio({
         if (!isAdmin) {
           const { handleFirestoreError, OperationType } = await import('../lib/firebase');
           const { runTransaction, collection, serverTimestamp } = await import('firebase/firestore');
-          
+
           await runTransaction(db, async (transaction) => {
             const userRef = doc(db, 'users', userId);
             const userDoc = await transaction.get(userRef);
             if (!userDoc.exists()) throw new Error("User record not found");
             const currentCredits = userDoc.data().credits || 0;
-            
+
             transaction.update(userRef, { credits: currentCredits - cost });
-            
+
             const activityRef = doc(collection(db, 'users', userId, 'activity'));
             transaction.set(activityRef, {
               type: `${activeMode}_generation`,
@@ -1022,7 +1022,7 @@ export function MultiModalStudio({
       } catch (err) {
         console.error("Failed to save asset to database:", err);
       }
-      
+
       setPrompts(prev => ({ ...prev, [executeMode]: "" }));
     } catch (err: any) {
       console.error(`Generation error (${executeMode}):`, err);
@@ -1042,35 +1042,35 @@ export function MultiModalStudio({
       console.log("handleGenerateCover skipped: audio check or task_id missing", asset.type, asset.metadata);
       return;
     }
-    
+
     setCoverGeneratingAssets(prev => new Set(prev).add(asset.id));
     setError(null);
 
     try {
       const prompt = `Generate a high quality, square cover art for a song. There should be no text on the image. Song metadata: ${asset.metadata?.prompt || asset.name}. Lyrics: ${asset.metadata?.lyrics || 'No lyrics provided'}`;
-      
+
       const { GoogleGenAI } = await import("@google/genai");
       const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
       if (!apiKey) throw new Error("Gemini API Key is required.");
-      
+
       const genAI = new GoogleGenAI({ apiKey });
-      
+
       const response = await genAI.models.generateContent({
         model: "gemini-3.1-flash-image-preview",
         contents: [{ parts: [{ text: `Generate an image. ${prompt}` }] }],
         config: {
           imageConfig: {
-             aspectRatio: "1:1",
+            aspectRatio: "1:1",
           }
         }
       });
-      
+
       const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
-      
+
       if (!imagePart?.inlineData?.data) {
         throw new Error("No image data returned. Ensure the model supports image generation.");
       }
-      
+
       // Upload raw image to Storage
       const { db, storage } = await import('../lib/firebase');
       const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
@@ -1078,68 +1078,68 @@ export function MultiModalStudio({
 
       const path = `uploads/generated/${userId}/${asset.id}_cover.png`;
       const storageRef = ref(storage, path);
-      
+
       // Upload using base64 string
       const uploadResult = await uploadString(storageRef, imagePart.inlineData.data, 'base64', {
         contentType: 'image/png'
       });
-      
+
       const imageUrl = await getDownloadURL(storageRef);
       const coverSize = uploadResult.metadata.size;
-      
+
       // userId is required here; hopefully it's available in the component scope
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
 
       // Now attach cover to the actual MP3 file using browser-id3-writer
       if (asset.url) {
         try {
-            const { getBytes, uploadBytes } = await import('firebase/storage');
-            
-            // asset.url is the download URL which can be parsed by `ref` directly
-            const audioStorageRef = ref(storage, asset.url);
-            const audioBuffer = await getBytes(audioStorageRef);
-                
-            // Convert base64 to ArrayBuffer for ID3Writer
-            const binaryString = window.atob(imagePart.inlineData.data);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            const imageBuffer = bytes.buffer;
+          const { getBytes, uploadBytes } = await import('firebase/storage');
 
-            const ID3WriterModule = await import('browser-id3-writer');
-            const ID3Writer = ID3WriterModule.default && typeof ID3WriterModule.default === 'function' ? ID3WriterModule.default : ID3WriterModule;
-            const titleToUse = asset.metadata?.title || asset.name.replace('.mp3', '') || "Generated Track";
-            
-            const writer = new (ID3Writer as any)(audioBuffer);
-            writer.setFrame('TIT2', titleToUse)
-                  .setFrame('TPE1', ['Media Studio AI'])
-                  .setFrame('APIC', {
-                      type: 3,
-                      data: imageBuffer,
-                      description: 'Front cover'
-                  });
-            writer.addTag();
-            const taggedBuffer = writer.arrayBuffer;
-            const taggedBlob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
+          // asset.url is the download URL which can be parsed by `ref` directly
+          const audioStorageRef = ref(storage, asset.url);
+          const audioBuffer = await getBytes(audioStorageRef);
 
-            // Define a simple retry helper
-            const uploadWithRetry = async (ref: any, data: any, metadata: any, retries = 3): Promise<any> => {
-              for (let i = 0; i < retries; i++) {
-                try {
-                  return await uploadBytes(ref, data, metadata);
-                } catch (e: any) {
-                  if (i === retries - 1 || e?.code !== 'storage/retry-limit-exceeded') throw e;
-                  await new Promise(r => setTimeout(r, 1000 * (i + 1))); 
-                }
+          // Convert base64 to ArrayBuffer for ID3Writer
+          const binaryString = window.atob(imagePart.inlineData.data);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const imageBuffer = bytes.buffer;
+
+          const ID3WriterModule = await import('browser-id3-writer');
+          const ID3Writer = ID3WriterModule.default && typeof ID3WriterModule.default === 'function' ? ID3WriterModule.default : ID3WriterModule;
+          const titleToUse = asset.metadata?.title || asset.name.replace('.mp3', '') || "Generated Track";
+
+          const writer = new (ID3Writer as any)(audioBuffer);
+          writer.setFrame('TIT2', titleToUse)
+            .setFrame('TPE1', ['Media Studio AI'])
+            .setFrame('APIC', {
+              type: 3,
+              data: imageBuffer,
+              description: 'Front cover'
+            });
+          writer.addTag();
+          const taggedBuffer = writer.arrayBuffer;
+          const taggedBlob = new Blob([taggedBuffer], { type: 'audio/mpeg' });
+
+          // Define a simple retry helper
+          const uploadWithRetry = async (ref: any, data: any, metadata: any, retries = 3): Promise<any> => {
+            for (let i = 0; i < retries; i++) {
+              try {
+                return await uploadBytes(ref, data, metadata);
+              } catch (e: any) {
+                if (i === retries - 1 || e?.code !== 'storage/retry-limit-exceeded') throw e;
+                await new Promise(r => setTimeout(r, 1000 * (i + 1)));
               }
-            };
+            }
+          };
 
-            await uploadWithRetry(audioStorageRef, taggedBlob, { contentType: 'audio/mpeg' });
-            // Note: The URL might not change visually but it's safe to keep using the existing one.
+          await uploadWithRetry(audioStorageRef, taggedBlob, { contentType: 'audio/mpeg' });
+          // Note: The URL might not change visually but it's safe to keep using the existing one.
         } catch (id3Err) {
-            console.error("Failed to write ID3 metadata for updated cover:", id3Err);
+          console.error("Failed to write ID3 metadata for updated cover:", id3Err);
         }
       }
 
@@ -1154,13 +1154,13 @@ export function MultiModalStudio({
         console.error("Firestore updateDoc error:", updateErr);
         const { handleFirestoreError, OperationType } = await import('../lib/firebase');
         if (handleFirestoreError) {
-           handleFirestoreError(updateErr, OperationType.UPDATE, assetRef.path);
+          handleFirestoreError(updateErr, OperationType.UPDATE, assetRef.path);
         }
         throw updateErr;
       }
-      
+
       // Update local assets state
-      setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, coverUrl: imageUrl, coverSize}} : a));
+      setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, metadata: { ...a.metadata, coverUrl: imageUrl, coverSize } } : a));
 
       // Notify completion
       setError("Cover art generated and attached to track!");
@@ -1180,7 +1180,7 @@ export function MultiModalStudio({
 
   const handleConvertToWav = async (asset: MediaAsset) => {
     if (asset.type !== 'audio' || !asset.url) return;
-    
+
     // If WAV URL already exists, download it
     if (asset.metadata?.wavUrl) {
       window.open(asset.metadata.wavUrl, '_blank');
@@ -1204,13 +1204,13 @@ export function MultiModalStudio({
         })
       });
       if (!response.ok) throw new Error("Conversion failed");
-      
+
       setError("WAV generation requested! It may take a few moments.");
-      
+
       // We don't open in a new tab here anymore. 
       // The Firestore document should be updated by the callback which 
       // will trigger an update in the asset state.
-      
+
       setTimeout(() => setError(null), 3000);
     } catch (err: any) {
       console.error("WAV conversion error:", err);
@@ -1226,16 +1226,16 @@ export function MultiModalStudio({
 
   const handleFetchTimestampedLyrics = async (asset: MediaAsset) => {
     console.log("handleFetchTimestampedLyrics clicked for:", asset.id, "Metadata:", asset.metadata);
-    
+
     // The asset metadata is where the task_id and id should be
     const taskId = asset.metadata?.task_id || asset.metadata?.taskId;
     const audioId = asset.metadata?.id || asset.metadata?.audioId;
-    
+
     if (asset.type !== 'audio' || !taskId) {
-       console.log("handleFetchTimestampedLyrics skipped: audio check or task_id missing", asset.type, taskId, asset.metadata);
-       return;
+      console.log("handleFetchTimestampedLyrics skipped: audio check or task_id missing", asset.type, taskId, asset.metadata);
+      return;
     }
-    
+
     if (!audioId) {
       console.log("handleFetchTimestampedLyrics skipped: audioId missing", asset.metadata);
       return;
@@ -1267,31 +1267,31 @@ export function MultiModalStudio({
       });
 
       if (!response.ok) throw new Error(`Lyric fetch failed: ${await response.text()}`);
-      
+
       const jsonRes = await response.json();
       const lyricsData = jsonRes?.data?.response || jsonRes?.data || jsonRes;
 
       if (!lyricsData || (!lyricsData.lyrics && !lyricsData.segments)) {
-         setError("No lyrics found for this track - it might be an instrumental.");
-         setTimeout(() => setError(null), 3000);
-         
-         const { db } = await import('../lib/firebase');
-         const { doc, updateDoc } = await import('firebase/firestore');
-         const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
-         await updateDoc(assetRef, {
-           userId: userId,
-           'metadata.timestampedLyrics': 'Instrumental / No Lyrics'
-         });
-         setAssets(prev => prev.map(a => a.id === asset.id ? {...a, metadata: {...a.metadata, timestampedLyrics: 'Instrumental / No Lyrics'}} : a));
-         
-         return;
+        setError("No lyrics found for this track - it might be an instrumental.");
+        setTimeout(() => setError(null), 3000);
+
+        const { db } = await import('../lib/firebase');
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
+        await updateDoc(assetRef, {
+          userId: userId,
+          'metadata.timestampedLyrics': 'Instrumental / No Lyrics'
+        });
+        setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, metadata: { ...a.metadata, timestampedLyrics: 'Instrumental / No Lyrics' } } : a));
+
+        return;
       }
 
       // Update Firestore
       const { db } = await import('../lib/firebase');
       const { doc, updateDoc } = await import('firebase/firestore');
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
-      
+
       await updateDoc(assetRef, {
         userId: userId,
         'metadata.timestampedLyrics': lyricsData
@@ -1323,10 +1323,10 @@ export function MultiModalStudio({
       const { db, storage } = await import('../lib/firebase');
       const { doc, deleteDoc } = await import('firebase/firestore');
       const { ref, deleteObject } = await import('firebase/storage');
-      
+
       const assetRef = doc(db, 'users', userId, 'media_assets', asset.id);
       await deleteDoc(assetRef);
-      
+
       if (asset.source === 'generated') {
         try {
           const storageRef = ref(storage, `uploads/generated/${userId}/${asset.id}_${asset.name}`);
@@ -1392,11 +1392,10 @@ export function MultiModalStudio({
             <button
               key={mode}
               onClick={() => setActiveMode(mode)}
-              className={`px-3 md:px-4 py-1.5 md:py-2 border-2 text-[10px] md:text-sm font-bold uppercase transition-all flex items-center gap-2 shrink-0 ${
-                activeMode === mode 
-                  ? theme === 'dark' ? 'border-white bg-white text-black' : 'border-black bg-black text-white'
-                  : theme === 'dark' ? 'border-[#333] hover:border-gray-500' : 'border-gray-200 hover:border-gray-400'
-              }`}
+              className={`px-3 md:px-4 py-1.5 md:py-2 border-2 text-[10px] md:text-sm font-bold uppercase transition-all flex items-center gap-2 shrink-0 ${activeMode === mode
+                ? theme === 'dark' ? 'border-white bg-white text-black' : 'border-black bg-black text-white'
+                : theme === 'dark' ? 'border-[#333] hover:border-gray-500' : 'border-gray-200 hover:border-gray-400'
+                }`}
             >
               {mode === 'image' && <ImageIcon className="w-3 h-3 md:w-4 md:h-4" />}
               {mode === 'video' && <Video className="w-3 h-3 md:w-4 md:h-4" />}
@@ -1422,20 +1421,20 @@ export function MultiModalStudio({
                 <span>{error}</span>
               </div>
             )}
-            
+
             {/* Mock Advanced Settings based on mode */}
             <div className={`p-4 border ${theme === 'dark' ? 'border-[#333] bg-black/20' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-center gap-2 mb-4">
                 <Settings2 className="w-4 h-4 opacity-50" />
                 <span className="text-xs uppercase font-bold tracking-widest">Model Config</span>
               </div>
-              
+
               <div className="space-y-4">
                 {activeMode === 'image' && (
                   <div className="flex flex-col gap-6">
                     <div>
                       <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Aspect Ratio</label>
-                      <select 
+                      <select
                         value={aspectRatio}
                         onChange={e => setAspectRatio(e.target.value)}
                         disabled={isGenerating}
@@ -1450,10 +1449,10 @@ export function MultiModalStudio({
                     </div>
 
                     <div className="pt-2">
-                       <div className="flex justify-between items-center mb-2">
+                      <div className="flex justify-between items-center mb-2">
                         <label className="text-[10px] uppercase font-mono opacity-60 tracking-wider">Styles [{imageStyles.length}]</label>
                         {imageStyles.length > 0 && (
-                          <button 
+                          <button
                             onClick={() => setImageStyles([])}
                             className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
                           >
@@ -1462,7 +1461,7 @@ export function MultiModalStudio({
                         )}
                       </div>
                       <div className={`flex gap-2 mb-2 ${isGenerating ? 'opacity-50' : ''}`}>
-                        <input 
+                        <input
                           type="text"
                           value={newImageStyle}
                           onChange={(e) => setNewImageStyle(e.target.value)}
@@ -1489,7 +1488,7 @@ export function MultiModalStudio({
                             }
                           }}
                         />
-                        <button 
+                        <button
                           onClick={() => {
                             if (newImageStyle.trim()) {
                               const vals = newImageStyle.split(',').map(v => v.trim()).filter(Boolean);
@@ -1514,30 +1513,28 @@ export function MultiModalStudio({
                           Add
                         </button>
                       </div>
-                      <div className={`w-full border max-h-48 overflow-y-auto p-3 space-y-2 scrollbar-thin ${
-                        theme === 'dark' 
-                          ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
-                          : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
-                      }`}>
+                      <div className={`w-full border max-h-48 overflow-y-auto p-3 space-y-2 scrollbar-thin ${theme === 'dark'
+                        ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent'
+                        : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
+                        }`}>
                         {Array.from(new Set([...customImageStyles, ...DEFAULT_IMAGE_STYLES])).map((style) => (
                           <label key={`img-style-${style}`} className={`flex items-center gap-3 group/item ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                             <div className="relative flex items-center justify-center">
-                              <input 
+                              <input
                                 type="checkbox"
                                 checked={imageStyles.includes(style)}
                                 disabled={isGenerating}
                                 onChange={(e) => {
                                   if (isGenerating) return;
-                                  const newList = e.target.checked 
+                                  const newList = e.target.checked
                                     ? [...imageStyles, style]
                                     : imageStyles.filter(a => a !== style);
                                   setImageStyles(newList);
                                 }}
-                                className={`peer appearance-none w-3.5 h-3.5 border transition-colors ${
-                                  theme === 'dark' 
-                                    ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white' 
-                                    : 'border-gray-300 bg-white checked:bg-black checked:border-black'
-                                } ${isGenerating ? 'cursor-not-allowed' : ''}`}
+                                className={`peer appearance-none w-3.5 h-3.5 border transition-colors ${theme === 'dark'
+                                  ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white'
+                                  : 'border-gray-300 bg-white checked:bg-black checked:border-black'
+                                  } ${isGenerating ? 'cursor-not-allowed' : ''}`}
                               />
                               <Check className={`w-2.5 h-2.5 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
                             </div>
@@ -1550,12 +1547,12 @@ export function MultiModalStudio({
                     </div>
                   </div>
                 )}
-                
+
                 {activeMode === 'video' && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Aspect Ratio</label>
-                      <select 
+                      <select
                         value={aspectRatio === '1:1' ? '16:9' : aspectRatio} // Veo prefers 16:9 or 9:16
                         onChange={e => setAspectRatio(e.target.value)}
                         disabled={isGenerating}
@@ -1567,7 +1564,7 @@ export function MultiModalStudio({
                     </div>
                     <div>
                       <label className="text-[10px] uppercase font-mono opacity-60 mb-1 block">Resolution</label>
-                      <select 
+                      <select
                         value={resolution}
                         onChange={e => setResolution(e.target.value)}
                         disabled={isGenerating}
@@ -1580,7 +1577,7 @@ export function MultiModalStudio({
                     </div>
                   </div>
                 )}
-                
+
                 {activeMode === 'music' && (
                   <div className="flex flex-col gap-8 mt-2">
                     {/* Primary Controls */}
@@ -1588,7 +1585,7 @@ export function MultiModalStudio({
                       <div className="flex flex-col gap-5 mb-5">
                         <div>
                           <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Model</label>
-                          <select 
+                          <select
                             value={sunoModel}
                             onChange={e => setSunoModel(e.target.value)}
                             disabled={isGenerating}
@@ -1604,8 +1601,8 @@ export function MultiModalStudio({
                         </div>
                         <div className="flex flex-wrap items-center gap-6">
                           <label className={`flex items-center gap-2 group ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
                               checked={sunoCustomMode}
                               onChange={e => setSunoCustomMode(e.target.checked)}
                               disabled={isGenerating}
@@ -1614,8 +1611,8 @@ export function MultiModalStudio({
                             <span className="text-[11px] font-bold uppercase tracking-widest group-hover:opacity-100 opacity-80 transition-opacity">Custom Mode</span>
                           </label>
                           <label className={`flex items-center gap-2 group ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
                               checked={sunoInstrumental}
                               onChange={e => setSunoInstrumental(e.target.checked)}
                               disabled={isGenerating}
@@ -1629,8 +1626,8 @@ export function MultiModalStudio({
                       <div className="grid grid-cols-1 gap-5 pt-5 border-t border-current/10">
                         <div>
                           <label className="text-[10px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Song Title</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="e.g. Neon Horizon"
                             value={sunoTitle}
                             onChange={e => setSunoTitle(e.target.value)}
@@ -1642,7 +1639,7 @@ export function MultiModalStudio({
                           <div className="flex justify-between items-center mb-2">
                             <label className="text-[10px] uppercase font-mono opacity-60 tracking-wider">Style / Genre [{sunoStyles.length}]</label>
                             {sunoStyles.length > 0 && (
-                              <button 
+                              <button
                                 onClick={() => setSunoStyles([])}
                                 className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-opacity ${theme === 'dark' ? 'text-white' : 'text-black'}`}
                               >
@@ -1651,7 +1648,7 @@ export function MultiModalStudio({
                             )}
                           </div>
                           <div className={`flex gap-2 mb-2 ${isGenerating ? 'opacity-50' : ''}`}>
-                            <input 
+                            <input
                               type="text"
                               value={newStyle}
                               onChange={(e) => setNewStyle(e.target.value)}
@@ -1678,7 +1675,7 @@ export function MultiModalStudio({
                                 }
                               }}
                             />
-                            <button 
+                            <button
                               onClick={() => {
                                 if (newStyle.trim()) {
                                   const vals = newStyle.split(',').map(v => v.trim()).filter(Boolean);
@@ -1703,30 +1700,28 @@ export function MultiModalStudio({
                               Add
                             </button>
                           </div>
-                          <div className={`w-full border max-h-40 overflow-y-auto p-4 space-y-3 scrollbar-thin ${
-                            theme === 'dark' 
-                              ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent' 
-                              : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
-                          }`}>
+                          <div className={`w-full border max-h-40 overflow-y-auto p-4 space-y-3 scrollbar-thin ${theme === 'dark'
+                            ? 'bg-[#0A0A0A] border-[#333] scrollbar-thumb-[#333] scrollbar-track-transparent'
+                            : 'bg-white border-gray-300 scrollbar-thumb-gray-200 scrollbar-track-transparent'
+                            }`}>
                             {Array.from(new Set([...customStyles, ...DEFAULT_MUSIC_STYLES])).map((style, idx) => (
                               <label key={`style-seg-${style}`} className={`flex items-center gap-3 group/item ${isGenerating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                 <div className="relative flex items-center justify-center">
-                                  <input 
+                                  <input
                                     type="checkbox"
                                     checked={sunoStyles.includes(style)}
                                     disabled={isGenerating}
                                     onChange={(e) => {
                                       if (isGenerating) return;
-                                      const newStyleList = e.target.checked 
+                                      const newStyleList = e.target.checked
                                         ? [...sunoStyles, style]
                                         : sunoStyles.filter(a => a !== style);
                                       setSunoStyles(newStyleList);
                                     }}
-                                    className={`peer appearance-none w-4 h-4 border transition-colors ${
-                                      theme === 'dark' 
-                                        ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white' 
-                                        : 'border-gray-300 bg-white checked:bg-black checked:border-black'
-                                    } ${isGenerating ? 'cursor-not-allowed' : ''}`}
+                                    className={`peer appearance-none w-4 h-4 border transition-colors ${theme === 'dark'
+                                      ? 'border-[#333] bg-[#141414] checked:bg-white checked:border-white'
+                                      : 'border-gray-300 bg-white checked:bg-black checked:border-black'
+                                      } ${isGenerating ? 'cursor-not-allowed' : ''}`}
                                   />
                                   <Check className={`w-2.5 h-2.5 absolute opacity-0 peer-checked:opacity-100 pointer-events-none ${theme === 'dark' ? 'text-black' : 'text-white'}`} />
                                 </div>
@@ -1749,7 +1744,7 @@ export function MultiModalStudio({
                         <div className="grid grid-cols-1 gap-4">
                           <div>
                             <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Vocal Gender</label>
-                            <select 
+                            <select
                               value={sunoVocalGender}
                               onChange={e => setSunoVocalGender(e.target.value)}
                               disabled={isGenerating}
@@ -1762,8 +1757,8 @@ export function MultiModalStudio({
                           </div>
                           <div>
                             <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Negative Tags</label>
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               placeholder="e.g. Heavy Metal"
                               value={sunoNegativeTags}
                               onChange={e => setSunoNegativeTags(e.target.value)}
@@ -1783,8 +1778,8 @@ export function MultiModalStudio({
                         <div className={`grid grid-cols-1 gap-4 transition-opacity ${!sunoCustomMode ? 'opacity-40' : 'opacity-100'}`}>
                           <div>
                             <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Persona ID</label>
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               disabled={isGenerating || !sunoCustomMode}
                               placeholder="e.g. persona_123"
                               value={sunoPersonaId}
@@ -1794,7 +1789,7 @@ export function MultiModalStudio({
                           </div>
                           <div>
                             <label className="text-[9px] uppercase font-mono opacity-60 mb-2 block tracking-wider">Persona Model</label>
-                            <select 
+                            <select
                               disabled={isGenerating || !sunoCustomMode}
                               value={sunoPersonaModel}
                               onChange={e => setSunoPersonaModel(e.target.value)}
@@ -1822,7 +1817,7 @@ export function MultiModalStudio({
                             <span className="opacity-70">Style Weight</span>
                             <span className="font-bold opacity-100">{sunoStyleWeight.toFixed(2)}</span>
                           </label>
-                          <input 
+                          <input
                             type="range" min="0" max="1" step="0.05"
                             value={sunoStyleWeight} onChange={e => setSunoStyleWeight(parseFloat(e.target.value))}
                             disabled={isGenerating}
@@ -1834,7 +1829,7 @@ export function MultiModalStudio({
                             <span className="opacity-70">Weirdness</span>
                             <span className="font-bold opacity-100">{sunoWeirdnessConstraint.toFixed(2)}</span>
                           </label>
-                          <input 
+                          <input
                             type="range" min="0" max="1" step="0.05"
                             value={sunoWeirdnessConstraint} onChange={e => setSunoWeirdnessConstraint(parseFloat(e.target.value))}
                             disabled={isGenerating}
@@ -1846,7 +1841,7 @@ export function MultiModalStudio({
                             <span className="opacity-70">Audio Weight</span>
                             <span className="font-bold opacity-100">{sunoAudioWeight.toFixed(2)}</span>
                           </label>
-                          <input 
+                          <input
                             type="range" min="0" max="1" step="0.05"
                             value={sunoAudioWeight} onChange={e => setSunoAudioWeight(parseFloat(e.target.value))}
                             disabled={isGenerating}
@@ -1885,26 +1880,24 @@ export function MultiModalStudio({
                     </div>
                   </div>
                   <div className="relative">
-                    <textarea 
+                    <textarea
                       value={prompt}
                       onChange={e => setPrompts(prev => ({ ...prev, [activeMode]: e.target.value }))}
                       disabled={isGenerating || isAutoPrompting}
                       placeholder={`Describe the ${activeMode} you want to synthesize...`}
-                      className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${
-                        theme === 'dark' 
-                          ? 'bg-[#1A1A1A] border-[#333] focus:border-white' 
-                          : 'bg-white border-gray-300 focus:border-black'
-                      } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''} ${isAutoPrompting ? 'text-transparent selection:text-transparent' : ''}`}
+                      className={`w-full p-3 md:p-4 border resize-none h-24 md:h-32 font-mono text-xs md:text-sm focus:outline-none transition-colors ${theme === 'dark'
+                        ? 'bg-[#1A1A1A] border-[#333] focus:border-white'
+                        : 'bg-white border-gray-300 focus:border-black'
+                        } ${(isGenerating || isAutoPrompting) ? 'opacity-50 cursor-not-allowed' : ''} ${isAutoPrompting ? 'text-transparent selection:text-transparent' : ''}`}
                     />
                     <AnimatePresence>
                       {isAutoPrompting && (
-                        <motion.div 
+                        <motion.div
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${
-                            theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
-                          }`}
+                          className={`absolute inset-0 z-10 flex flex-col items-center justify-center backdrop-blur-[2px] ${theme === 'dark' ? 'bg-black/60' : 'bg-white/60'
+                            }`}
                         >
                           <RotatingQuotes quotes={FOCUS_QUOTES} theme={theme} />
                         </motion.div>
@@ -1913,14 +1906,13 @@ export function MultiModalStudio({
                   </div>
                 </div>
 
-                <button 
+                <button
                   onClick={handleGenerate}
                   disabled={isGenerating || !prompt.trim()}
-                  className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-2 ${
-                    isGenerating 
-                      ? 'opacity-50 cursor-not-allowed bg-gray-500 text-white' 
-                      : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5`
-                  }`}
+                  className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-2 ${isGenerating
+                    ? 'opacity-50 cursor-not-allowed bg-gray-500 text-white'
+                    : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5`
+                    }`}
                 >
                   {isGenerating ? (
                     <RefreshCw className="w-5 h-5 animate-spin" />
@@ -1955,7 +1947,7 @@ export function MultiModalStudio({
               {assets.length} Entry_Points
             </div>
           </div>
-          
+
           <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
             {assets.length === 0 ? (
               <div className={`w-full h-full min-h-[300px] flex flex-col items-center justify-center border-2 border-dashed ${theme === 'dark' ? 'border-[#333] text-[#F8F8F7]' : 'border-gray-300 text-black'}`}>
@@ -1975,11 +1967,10 @@ export function MultiModalStudio({
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-bold uppercase font-mono tracking-widest">{selectedAssets.size} Selected</span>
                         {selectedAssets.size > 1 && (
-                          <button 
+                          <button
                             onClick={handleBulkIntake}
-                            className={`px-3 py-1 border-2 text-[10px] uppercase font-mono font-bold tracking-widest flex items-center gap-2 transition-colors ${
-                              theme === 'dark' ? 'border-white text-white hover:bg-white hover:text-black' : 'border-black text-black hover:bg-black hover:text-white'
-                            }`}
+                            className={`px-3 py-1 border-2 text-[10px] uppercase font-mono font-bold tracking-widest flex items-center gap-2 transition-colors ${theme === 'dark' ? 'border-white text-white hover:bg-white hover:text-black' : 'border-black text-black hover:bg-black hover:text-white'
+                              }`}
                           >
                             <Layout className="w-3 h-3" />
                             Intake Selected
@@ -1989,7 +1980,7 @@ export function MultiModalStudio({
                           Deselect All
                         </button>
                       </div>
-                      <button 
+                      <button
                         onClick={() => setIsBulkDeleting(true)}
                         className="px-3 py-1 border-2 border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white transition-colors text-[10px] uppercase font-mono font-bold tracking-widest flex items-center gap-2"
                       >
@@ -2011,8 +2002,8 @@ export function MultiModalStudio({
                 <div className={`border-b-2 p-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 transition-all ${theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-gray-200 bg-white'}`}>
                   <div className="relative flex-1 group">
                     <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 transition-colors ${theme === 'dark' ? 'text-gray-500 group-focus-within:text-white' : 'text-gray-400 group-focus-within:text-black'}`} />
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="Search library assets..."
                       value={librarySearchQuery}
                       onChange={(e) => setLibrarySearchQuery(e.target.value)}
@@ -2024,11 +2015,10 @@ export function MultiModalStudio({
                       <button
                         key={type}
                         onClick={() => setLibraryTypeFilter(type)}
-                        className={`px-3 py-1.5 text-[9px] uppercase font-mono font-bold tracking-widest transition-all border ${
-                          libraryTypeFilter === type
-                            ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black')
-                            : (theme === 'dark' ? 'bg-transparent text-gray-500 border-transparent hover:text-white' : 'bg-transparent text-gray-400 border-transparent hover:text-black')
-                        }`}
+                        className={`px-3 py-1.5 text-[9px] uppercase font-mono font-bold tracking-widest transition-all border ${libraryTypeFilter === type
+                          ? (theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black')
+                          : (theme === 'dark' ? 'bg-transparent text-gray-500 border-transparent hover:text-white' : 'bg-transparent text-gray-400 border-transparent hover:text-black')
+                          }`}
                       >
                         {type}
                       </button>
@@ -2044,10 +2034,10 @@ export function MultiModalStudio({
                         <motion.div
                           key={asset.id}
                           initial={{ opacity: 0, y: 10, height: 160 }}
-                          animate={{ 
-                            opacity: 1, 
-                            y: 0, 
-                            height: isTapped ? 'auto' : 160 
+                          animate={{
+                            opacity: 1,
+                            y: 0,
+                            height: isTapped ? 'auto' : 160
                           }}
                           whileHover={{ height: 'auto' }}
                           exit={{ opacity: 0, y: -10 }}
@@ -2056,73 +2046,70 @@ export function MultiModalStudio({
                               setTappedAssetId(prev => prev === asset.id ? null : asset.id);
                             }
                           }}
-                          transition={{ 
+                          transition={{
                             height: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
                             opacity: { duration: 0.3 },
                             y: { duration: 0.3 }
                           }}
-                          className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${
-                            theme === 'dark' 
-                              ? `border-[#222] ${isTapped ? 'bg-[#141414]' : 'hover:bg-[#141414]'}` 
-                              : `border-gray-100 ${isTapped ? 'bg-gray-50' : 'hover:bg-gray-50'}`
-                          } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
+                          className={`group border-b last:border-b-0 p-4 lg:p-6 transition-colors relative overflow-hidden ${theme === 'dark'
+                            ? `border-[#222] ${isTapped ? 'bg-[#141414]' : 'hover:bg-[#141414]'}`
+                            : `border-gray-100 ${isTapped ? 'bg-gray-50' : 'hover:bg-gray-50'}`
+                            } ${selectedAssets.has(asset.id) ? (theme === 'dark' ? '!bg-[#1a1a1a]' : '!bg-gray-100') : ''}`}
                         >
-                           {(() => {
-                             const bgUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' ? asset.url : undefined);
-                             if (!bgUrl) return null;
-                             return (
-                               <img 
-                                 src={bgUrl} 
-                                 alt="" 
-                                 referrerPolicy="no-referrer"
-                                 className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-all duration-500 ${isTapped ? 'blur-sm' : 'blur-[2px] group-hover:blur-sm'} scale-105 ${
-                                   theme === 'dark' 
-                                     ? `${isTapped ? 'opacity-[0.15]' : 'opacity-40 group-hover:opacity-[0.15]'}` 
-                                     : `${isTapped ? 'opacity-[0.08]' : 'opacity-30 group-hover:opacity-[0.08]'}`
-                                 }`} 
-                               />
-                             );
-                           })()}
+                          {(() => {
+                            const bgUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' ? asset.url : undefined);
+                            if (!bgUrl) return null;
+                            return (
+                              <img
+                                src={bgUrl}
+                                alt=""
+                                referrerPolicy="no-referrer"
+                                className={`absolute inset-0 w-full h-full object-cover z-0 pointer-events-none transition-all duration-500 ${isTapped ? 'blur-sm' : 'blur-[2px] group-hover:blur-sm'} scale-105 ${theme === 'dark'
+                                  ? `${isTapped ? 'opacity-[0.15]' : 'opacity-40 group-hover:opacity-[0.15]'}`
+                                  : `${isTapped ? 'opacity-[0.08]' : 'opacity-30 group-hover:opacity-[0.08]'}`
+                                  }`}
+                              />
+                            );
+                          })()}
 
-                           {/* Unhovered State Content */}
-                           <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-all duration-500 ${selectedAssets.has(asset.id) ? 'opacity-0 pointer-events-none' : (isTapped ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0 group-hover:pointer-events-none')}`}>
-                              <div className={`p-4 rounded-full border-2 ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/40' : 'bg-white/40 border-black/5 text-black/40'} backdrop-blur-md`}>
-                                {asset.type === 'image' && <ImageIcon className="w-8 h-8" />}
-                                {asset.type === 'video' && <Video className="w-8 h-8" />}
-                                {asset.type === 'audio' && <Music className="w-8 h-8" />}
-                              </div>
-                           </div>
-
-                           <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : (isTapped ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}`}>
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
-                               className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${
-                                 selectedAssets.has(asset.id) 
-                                   ? 'opacity-100' 
-                                   : (isTapped ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
-                               }`}
-                             >
-                             {selectedAssets.has(asset.id) ? <CheckSquare className="w-5 h-5 text-indigo-500" /> : <Square className="w-5 h-5" />}
-                           </button>
-                           <div className="flex-1 flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6 min-w-0">
-                             <div 
-                               onClick={() => {
-                                 setViewingCover(asset);
-                               }}
-                               className={`w-[72px] h-[72px] sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
-                             >
-                              {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
-                                <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url || undefined} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
-                              )}
-                              {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
-                                <>
-                                  {asset.type === 'image' && <ImageIcon className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
-                                  {asset.type === 'video' && <Video className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
-                                  {asset.type === 'audio' && <Music className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
-                                </>
-                              )}
+                          {/* Unhovered State Content */}
+                          <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-all duration-500 ${selectedAssets.has(asset.id) ? 'opacity-0 pointer-events-none' : (isTapped ? 'opacity-0 pointer-events-none' : 'opacity-100 group-hover:opacity-0 group-hover:pointer-events-none')}`}>
+                            <div className={`p-4 rounded-full border-2 ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/40' : 'bg-white/40 border-black/5 text-black/40'} backdrop-blur-md`}>
+                              {asset.type === 'image' && <ImageIcon className="w-8 h-8" />}
+                              {asset.type === 'video' && <Video className="w-8 h-8" />}
+                              {asset.type === 'audio' && <Music className="w-8 h-8" />}
                             </div>
-                             <div className="flex flex-col min-w-0 flex-1 group/title">
+                          </div>
+
+                          <div className={`relative z-10 flex items-start gap-3 transition-opacity duration-500 ${selectedAssets.has(asset.id) ? 'opacity-100' : (isTapped ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}`}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleSelectAsset(asset.id); }}
+                              className={`mt-2 w-5 h-5 flex items-center justify-center transition-opacity flex-shrink-0 ${selectedAssets.has(asset.id)
+                                ? 'opacity-100'
+                                : (isTapped ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+                                }`}
+                            >
+                              {selectedAssets.has(asset.id) ? <CheckSquare className="w-5 h-5 text-indigo-500" /> : <Square className="w-5 h-5" />}
+                            </button>
+                            <div className="flex-1 flex flex-col sm:flex-row sm:items-start gap-4 lg:gap-6 min-w-0">
+                              <div
+                                onClick={() => {
+                                  setViewingCover(asset);
+                                }}
+                                className={`w-[72px] h-[72px] sm:w-20 sm:h-20 lg:w-24 lg:h-24 flex-shrink-0 border-2 flex items-center justify-center relative overflow-hidden bg-black/5 dark:bg-white/5 transition-transform cursor-pointer hover:scale-105 active:scale-95 ${getBorderColor(asset).split(' ')[0]}`}
+                              >
+                                {(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
+                                  <img src={asset.metadata?.coverUrl || asset.metadata?.imageUrl || asset.url || undefined} referrerPolicy="no-referrer" alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                )}
+                                {!(asset.metadata?.coverUrl || asset.metadata?.imageUrl || (asset.type === 'image' && asset.url)) && (
+                                  <>
+                                    {asset.type === 'image' && <ImageIcon className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
+                                    {asset.type === 'video' && <Video className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
+                                    {asset.type === 'audio' && <Music className="w-6 h-6 sm:w-8 sm:h-8 opacity-50 relative z-10" />}
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0 flex-1 group/title">
                                 {/* Asset Name and Timestamp */}
                                 <div className={`flex items-start gap-4 mb-1 ${asset.type === 'audio' ? 'justify-end' : 'justify-between'}`}>
                                   {asset.type !== 'audio' && (
@@ -2145,7 +2132,7 @@ export function MultiModalStudio({
                                       ) : (
                                         <>
                                           <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight truncate" title={asset.name}>{asset.name}</h4>
-                                          <button 
+                                          <button
                                             onClick={() => {
                                               setEditValue(asset.name);
                                               setEditingId(asset.id);
@@ -2159,14 +2146,14 @@ export function MultiModalStudio({
                                     </div>
                                   )}
                                   <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest whitespace-nowrap hidden sm:block">
-                                    {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 </div>
-                               
-                               {/* Type and Source */}
-                               {asset.type !== 'audio' && (
-                                 <div className="flex flex-wrap items-center gap-2 mb-3">
-                                    <div 
+
+                                {/* Type and Source */}
+                                {asset.type !== 'audio' && (
+                                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <div
                                       onClick={() => {
                                         setViewingAssetDetails(asset);
                                       }}
@@ -2190,19 +2177,19 @@ export function MultiModalStudio({
                                         )}
                                       </div>
                                     )}
-                                 </div>
-                               )}
-                               
-                               {/* Custom Audio Player */}
-                               {asset.type === 'audio' && asset.url && (
-                                 <div className="mb-4 w-full">
-                                   <CustomAudioPlayer 
-                                     asset={asset} 
-                                     theme={theme} 
-                                     onRename={handleRename} 
-                                     badgeContent={
-                                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                          <div 
+                                  </div>
+                                )}
+
+                                {/* Custom Audio Player */}
+                                {asset.type === 'audio' && asset.url && (
+                                  <div className="mb-4 w-full">
+                                    <CustomAudioPlayer
+                                      asset={asset}
+                                      theme={theme}
+                                      onRename={handleRename}
+                                      badgeContent={
+                                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                          <div
                                             onClick={() => setViewingAssetDetails(asset)}
                                             className={`px-1 py-0.5 text-[8px] uppercase font-mono font-black tracking-widest border transition-all ${getBorderColor(asset).split(' ')[0]} cursor-pointer hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 hover:scale-105 active:scale-95`}
                                           >
@@ -2224,236 +2211,202 @@ export function MultiModalStudio({
                                               )}
                                             </div>
                                           )}
-                                       </div>
-                                     }
-                                   >
-                                     {/* Asset Actions inside Audio Player */}
-                                     <div className="flex flex-wrap gap-2 mt-2">
-                                       {asset.source === 'generated' && (
-                                         <button 
-                                           onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
-                                           disabled={coverGeneratingAssets.has(asset.id)}
-                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                             theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
-                                           } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                           title="Generate Song Cover"
-                                         >
-                                           {coverGeneratingAssets.has(asset.id) ? (
-                                             <RefreshCw className="w-4 h-4 animate-spin" />
-                                           ) : (
-                                             <Sparkles className="w-4 h-4" />
-                                           )}
-                                         </button>
-                                       )}
-                                       {asset.source === 'generated' && (
-                                         <button 
-                                           onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
-                                           disabled={wavGeneratingAssets.has(asset.id)}
-                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                             theme === 'dark' 
-                                               ? asset.metadata?.wavUrl 
-                                                 ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
-                                                 : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
-                                               : asset.metadata?.wavUrl
-                                                 ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
-                                                 : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
-                                           } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                           title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
-                                         >
-                                           {wavGeneratingAssets.has(asset.id) ? (
-                                             <RefreshCw className="w-4 h-4 animate-spin" />
-                                           ) : asset.metadata?.wavUrl ? (
-                                             <Download className="w-4 h-4" />
-                                           ) : (
-                                             <FileAudio className="w-4 h-4" />
-                                           )}
-                                         </button>
-                                       )}
-                                       {asset.source === 'generated' && (
-                                         <button 
-                                           onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
-                                           disabled={lyricsLoadingAssets.has(asset.id)}
-                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                             theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
-                                           } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                           title="View Temporal Lyrics"
-                                         >
-                                           {lyricsLoadingAssets.has(asset.id) ? (
-                                             <RefreshCw className="w-4 h-4 animate-spin" />
-                                           ) : (
-                                             <Wand2 className="w-4 h-4" />
-                                           )}
-                                         </button>
-                                       )}
-                                       {asset.source === 'generated' && (
-                                         <button 
-                                           onClick={() => onAddAssetToNarrative?.(asset)}
-                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                             theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
-                                           }`}
-                                           title="Add to Narrative Context"
-                                         >
-                                           <BookOpen className="w-4 h-4" />
-                                         </button>
-                                       )}
-                                       <button 
-                                         onClick={() => {
-                                           if (asset.url) {
-                                             window.open(asset.url, '_blank');
-                                           }
-                                         }}
-                                         className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                           theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
-                                         }`} title="Download / Open">
-                                           <Download className="w-4 h-4" />
-                                       </button>
-                                       <button 
-                                         onClick={() => setAssetToDelete(asset)}
-                                         className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0" title="Purge Record">
-                                           <Trash2 className="w-4 h-4" />
-                                       </button>
-                                     </div>
-                                   </CustomAudioPlayer>
-                                 </div>
-                               )}
-                               
-                               {/* Asset Actions */}
-                               {asset.type !== 'audio' && (
-                               <div className="flex flex-wrap gap-2 mb-4">
-                                 {false && (
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
-                                     disabled={coverGeneratingAssets.has(asset.id)}
-                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
-                                     } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                     title="Generate Song Cover"
-                                   >
-                                     {coverGeneratingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-4 h-4 animate-spin" />
-                                     ) : (
-                                       <Sparkles className="w-4 h-4" />
-                                     )}
-                                   </button>
-                                 )}
-                                 {false && (
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
-                                     disabled={wavGeneratingAssets.has(asset.id)}
-                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' 
-                                         ? asset.metadata?.wavUrl 
-                                           ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
-                                           : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
-                                         : asset.metadata?.wavUrl
-                                           ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
-                                           : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
-                                     } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                     title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
-                                   >
-                                     {wavGeneratingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-4 h-4 animate-spin" />
-                                     ) : asset.metadata?.wavUrl ? (
-                                       <Download className="w-4 h-4" />
-                                     ) : (
-                                       <FileAudio className="w-4 h-4" />
-                                     )}
-                                   </button>
-                                 )}
-                                 {false && (
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
-                                     disabled={lyricsLoadingAssets.has(asset.id)}
-                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
-                                     } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                     title="View Temporal Lyrics"
-                                   >
-                                     {lyricsLoadingAssets.has(asset.id) ? (
-                                       <RefreshCw className="w-4 h-4 animate-spin" />
-                                     ) : (
-                                       <Wand2 className="w-4 h-4" />
-                                     )}
-                                   </button>
-                                 )}
-                                 {asset.source === 'generated' && (
-                                   <button 
-                                     onClick={() => onAddAssetToNarrative?.(asset)}
-                                     className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                       theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
-                                     }`}
-                                     title="Add to Narrative Context"
-                                   >
-                                     <BookOpen className="w-4 h-4" />
-                                   </button>
-                                 )}
-                                 <button 
-                                   onClick={() => {
-                                     if (asset.url) {
-                                       window.open(asset.url, '_blank');
-                                     }
-                                   }}
-                                   className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${
-                                     theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
-                                   }`} title="Download / Open">
-                                     <Download className="w-4 h-4" />
-                                 </button>
-                                 <button 
-                                   onClick={() => setAssetToDelete(asset)}
-                                   className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0" title="Purge Record">
-                                     <Trash2 className="w-4 h-4" />
-                                 </button>
-                               </div>
-                               )}
-                               
-                               {/* Details and Metadata */}
-                               <div className={`w-full p-4 border-l-2 opacity-69 rounded-3xl ${theme === 'dark' ? 'bg-[#111] border-[#444]' : 'bg-gray-50 border-gray-300'}`}>
-                                 {asset.source === 'generated' && asset.metadata ? (
-                                  <div className="flex flex-col gap-2 w-full relative group/details">
-                                    {asset.metadata.prompt && (
-                                      <div className="relative">
-                                        <p 
-                                          className={`text-xs font-mono italic leading-relaxed whitespace-pre-wrap break-words pr-8 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} 
-                                          title={asset.metadata.prompt}
-                                        >
-                                          "{asset.metadata.prompt.length > 300 ? `${asset.metadata.prompt.substring(0, 300)}...` : asset.metadata.prompt}"
-                                        </p>
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); copyToClipboard(asset.metadata.prompt, asset.id); }}
-                                          className={`absolute top-0 right-0 p-1.5 rounded-md transition-all opacity-0 group-hover/details:opacity-100 ${theme === 'dark' ? 'hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-black/5 text-black/40 hover:text-black'}`}
-                                          title="Copy Prompt"
-                                        >
-                                          {copiedId === asset.id ? (
-                                            <div className="flex items-center gap-1">
-                                              <span className="text-[8px] font-bold uppercase tracking-tighter text-green-500">Copied</span>
-                                              <Check className="w-3 h-3 text-green-500" />
-                                            </div>
-                                          ) : <Copy className="w-3 h-3" />}
+                                        </div>
+                                      }
+                                    >
+                                      {/* Tags under the audio badge and above the action buttons */}
+                                      {asset.metadata?.tags && (
+                                        <div className="flex flex-wrap gap-1 mt-1.5 mb-1">
+                                          {asset.metadata.tags.split(',').map((tag: string, i: number) => (
+                                            <span
+                                              key={`${tag}-${i}`}
+                                              className={`px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm ${theme === 'dark'
+                                                ? 'bg-zinc-800/50 border border-zinc-700/40 text-gray-300'
+                                                : 'bg-gray-100 border border-gray-200 text-gray-600'
+                                                }`}
+                                            >
+                                              {tag.trim()}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Asset Actions inside Audio Player */}
+                                      <div className="flex flex-wrap gap-2 mt-2">
+                                        {asset.source === 'generated' && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
+                                            disabled={coverGeneratingAssets.has(asset.id)}
+                                            className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
+                                              } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title="Generate Song Cover"
+                                          >
+                                            {coverGeneratingAssets.has(asset.id) ? (
+                                              <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Sparkles className="w-4 h-4" />
+                                            )}
+                                          </button>
+                                        )}
+                                        {asset.source === 'generated' && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
+                                            disabled={wavGeneratingAssets.has(asset.id)}
+                                            className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark'
+                                              ? asset.metadata?.wavUrl
+                                                ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
+                                                : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
+                                              : asset.metadata?.wavUrl
+                                                ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
+                                                : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
+                                              } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
+                                          >
+                                            {wavGeneratingAssets.has(asset.id) ? (
+                                              <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : asset.metadata?.wavUrl ? (
+                                              <Download className="w-4 h-4" />
+                                            ) : (
+                                              <FileAudio className="w-4 h-4" />
+                                            )}
+                                          </button>
+                                        )}
+                                        {asset.source === 'generated' && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
+                                            disabled={lyricsLoadingAssets.has(asset.id)}
+                                            className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
+                                              } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title="View Temporal Lyrics"
+                                          >
+                                            {lyricsLoadingAssets.has(asset.id) ? (
+                                              <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Wand2 className="w-4 h-4" />
+                                            )}
+                                          </button>
+                                        )}
+                                        {asset.source === 'generated' && (
+                                          <button
+                                            onClick={() => onAddAssetToNarrative?.(asset)}
+                                            className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
+                                              }`}
+                                            title="Add to Narrative Context"
+                                          >
+                                            <BookOpen className="w-4 h-4" />
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => {
+                                            if (asset.url) {
+                                              window.open(asset.url, '_blank');
+                                            }
+                                          }}
+                                          className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                                            }`} title="Download / Open">
+                                          <Download className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => setAssetToDelete(asset)}
+                                          className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0" title="Purge Record">
+                                          <Trash2 className="w-4 h-4" />
                                         </button>
                                       </div>
-                                    )}
-                                    {(asset.metadata.title || asset.metadata.tags || asset.metadata.duration) && (
-                                      <div className="flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-widest opacity-60 mt-1">
-                                         {asset.metadata.title && <span className="font-bold">{asset.metadata.title}</span>}
-                                         {asset.metadata.duration && <span>• {asset.metadata.duration}s</span>}
-                                         {asset.metadata.tags && <span>• {asset.metadata.tags}</span>}
-                                      </div>
-                                    )}
+                                    </CustomAudioPlayer>
                                   </div>
-                                 ) : (
-                                  <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">No Context Data</span>
-                                 )}
-                               </div>
-                               
+                                )}
+
+                                {/* Asset Actions */}
+                                {asset.type !== 'audio' && (
+                                  <div className="flex flex-wrap gap-2 mb-4">
+                                    {false && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
+                                        disabled={coverGeneratingAssets.has(asset.id)}
+                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
+                                          } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Generate Song Cover"
+                                      >
+                                        {coverGeneratingAssets.has(asset.id) ? (
+                                          <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <Sparkles className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    )}
+                                    {false && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
+                                        disabled={wavGeneratingAssets.has(asset.id)}
+                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark'
+                                          ? asset.metadata?.wavUrl
+                                            ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
+                                            : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
+                                          : asset.metadata?.wavUrl
+                                            ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
+                                            : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
+                                          } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
+                                      >
+                                        {wavGeneratingAssets.has(asset.id) ? (
+                                          <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : asset.metadata?.wavUrl ? (
+                                          <Download className="w-4 h-4" />
+                                        ) : (
+                                          <FileAudio className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    )}
+                                    {false && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
+                                        disabled={lyricsLoadingAssets.has(asset.id)}
+                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
+                                          } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="View Temporal Lyrics"
+                                      >
+                                        {lyricsLoadingAssets.has(asset.id) ? (
+                                          <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <Wand2 className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    )}
+                                    {asset.source === 'generated' && (
+                                      <button
+                                        onClick={() => onAddAssetToNarrative?.(asset)}
+                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-[#333] hover:bg-white hover:text-black' : 'border-gray-200 hover:bg-black hover:text-white'
+                                          }`}
+                                        title="Add to Narrative Context"
+                                      >
+                                        <BookOpen className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        if (asset.url) {
+                                          window.open(asset.url, '_blank');
+                                        }
+                                      }}
+                                      className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                                        }`} title="Download / Open">
+                                      <Download className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => setAssetToDelete(asset)}
+                                      className="w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-red-500 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0" title="Purge Record">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+
                                 {/* Associated Generations (Narrative Links) */}
                                 {(() => {
                                   const linkedGenerations = generations?.filter(gen => gen.fileIds?.includes(asset.id)) || [];
                                   if (linkedGenerations.length === 0) return null;
                                   return (
-                                    <div className="mt-4 space-y-2">
-                                      <span className="text-[9px] uppercase font-mono tracking-widest opacity-50 block font-bold">
-                                        Associated Narratives ({linkedGenerations.length})
-                                      </span>
+                                    <div className="mt-2 space-y-2">
+
                                       <div className="flex flex-wrap gap-2">
                                         {linkedGenerations.map(gen => (
                                           <button
@@ -2462,11 +2415,10 @@ export function MultiModalStudio({
                                               e.stopPropagation();
                                               onLoadGeneration?.(gen);
                                             }}
-                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-mono font-bold tracking-tight transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md cursor-pointer ${
-                                              theme === 'dark'
-                                                ? 'bg-[#1e1e1e]/60 border-[#333] text-gray-300 hover:border-yellow-500 hover:text-white hover:bg-yellow-500/10'
-                                                : 'bg-white border-gray-200 text-gray-700 hover:border-yellow-600 hover:text-yellow-600 hover:bg-yellow-50/50'
-                                            }`}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-mono font-bold tracking-tight transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md cursor-pointer ${theme === 'dark'
+                                              ? 'bg-[#1e1e1e]/60 border-[#333] text-gray-300 hover:border-yellow-500 hover:text-white hover:bg-yellow-500/10'
+                                              : 'bg-white border-gray-200 text-gray-700 hover:border-yellow-600 hover:text-yellow-600 hover:bg-yellow-50/50'
+                                              }`}
                                           >
                                             <BookOpen className="w-3 h-3 text-yellow-500 shrink-0" />
                                             <span className="truncate max-w-[150px]">{gen.title || "Untitled Post"}</span>
@@ -2476,16 +2428,16 @@ export function MultiModalStudio({
                                     </div>
                                   );
                                 })()}
-                                
-                               <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest mt-4 block sm:hidden">
-                                 {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                               </span>
+
+                                <span className="text-[9px] font-mono opacity-40 uppercase tracking-widest mt-4 block sm:hidden">
+                                  {new Date(asset.timestamp).toLocaleDateString()} {new Date(asset.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
                             </div>
-                           </div>
-                         </div>
-                      </motion.div>
-                    );
-                  })}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                   {visibleCount < assets.length && (
                     <div ref={loaderRef} className="p-10 flex items-center justify-center">
@@ -2509,14 +2461,14 @@ export function MultiModalStudio({
       {/* Cover Details Modal */}
       <AnimatePresence>
         {viewingCover && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-             onClick={() => setViewingCover(null)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setViewingCover(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2524,13 +2476,13 @@ export function MultiModalStudio({
               onClick={e => e.stopPropagation()}
             >
               <div className="relative aspect-square w-full">
-                <img 
-                  src={viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl || undefined} 
+                <img
+                  src={viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl || undefined}
                   alt={viewingCover.name}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
                 />
-                <button 
+                <button
                   onClick={() => setViewingCover(null)}
                   className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black transition-colors"
                 >
@@ -2545,7 +2497,7 @@ export function MultiModalStudio({
                   </div>
                   < Music className="w-5 h-5 opacity-40 shrink-0" />
                 </div>
-                
+
                 <div className="p-3 border border-current/10 bg-current/5 space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -2567,26 +2519,24 @@ export function MultiModalStudio({
 
                 <div className="flex gap-2">
                   {viewingCover.url && (
-                    <button 
+                    <button
                       onClick={() => window.open(viewingCover.url, '_blank')}
-                      className={`flex-1 p-2.5 font-bold uppercase tracking-widest text-[9px] md:text-[10px] flex items-center justify-center gap-2 border-2 ${
-                        theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
-                      } hover:opacity-90 transition-all`}
+                      className={`flex-1 p-2.5 font-bold uppercase tracking-widest text-[9px] md:text-[10px] flex items-center justify-center gap-2 border-2 ${theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
+                        } hover:opacity-90 transition-all`}
                     >
                       <Download className="w-3.5 h-3.5" /> Download
                     </button>
                   )}
-                  <button 
+                  <button
                     onClick={() => {
-                        const link = document.createElement('a');
-                        link.href = viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl;
-                        link.download = `cover_${viewingCover.name}.png`;
-                        link.target = '_blank';
-                        link.click();
+                      const link = document.createElement('a');
+                      link.href = viewingCover.metadata.coverUrl || viewingCover.metadata.imageUrl;
+                      link.download = `cover_${viewingCover.name}.png`;
+                      link.target = '_blank';
+                      link.click();
                     }}
-                    className={`flex-1 p-2.5 font-bold uppercase tracking-widest text-[9px] md:text-[10px] flex items-center justify-center gap-2 border-2 ${
-                      theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
-                    } transition-all`}
+                    className={`flex-1 p-2.5 font-bold uppercase tracking-widest text-[9px] md:text-[10px] flex items-center justify-center gap-2 border-2 ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
+                      } transition-all`}
                   >
                     Save Art
                   </button>
@@ -2600,14 +2550,14 @@ export function MultiModalStudio({
       {/* Asset Details Modal */}
       <AnimatePresence>
         {viewingAssetDetails && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-             onClick={() => setViewingAssetDetails(null)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setViewingAssetDetails(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2631,8 +2581,8 @@ export function MultiModalStudio({
                 <div className="flex gap-4 items-start">
                   <div className={`w-24 h-24 shrink-0 border-2 ${theme === 'dark' ? 'border-[#333]' : 'border-black'} relative overflow-hidden bg-black/5`}>
                     {(viewingAssetDetails.metadata?.coverUrl || viewingAssetDetails.metadata?.imageUrl || viewingAssetDetails.url) ? (
-                      <img 
-                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl || viewingAssetDetails.url || undefined} 
+                      <img
+                        src={viewingAssetDetails.metadata.coverUrl || viewingAssetDetails.metadata.imageUrl || viewingAssetDetails.url || undefined}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                         alt=""
@@ -2647,31 +2597,47 @@ export function MultiModalStudio({
                     <p className="text-[10px] uppercase font-mono opacity-40">Composition Details</p>
                     <h4 className="text-lg font-bold truncate leading-tight uppercase italic">{viewingAssetDetails.metadata?.title || 'Untitled Work'}</h4>
                     <div className="flex flex-wrap gap-2 pt-2">
-                       {viewingAssetDetails.metadata?.tags?.split(' ').slice(0, 5).map((tag: string, i: number) => (
-                         <span key={i} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-500 text-[8px] font-mono uppercase tracking-tighter border border-indigo-500/20">
-                            {tag}
-                         </span>
-                       ))}
+                      {viewingAssetDetails.metadata?.tags?.split(' ').slice(0, 5).map((tag: string, i: number) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-500 text-[8px] font-mono uppercase tracking-tighter border border-indigo-500/20">
+                          {tag}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
 
                 {/* Prompt Section */}
                 <div className="space-y-3">
-                   <div className="flex items-center gap-2">
-                     <div className="h-[1px] flex-1 bg-current/10" />
-                     <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">
-                       {viewingAssetDetails.type === 'audio' ? 'COMPOSITION SOURCE' : 'GENETIC PROMPT'}
-                     </span>
-                     <div className="h-[1px] flex-1 bg-current/10" />
-                   </div>
-                   <div className={`p-6 border text-center transition-all ${
-                     viewingAssetDetails.type === 'audio' 
-                       ? 'font-serif text-base md:text-lg leading-relaxed italic whitespace-pre-wrap' 
-                       : 'font-mono text-[11px] leading-relaxed italic whitespace-pre-wrap'
-                     } ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/90' : 'bg-black/5 border-black/10 text-black/90'}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="h-[1px] flex-1 bg-current/10" />
+                    <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">
+                      {viewingAssetDetails.type === 'audio' ? 'COMPOSITION SOURCE' : 'GENETIC PROMPT'}
+                    </span>
+                    <div className="h-[1px] flex-1 bg-current/10" />
+                  </div>
+                  <div className="relative group/modal-prompt w-full">
+                    <div className={`p-6 border text-center transition-all ${viewingAssetDetails.type === 'audio'
+                      ? 'font-serif text-base md:text-lg leading-relaxed italic whitespace-pre-wrap'
+                      : 'font-mono text-[11px] leading-relaxed italic whitespace-pre-wrap'
+                      } ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/90' : 'bg-black/5 border-black/10 text-black/90'}`}>
                       {viewingAssetDetails.metadata?.prompt || 'No prompt recorded.'}
-                   </div>
+                    </div>
+                    {viewingAssetDetails.metadata?.prompt && (
+                      <button
+                        onClick={() => copyToClipboard(viewingAssetDetails.metadata!.prompt!, 'modal-prompt')}
+                        className={`absolute top-2 right-2 p-1.5 rounded-md transition-all opacity-0 group-hover/modal-prompt:opacity-100 ${theme === 'dark' ? 'hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-black/5 text-black/40 hover:text-black'
+                          }`}
+                        title="Copy Prompt"
+                      >
+                        {copiedId === 'modal-prompt' ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] font-bold uppercase tracking-tighter text-green-500">Copied</span>
+                            <Check className="w-3 h-3 text-green-500" />
+                          </div>
+                        ) : <Copy className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Technical Specs */}
@@ -2695,25 +2661,23 @@ export function MultiModalStudio({
                 {viewingAssetDetails.metadata?.lyrics && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                       <div className="h-[1px] flex-1 bg-current/10" />
-                       <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">TRANSCRIBED SCRIPT</span>
-                       <div className="h-[1px] flex-1 bg-current/10" />
+                      <div className="h-[1px] flex-1 bg-current/10" />
+                      <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">TRANSCRIBED SCRIPT</span>
+                      <div className="h-[1px] flex-1 bg-current/10" />
                     </div>
-                    <div className={`p-6 border text-center whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar italic ${
-                      theme === 'dark' ? 'bg-white/5 border-white/10 text-white/80' : 'bg-black/5 border-black/10 text-black/80'
-                    }`}>
-                       <p className="text-sm md:text-base leading-loose">{viewingAssetDetails.metadata.lyrics}</p>
+                    <div className={`p-6 border text-center whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar italic ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/80' : 'bg-black/5 border-black/10 text-black/80'
+                      }`}>
+                      <p className="text-sm md:text-base leading-loose">{viewingAssetDetails.metadata.lyrics}</p>
                     </div>
                   </div>
                 )}
               </div>
 
               <div className="p-4 border-t border-current/10 bg-current/5">
-                <button 
+                <button
                   onClick={() => setViewingAssetDetails(null)}
-                  className={`w-full p-2.5 font-bold uppercase tracking-widest text-[10px] border-2 ${
-                    theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
-                  } hover:opacity-90 transition-all`}
+                  className={`w-full p-2.5 font-bold uppercase tracking-widest text-[10px] border-2 ${theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
+                    } hover:opacity-90 transition-all`}
                 >
                   Close Artifact Details
                 </button>
@@ -2726,14 +2690,14 @@ export function MultiModalStudio({
       {/* Lyrics Modal */}
       <AnimatePresence>
         {viewingLyrics && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-             onClick={() => setViewingLyrics(null)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setViewingLyrics(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2749,7 +2713,7 @@ export function MultiModalStudio({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              
+
               <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scrollbar">
                 {viewingLyrics.metadata?.timestampedLyrics?.segments ? (
                   <div className="space-y-6">
@@ -2759,9 +2723,9 @@ export function MultiModalStudio({
                           {(segment.start_time / 1000).toFixed(1)}s
                         </div>
                         <div className={`p-4 md:p-6 border-l-4 transition-colors ${theme === 'dark' ? 'border-white/5 group-hover:border-indigo-500 bg-white/5' : 'border-black/5 group-hover:border-indigo-500 bg-black/5'} flex-1`}>
-                           <p className="text-base md:text-xl font-serif leading-loose italic tracking-tight text-current/90">
-                             {segment.text}
-                           </p>
+                          <p className="text-base md:text-xl font-serif leading-loose italic tracking-tight text-current/90">
+                            {segment.text}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -2775,11 +2739,10 @@ export function MultiModalStudio({
               </div>
 
               <div className="p-4 border-t border-current/10 bg-current/5">
-                <button 
+                <button
                   onClick={() => setViewingLyrics(null)}
-                  className={`w-full p-3 font-bold uppercase tracking-widest text-xs border-2 ${
-                    theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
-                  } hover:opacity-90 transition-all`}
+                  className={`w-full p-3 font-bold uppercase tracking-widest text-xs border-2 ${theme === 'dark' ? 'bg-white text-black border-white' : 'bg-black text-white border-black'
+                    } hover:opacity-90 transition-all`}
                 >
                   Return to Studio
                 </button>
@@ -2791,14 +2754,14 @@ export function MultiModalStudio({
       {/* Deletion Confirmation Modal */}
       <AnimatePresence>
         {assetToDelete && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-             onClick={() => setAssetToDelete(null)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setAssetToDelete(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2808,8 +2771,8 @@ export function MultiModalStudio({
               <h3 className="font-black uppercase tracking-widest mb-4">Purge Asset</h3>
               <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to permanently delete {assetToDelete.name}? This action cannot be undone.</p>
               <div className="flex gap-4">
-                 <button onClick={() => setAssetToDelete(null)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
-                 <button onClick={() => executeDeleteAsset(assetToDelete)} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
+                <button onClick={() => setAssetToDelete(null)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                <button onClick={() => executeDeleteAsset(assetToDelete)} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
               </div>
             </motion.div>
           </motion.div>
@@ -2817,14 +2780,14 @@ export function MultiModalStudio({
       </AnimatePresence>
       <AnimatePresence>
         {isBulkDeleting && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-             onClick={() => setIsBulkDeleting(false)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setIsBulkDeleting(false)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2834,8 +2797,8 @@ export function MultiModalStudio({
               <h3 className="font-black uppercase tracking-widest mb-4">Purge {selectedAssets.size} Assets</h3>
               <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to permanently delete {selectedAssets.size} selected assets? This action cannot be undone.</p>
               <div className="flex gap-4">
-                 <button onClick={() => setIsBulkDeleting(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
-                 <button onClick={executeBulkDelete} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
+                <button onClick={() => setIsBulkDeleting(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                <button onClick={executeBulkDelete} className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">Purge</button>
               </div>
             </motion.div>
           </motion.div>
@@ -2843,14 +2806,14 @@ export function MultiModalStudio({
       </AnimatePresence>
       <AnimatePresence>
         {showClearConfirmation && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-             onClick={() => setShowClearConfirmation(false)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowClearConfirmation(false)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2860,12 +2823,12 @@ export function MultiModalStudio({
               <h3 className="font-black uppercase tracking-widest mb-4">Clear Master Prompt</h3>
               <p className="text-sm font-mono mb-6 opacity-70">Are you sure you want to clear the {activeMode} master prompt? This will erase all current text in the prompt field.</p>
               <div className="flex gap-4">
-                 <button onClick={() => setShowClearConfirmation(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
-                 <button 
+                <button onClick={() => setShowClearConfirmation(false)} className="flex-1 border-2 border-zinc-500 py-2 uppercase font-bold text-xs hover:bg-zinc-500/10 transition-colors">Cancel</button>
+                <button
                   onClick={() => {
                     setPrompts((prev: any) => ({ ...prev, [activeMode]: "" }));
                     setShowClearConfirmation(false);
-                  }} 
+                  }}
                   className="flex-1 border-2 border-red-500 bg-red-500/10 text-red-500 py-2 uppercase font-bold text-xs hover:bg-red-500 hover:text-white transition-colors"
                 >
                   Clear Prompt
