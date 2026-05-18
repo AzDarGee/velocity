@@ -7,8 +7,19 @@ import Stripe from "stripe";
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
 
 import { getFirestore } from "firebase-admin/firestore";
+
+// Load environment variables from .env.local first, then fallback to .env
+const envPathLocal = path.resolve(process.cwd(), ".env.local");
+const envPathDefault = path.resolve(process.cwd(), ".env");
+console.log(`[DEBUG_ENV] Resolving .env.local path: ${envPathLocal} (Exists: ${fs.existsSync(envPathLocal)})`);
+console.log(`[DEBUG_ENV] Resolving .env path: ${envPathDefault} (Exists: ${fs.existsSync(envPathDefault)})`);
+dotenv.config({ path: envPathLocal });
+dotenv.config({ path: envPathDefault });
+
+console.log(`[DEBUG_ENV] Loaded STRIPE_SECRET_KEY: ${process.env.STRIPE_SECRET_KEY ? `${process.env.STRIPE_SECRET_KEY.substring(0, 10)}...` : "undefined"}`);
 
 // Initialize Firebase Admin
 let firebaseConfig: any = null;
