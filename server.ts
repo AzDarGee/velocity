@@ -470,7 +470,7 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid plan or user identity" });
       }
 
-      const appUrl = req.headers.origin || req.headers.referer || "http://localhost:3000";
+      const appUrl = process.env.APP_URL || req.headers.origin || req.headers.referer || "http://localhost:3000";
       const baseUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
 
       const stripe = getStripe();

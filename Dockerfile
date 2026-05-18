@@ -24,6 +24,12 @@ ENV PORT=3000
 ARG GEMINI_API_KEY
 ENV GEMINI_API_KEY=$GEMINI_API_KEY
 
+ARG VITE_STRIPE_PUBLISHABLE_KEY
+ENV VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY
+
+ARG STRIPE_SECRET_KEY
+ENV STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
+
 # Build the Vite frontend and compile the Express server backend
 # Note: This will produce dist/index.html and dist/server.js based on your package.json
 RUN npm run build
