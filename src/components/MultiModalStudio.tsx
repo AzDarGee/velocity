@@ -80,7 +80,7 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
       onRename?.(asset, editValue);
     }
   };
-  const src = asset.url;
+  const src = asset.metadata?.wavUrl || asset.url;
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -852,8 +852,6 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
           model: sunoModel,
           title: sunoTitle || "Generated Track",
           style: sunoStyles.join(", ") || (sunoInstrumental ? "Instrumental" : ""),
-          callBackUrl: window.location.origin + "/api/suno-callback",
-          wait_audio: true
         };
 
         if (sunoPersonaId) payload.personaId = sunoPersonaId;
@@ -864,70 +862,23 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
         if (sunoWeirdnessConstraint !== 0.65) payload.weirdnessConstraint = sunoWeirdnessConstraint;
         if (sunoAudioWeight !== 0.65) payload.audioWeight = sunoAudioWeight;
 
-        const response = await fetch('https://api.sunoapi.org/api/v1/generate', {
+        // Call backend proxy — Node.js handles wait_audio:true without browser timeout
+        const response = await fetch('/api/music/generate', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify(payload)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload })
         });
 
         if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Suno AI Music Generation failed: ${errText}`);
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Music generation failed: ${response.status}`);
         }
 
-        const jsonRes = await response.json();
+        const proxyResult = await response.json();
+        console.log('[Suno] Proxy result:', proxyResult);
 
-        if (jsonRes.code && jsonRes.code !== 200) {
-          throw new Error(`Suno AI Music Generation failed: ${jsonRes.msg || JSON.stringify(jsonRes)}`);
-        }
-
-        let sunoItem = null;
-
-        // Check if initial response already contains audio data (since wait_audio: true was used)
-        const initialItems = jsonRes?.data?.response?.sunoData || jsonRes?.data?.sunoData || jsonRes?.sunoData || (Array.isArray(jsonRes.data) ? jsonRes.data : null);
-        if (Array.isArray(initialItems) && initialItems.length > 0) {
-          const potentialItem = initialItems[0];
-          if (potentialItem.audioUrl || potentialItem.streamAudioUrl || potentialItem.audio_url || potentialItem.url) {
-            sunoItem = potentialItem;
-          }
-        }
-
-        const taskId = jsonRes?.data?.taskId || jsonRes?.taskId || (Array.isArray(jsonRes.data) && jsonRes.data[0]?.task_id) || jsonRes?.data?.task_id || jsonRes?.data?.id || jsonRes?.id;
-
-        if (!sunoItem && taskId) {
-          let attempts = 0;
-          while (attempts < 180) { // 6 minutes max (Suno can sometimes be slow for high quality)
-            await new Promise(r => setTimeout(r, 2000));
-            const statusRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
-              headers: {
-                'Authorization': `Bearer ${apiKey}`
-              }
-            });
-            if (!statusRes.ok) {
-              attempts++;
-              continue;
-            }
-            const statusData = await statusRes.json();
-            const status = statusData?.data?.status || statusData?.status;
-
-            if (status === 'SUCCESS' || status === 'COMPLETED') {
-              const items = statusData?.data?.response?.sunoData || statusData?.data?.sunoData || statusData?.sunoData || (Array.isArray(statusData.data) ? statusData.data : null);
-              if (Array.isArray(items) && items.length > 0) {
-                sunoItem = items[0];
-                // Ensure it has an audio URL before stopping
-                if (sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url) {
-                  break;
-                }
-              }
-            } else if (status && (status.includes('FAIL') || status.includes('ERROR') || status.includes('EXCEPTION'))) {
-              throw new Error(`Suno AI generation failed with status: ${status}. Message: ${statusData?.data?.errorMessage || statusData?.message || 'Unknown error'}`);
-            }
-            attempts++;
-          }
-        }
+        const sunoItem = proxyResult.sunoItem;
+        const taskId = proxyResult.taskId;
 
         if (!sunoItem || (!sunoItem.audioUrl && !sunoItem.streamAudioUrl && !sunoItem.audio_url && !sunoItem.url)) {
           throw new Error("Timeout or could not find audio metadata in Suno AI task results.");
@@ -1352,27 +1303,52 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
     setError(null);
 
     try {
+      const audioUrlToSend = asset.url.startsWith('blob:')
+        ? (asset.metadata?.audioUrl || asset.metadata?.audio_url || asset.metadata?.url || asset.url)
+        : asset.url;
+
+      console.log("WAV Conversion Request Payload:", {
+        audioUrl: audioUrlToSend,
+        userId,
+        assetId: asset.id,
+        filename: asset.name,
+        sunoAudioId: asset.metadata?.id || asset.metadata?.audioId || asset.metadata?.audio_id || asset.metadata?.task_id || asset.metadata?.taskId,
+        sunoTaskId: asset.metadata?.task_id || asset.metadata?.taskId,
+        metadata: asset.metadata
+      });
+
       const response = await fetch('/api/audio/convert-to-wav', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          audioUrl: asset.url,
+          audioUrl: audioUrlToSend,
           userId,
           assetId: asset.id,
           filename: asset.name,
-          sunoAudioId: asset.metadata?.id || asset.metadata?.audioId || asset.metadata?.task_id || asset.metadata?.taskId,
+          sunoAudioId: asset.metadata?.id || asset.metadata?.audioId || asset.metadata?.audio_id || asset.metadata?.task_id || asset.metadata?.taskId,
           sunoTaskId: asset.metadata?.task_id || asset.metadata?.taskId
         })
       });
-      if (!response.ok) throw new Error("Conversion failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Conversion failed");
+      }
 
-      setError("WAV generation requested! It may take a few moments.");
+      const result = await response.json();
+      const wavUrl = result.wavUrl;
 
-      // We don't open in a new tab here anymore. 
-      // The Firestore document should be updated by the callback which 
-      // will trigger an update in the asset state.
+      if (wavUrl) {
+        // Immediately update local state so button flips to Download WAV
+        setAssets(prev => prev.map(a => a.id === asset.id
+          ? { ...a, metadata: { ...a.metadata, wavUrl } }
+          : a
+        ));
+        setError("WAV file is ready!");
+      } else {
+        setError("WAV generation requested! It may take a few moments.");
+      }
 
-      setTimeout(() => setError(null), 3000);
+      setTimeout(() => setError(null), 4000);
     } catch (err: any) {
       console.error("WAV conversion error:", err);
       setError(err.message || "Failed to convert to WAV.");
@@ -2518,7 +2494,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                                             )}
                                           </button>
                                         )}
-                                        {asset.source === 'generated' && (
+                                        {false && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
                                             disabled={lyricsLoadingAssets.has(asset.id)}
@@ -2546,7 +2522,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                                         <button
                                           onClick={() => {
                                             if (asset.url) {
-                                              window.open(asset.url, '_blank');
+                                              window.open(asset.metadata?.wavUrl || asset.url, '_blank');
                                             }
                                           }}
                                           className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'
@@ -2598,7 +2574,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                                         )}
                                       </button>
                                     )}
-                                    {false && (
+                                    {asset.source === 'generated' && (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
                                         disabled={wavGeneratingAssets.has(asset.id)}
@@ -2649,7 +2625,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                                     <button
                                       onClick={() => {
                                         if (asset.url) {
-                                          window.open(asset.url, '_blank');
+                                          window.open(asset.metadata?.wavUrl || asset.url, '_blank');
                                         }
                                       }}
                                       className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-[#333] hover:border-white' : 'border-gray-200 hover:border-black'

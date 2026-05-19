@@ -662,7 +662,117 @@ async function startServer() {
     }
   });
 
+  // API Route: Suno Music Generation Proxy
+  // Proxied server-side so we can use long-running wait_audio:true without browser timeout
+  app.post("/api/music/generate", async (req, res) => {
+    // Set a long timeout for this route since music generation can take 2-3 mins
+    req.socket.setTimeout(0);
+    res.setTimeout(0);
+
+    try {
+      const token = process.env.SUNO_API_TOKEN || process.env.VITE_SUNO_API_KEY || process.env.SUNO_API_KEY;
+      if (!token) throw new Error("Suno API key not configured (VITE_SUNO_API_KEY required)");
+
+      const { payload } = req.body;
+      if (!payload) return res.status(400).json({ error: "Missing payload" });
+
+      // Point callBackUrl to our own server (required by Suno API, but we use wait_audio instead)
+      const callbackBaseUrl = process.env.APP_URL || `http://localhost:3000`;
+      const generationPayload = {
+        ...payload,
+        callBackUrl: `${callbackBaseUrl}/api/audio/callback`,
+        wait_audio: true
+      };
+
+      console.log(`[Music] Calling Suno generate API with model=${payload.model}, title="${payload.title}"`);
+      console.log(`[Music] Payload:`, JSON.stringify(generationPayload, null, 2));
+
+      const sunoRes = await fetch("https://api.sunoapi.org/api/v1/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(generationPayload),
+        signal: AbortSignal.timeout(300000) // 5 min server-side timeout
+      });
+
+      const sunoText = await sunoRes.text();
+      console.log(`[Music] Suno response: ${sunoRes.status} - ${sunoText}`);
+
+      let sunoJson: any = {};
+      try { sunoJson = JSON.parse(sunoText); } catch {}
+
+      if (!sunoRes.ok || (sunoJson.code && sunoJson.code !== 200)) {
+        throw new Error(sunoJson.msg || `Suno API failed: ${sunoRes.status} - ${sunoText}`);
+      }
+
+      // Check if wait_audio returned data immediately
+      let sunoItem = null;
+      const immediateItems = sunoJson?.data?.response?.sunoData
+        || sunoJson?.data?.sunoData
+        || (Array.isArray(sunoJson?.data) ? sunoJson.data : null);
+
+      if (Array.isArray(immediateItems) && immediateItems.length > 0) {
+        const candidate = immediateItems[0];
+        if (candidate.audioUrl || candidate.streamAudioUrl || candidate.audio_url) {
+          sunoItem = candidate;
+          console.log("[Music] Audio returned immediately from wait_audio response");
+        }
+      }
+
+      const taskId = sunoJson?.data?.taskId || sunoJson?.taskId;
+      console.log(`[Music] taskId: ${taskId}, immediate audio: ${!!sunoItem}`);
+
+      // If no immediate audio, poll for results
+      if (!sunoItem && taskId) {
+        console.log("[Music] Polling for results...");
+        for (let i = 0; i < 90; i++) { // 90 * 2s = 3 min polling max
+          await new Promise(r => setTimeout(r, 2000));
+          const pollRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (!pollRes.ok) { console.warn(`[Music] Poll ${i + 1} HTTP error: ${pollRes.status}`); continue; }
+
+          const pollData = await pollRes.json();
+          const status = pollData?.data?.status || pollData?.status;
+          console.log(`[Music] Poll ${i + 1} status: ${status}`);
+
+          const items = pollData?.data?.response?.sunoData
+            || pollData?.data?.sunoData
+            || (Array.isArray(pollData?.data?.data) ? pollData.data.data : null)
+            || (Array.isArray(pollData?.data) ? pollData.data : null);
+
+          if (Array.isArray(items) && items.length > 0) {
+            const candidate = items[0];
+            if (candidate.audioUrl || candidate.streamAudioUrl || candidate.audio_url) {
+              sunoItem = candidate;
+              console.log("[Music] Audio found via polling!");
+              break;
+            }
+          }
+
+          if (status && (status.includes("FAIL") || status.includes("ERROR") || status.includes("EXCEPTION"))) {
+            throw new Error(`Suno generation failed: ${status} - ${pollData?.data?.errorMessage || ""}`);
+          }
+        }
+      }
+
+      if (!sunoItem) {
+        throw new Error("Suno generation timed out — no audio URL found after polling. Please try again.");
+      }
+
+      console.log("[Music] Returning sunoItem to client:", JSON.stringify(sunoItem, null, 2));
+      res.json({ success: true, taskId, sunoItem });
+
+    } catch (error: any) {
+      console.error("[Music] Generation error:", error);
+      res.status(500).json({ error: error.message || "Unknown music generation error" });
+    }
+  });
+
   // API Route: Audio Callback
+
   app.post("/api/audio/callback", async (req, res) => {
     try {
       console.log("Audio callback received:", JSON.stringify(req.body));
@@ -735,33 +845,26 @@ async function startServer() {
   // API Route: Convert Audio to WAV
   app.post("/api/audio/convert-to-wav", async (req, res) => {
     try {
-      const { audioUrl, userId, assetId, filename, sunoAudioId, sunoTaskId } = req.body;
-      if (!audioUrl || !userId) return res.status(400).json({ error: "Missing required fields" });
+      const { userId, assetId, filename, sunoAudioId, sunoTaskId } = req.body;
+      if (!userId || !assetId) return res.status(400).json({ error: "Missing required fields: userId and assetId" });
 
-      const tmpMP3 = tmp.fileSync({ postfix: '.mp3' });
-      const tmpWAV = tmp.fileSync({ postfix: '.wav' });
+      const token = process.env.SUNO_API_TOKEN || process.env.VITE_SUNO_API_KEY || process.env.SUNO_API_KEY;
+      if (!token) throw new Error("Suno API key not configured (SUNO_API_TOKEN or VITE_SUNO_API_KEY required)");
 
-      // Download file to temp
-      console.log("Fetching audio from:", audioUrl);
-      const response = await fetch(audioUrl);
-      if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
-      const buffer = await response.arrayBuffer();
-      fs.writeFileSync(tmpMP3.name, Buffer.from(buffer));
-      console.log("Audio downloaded to:", tmpMP3.name);
+      // Validate IDs - Suno needs real taskId and audioId, not Firebase doc IDs
+      const computedTaskId = sunoTaskId;
+      const computedAudioId = sunoAudioId;
 
-      // Convert (Suno API placeholder)
-      console.log("Starting conversion to WAV via Suno API...");
-      const token = process.env.SUNO_API_TOKEN;
-      if (!token) throw new Error("SUNO_API_TOKEN not configured");
+      console.log(`[WAV] Request - userId: ${userId}, assetId: ${assetId}, taskId: ${computedTaskId}, audioId: ${computedAudioId}`);
+      console.log(`[WAV] Using token (first 8 chars): ${token.substring(0, 8)}...`);
 
-      // WARNING: Suno generation API requires task and audio IDs. 
-      // This is a placeholder call based on the user's provided example.
-      const callbackBaseUrl = process.env.APP_URL || `https://${req.headers.host}`;
-      
-      const computedTaskId = sunoTaskId || assetId || Date.now().toString();
-      const computedAudioId = sunoAudioId || assetId;
-      console.log(`Calling Suno API with taskId: ${computedTaskId}, audioId: ${computedAudioId}, callback: ${callbackBaseUrl}/api/audio/callback?userId=${userId}&assetId=${assetId}`);
-      
+      if (!computedTaskId || !computedAudioId) {
+        throw new Error(`Missing Suno IDs. taskId="${computedTaskId}", audioId="${computedAudioId}". Please generate a new song and try again.`);
+      }
+
+      // Step 1: Request WAV generation from Suno API
+      // NOTE: No need to download the audio - Suno already has it. We just need to tell it to convert.
+      console.log(`[WAV] Calling POST https://api.sunoapi.org/api/v1/wav/generate with taskId=${computedTaskId}, audioId=${computedAudioId}`);
       const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/wav/generate", {
         method: "POST",
         headers: {
@@ -770,44 +873,98 @@ async function startServer() {
         },
         body: JSON.stringify({
           taskId: computedTaskId,
-          audioId: computedAudioId,
-          callBackUrl: `${callbackBaseUrl}/api/audio/callback?userId=${userId}&assetId=${assetId}`
+          audioId: computedAudioId
+          // No callBackUrl - we will poll instead since localhost is not publicly accessible
         })
       });
-      
+
+      const sunoResponseText = await sunoResponse.text();
+      console.log(`[WAV] Suno generate response: ${sunoResponse.status} - ${sunoResponseText}`);
+
       if (!sunoResponse.ok) {
-          throw new Error(`Suno API request failed: ${sunoResponse.statusText}`);
+        throw new Error(`Suno API request failed: ${sunoResponse.status} - ${sunoResponseText}`);
       }
 
-      console.log("Conversion requested via Suno API");
+      let sunoResponseJson: any = {};
+      try { sunoResponseJson = JSON.parse(sunoResponseText); } catch {}
 
-      // Upload to Firebase Storage
-      if (!firebaseConfig.storageBucket) {
-         throw new Error("No storageBucket configured");
+      // Extract the WAV taskId from the response (may differ from music taskId)
+      const wavTaskId = sunoResponseJson?.data?.taskId || computedTaskId;
+      console.log(`[WAV] WAV task started. Polling taskId: ${wavTaskId}`);
+
+      // Step 2: Poll for WAV completion (max 3 minutes)
+      let wavUrl: string | null = null;
+      const maxAttempts = 90; // 90 * 2s = 3 min
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        console.log(`[WAV] Polling attempt ${i + 1}/${maxAttempts} for taskId: ${wavTaskId}`);
+
+        const pollRes = await fetch(`https://api.sunoapi.org/api/v1/wav/record-info?taskId=${wavTaskId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const pollText = await pollRes.text();
+        console.log(`[WAV] Poll response: ${pollRes.status} - ${pollText}`);
+
+        if (!pollRes.ok) continue;
+
+        let pollData: any = {};
+        try { pollData = JSON.parse(pollText); } catch { continue; }
+
+        const status = pollData?.data?.status || pollData?.status;
+        const audioWavUrl = pollData?.data?.audioWavUrl || pollData?.data?.wav_url || pollData?.data?.wavUrl
+          || (pollData?.data?.sunoData?.[0]?.audioWavUrl)
+          || (Array.isArray(pollData?.data) ? pollData?.data?.[0]?.audioWavUrl : null);
+
+        console.log(`[WAV] Poll status: ${status}, wavUrl found: ${!!audioWavUrl}`);
+
+        if (audioWavUrl) {
+          wavUrl = audioWavUrl;
+          break;
+        }
+
+        if (status === 'FAILED' || status === 'ERROR') {
+          throw new Error(`WAV conversion failed with status: ${status}`);
+        }
       }
-      console.log("Bucket name:", firebaseConfig.storageBucket);
+
+      if (!wavUrl) {
+        throw new Error("WAV generation timed out after 3 minutes. The file may still be processing — try again shortly.");
+      }
+
+      console.log(`[WAV] WAV ready at: ${wavUrl}. Downloading and uploading to Firebase...`);
+
+      // Step 3: Download WAV and upload to Firebase Storage
+      const wavDownloadRes = await fetch(wavUrl);
+      if (!wavDownloadRes.ok) throw new Error(`Failed to download WAV from Suno: ${wavDownloadRes.status}`);
+      const wavBuffer = await wavDownloadRes.arrayBuffer();
+
+      if (!firebaseConfig?.storageBucket) throw new Error("No storageBucket configured");
       const bucket = admin.storage().bucket(firebaseConfig.storageBucket);
-      // NOTE: Since Suno API is asynchronous, this upload logic for the converted file
-      // might need to be moved to the callback URL handler instead, because Suno API 
-      // likely returns a success response for the request, not the actual file.
-      const destination = `uploads/generated/${userId}/${assetId || Date.now()}_converted.wav`;
-      console.log("Uploading to destination:", destination);
+      const destination = `uploads/generated/${userId}/${assetId}_converted.wav`;
+      const file = bucket.file(destination);
+      const stream = file.createWriteStream({ metadata: { contentType: 'audio/wav' } });
 
-      // We'll leave the code here for now, but technically it won't work 
-      // because tmpWAV is not filled by the Suno API in this synchronous block.
-      // The user will need to implement the callback to handle the actual file download.
-      // ...
-      
-      res.json({ success: true, message: "Conversion requested, please check callback" });
-      return;
-      
-      // Cleanup
-      tmpMP3.removeCallback();
-      tmpWAV.removeCallback();
+      await new Promise((resolve, reject) => {
+        stream.on('error', reject);
+        stream.on('finish', resolve);
+        stream.end(Buffer.from(wavBuffer));
+      });
+
+      const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: '03-01-2500' });
+      console.log(`[WAV] Uploaded to Firebase. Signed URL: ${signedUrl}`);
+
+      // Step 4: Update Firestore with WAV URL
+      const db = getDb();
+      await db.collection("users").doc(userId).collection("media_assets").doc(assetId).update({
+        "metadata.wavUrl": signedUrl
+      });
+
+      console.log("[WAV] Firestore updated. Done!");
+      res.json({ success: true, wavUrl: signedUrl });
 
     } catch (error: any) {
-      console.error("Audio conversion error:", error);
-      res.status(500).json({ error: error.message || "Unknown error during conversion" });
+      console.error("[WAV] Conversion error:", error);
+      res.status(500).json({ error: error.message || "Unknown error during WAV conversion" });
     }
   });
 
