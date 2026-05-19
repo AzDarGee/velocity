@@ -624,8 +624,86 @@ export function MultiModalStudio({ theme, onAddAssetToNarrative, onBulkAddAssets
       if (executeMode === 'image') systemPrompt += "Generate a highly detailed and descriptive prompt for an image generation model. Focus on composition, lighting, subject matter, style, and mood.";
       else if (executeMode === 'video') systemPrompt += "Generate a highly detailed, cinematic prompt for a video generation model (like Veo). Describe the scene, the motion, the camera movement, the lighting, and the overall atmosphere.";
       else if (executeMode === 'music') {
-        if (sunoCustomMode) systemPrompt += "Generate creative lyrics with musical direction tags (like [Verse], [Chorus]) for a custom music generation model.";
-        else systemPrompt += "Generate a creative and evocative prompt for a music generation model. Describe the genre, instrumentation, tempo, mood, and any lyrical themes.";
+        systemPrompt += `Generate a creative master prompt for the Suno music generation model.
+Take into account the following active configurations:
+- Custom Mode: ${sunoCustomMode ? "Enabled" : "Disabled"}
+- Instrumental: ${sunoInstrumental ? "Yes" : "No"}
+- Title/Theme: "${sunoTitle || 'Untitled Track'}"
+- Styles/Genre: "${sunoStyles.join(', ') || 'Any'}"
+- Vocal Gender: "${sunoVocalGender || 'Any'}"
+- Negative/Excluded Tags: "${sunoNegativeTags || 'None'}"
+
+`;
+
+        if (sunoCustomMode) {
+          if (sunoInstrumental) {
+            systemPrompt += `Since this is an INSTRUMENTAL track, DO NOT generate any lyrics. Instead, generate a highly detailed instrumental arrangement structure using the following rules:
+1. Section Tags (Use Square Brackets): Place section tags on their own lines without punctuation to tell Suno when to change the melody or arrangement. Examples:
+[Intro]
+[Verse 1]
+[Build-up]
+[Drop]
+[Solo]
+[Outro]
+
+2. Instrumental Cues (Use Parentheses): Add instructions inside the section blocks to guide the instruments, tone, and tempo. Examples:
+(Soft piano arpeggios, distant string swells)
+(Energetic drums kick in, building tension)
+(Distorted guitar solo, soulful belt of brass)
+(Fading out with a soft acoustic echo)
+
+3. Structure Layout: Lay it out logically like a full song, with clear spacing between sections.
+`;
+          } else {
+            systemPrompt += `Since this is a VOCAL track, generate a full, beautiful set of lyrics using the following strict rules:
+1. Section Tags (Use Square Brackets): Place section tags on their own lines without punctuation to tell Suno when to change the melody or arrangement. Examples:
+[Intro]
+[Verse 1]
+[Pre-Chorus]
+[Chorus]
+[Bridge]
+[Outro]
+
+2. Vocal and Delivery Cues (Use Parentheses): Add instructions inside the lyrics lines to guide the AI's delivery, tone, or to add background ad-libs. Examples:
+(whispered)
+(soulful belt)
+(female backing vocals)
+(acoustic guitar solo)
+(building up tension, drums kick in)
+(energetic and euphoric)
+(slow, atmospheric, emotional delivery)
+
+3. Example Lyric Layout: Follow this exact template structure:
+[Intro]
+(Soft piano arpeggios, distant string swells)
+
+[Verse 1]
+Midnight comes and I'm wide awake
+Wondering which path I should take
+
+[Pre-Chorus]
+(Building up tension, drums kick in)
+The city lights are calling my name
+
+[Chorus]
+(Energetic and euphoric)
+I’m breaking out, I’m running free
+This is the moment I was meant to see!
+
+[Bridge]
+(Slow, atmospheric, emotional delivery)
+Every step has led me here
+
+[Outro]
+(Fading out with a soft echo)
+Running free, running free...
+
+Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"), the Styles/Genre ("${sunoStyles.join(', ')}"), and incorporate appropriate vocal gender cues matching "${sunoVocalGender || 'Any'}".
+`;
+          }
+        } else {
+          systemPrompt += `Since Custom Mode is disabled, generate a concise, highly descriptive prompt (max 200 characters) describing the style, genre, instrumentation, tempo, mood, and vocal attributes matching the active configurations (Genre: ${sunoStyles.join(', ') || 'Any'}, Title: ${sunoTitle || 'Any'}, Instrumental: ${sunoInstrumental ? 'Yes' : 'No'}, Vocals: ${sunoVocalGender || 'Any'}). Describe the composition vividly.`;
+        }
       }
       
       systemPrompt += ` Only return the prompt text, nothing else. If the user already provided some text, enhance and expand upon it: "${currentPrompt || 'Surprise me'}"`;
