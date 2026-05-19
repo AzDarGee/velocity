@@ -789,6 +789,33 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
     }
   };
 
+  const handleClearModelConfig = () => {
+    setPrompts(prev => ({ ...prev, [activeMode]: "" }));
+    if (activeMode === 'image') {
+      setAspectRatio("16:9");
+      setImageStyles([]);
+      setNewImageStyle("");
+    } else if (activeMode === 'video') {
+      setAspectRatio("16:9");
+      setResolution("1080p");
+    } else if (activeMode === 'music') {
+      setSunoModel("V4_5ALL");
+      setSunoCustomMode(false);
+      setSunoInstrumental(false);
+      setSunoTitle("");
+      setSunoStyles([]);
+      setNewStyle("");
+      setSunoNegativeTags("");
+      setSunoVocalGender("");
+      setSunoPersonaId("");
+      setSunoPersonaModel("");
+      setSunoStyleWeight(0.65);
+      setSunoWeirdnessConstraint(0.65);
+      setSunoAudioWeight(0.65);
+      setMusicSongDescription("");
+    }
+  };
+
   const handleGenerate = async () => {
     const executeMode = activeMode;
     const currentPrompt = prompts[executeMode];
@@ -1558,9 +1585,56 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 
             {/* Mock Advanced Settings based on mode */}
             <div className={`p-4 border ${theme === 'dark' ? 'border-[#333] bg-black/20' : 'border-gray-200 bg-white'}`}>
-              <div className="flex items-center gap-2 mb-4">
-                <Settings2 className="w-4 h-4 opacity-50" />
-                <span className="text-xs uppercase font-bold tracking-widest">Model Config</span>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="w-4 h-4 opacity-50" />
+                  <span className="text-xs uppercase font-bold tracking-widest">Model Config</span>
+                </div>
+                {(() => {
+                  const currentPrompt = prompts[activeMode] || "";
+                  let hasEdits = currentPrompt !== "";
+
+                  if (activeMode === 'image') {
+                    hasEdits = hasEdits ||
+                      aspectRatio !== "16:9" ||
+                      imageStyles.length > 0 ||
+                      newImageStyle !== "";
+                  } else if (activeMode === 'video') {
+                    hasEdits = hasEdits ||
+                      aspectRatio !== "16:9" ||
+                      resolution !== "1080p";
+                  } else if (activeMode === 'music') {
+                    hasEdits = hasEdits ||
+                      sunoModel !== "V4_5ALL" ||
+                      sunoCustomMode !== false ||
+                      sunoInstrumental !== false ||
+                      sunoTitle !== "" ||
+                      sunoStyles.length > 0 ||
+                      newStyle !== "" ||
+                      (sunoNegativeTags || "") !== "" ||
+                      (sunoVocalGender || "") !== "" ||
+                      (sunoPersonaId || "") !== "" ||
+                      (sunoPersonaModel || "") !== "" ||
+                      sunoStyleWeight !== 0.65 ||
+                      sunoWeirdnessConstraint !== 0.65 ||
+                      sunoAudioWeight !== 0.65 ||
+                      musicSongDescription !== "";
+                  }
+
+                  if (!hasEdits) return null;
+
+                  return (
+                    <button
+                      onClick={handleClearModelConfig}
+                      className={`text-[9px] font-mono hover:opacity-100 opacity-60 uppercase transition-all flex items-center gap-1 border border-current/20 px-2 py-0.5 ${
+                        theme === 'dark' ? 'text-white hover:bg-white hover:text-black border-white/20' : 'text-black hover:bg-black hover:text-white border-black/20'
+                      }`}
+                      title={`Reset all ${activeMode} parameters and prompt to default`}
+                    >
+                      Clear Config
+                    </button>
+                  );
+                })()}
               </div>
 
               <div className="space-y-4">
@@ -2040,28 +2114,58 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                   </div>
                 </div>
 
-                <button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim()}
-                  className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-2 ${isGenerating
-                    ? 'opacity-50 cursor-not-allowed bg-gray-500 text-white'
-                    : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5`
-                    }`}
-                >
-                  {isGenerating ? (
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Wand2 className="w-5 h-5" />
-                  )}
-                  <div className="flex flex-col items-center">
-                    <span>{isGenerating ? `Synthesizing ${activeMode}...` : `Generate ${activeMode}`}</span>
-                    {!isGenerating && (
-                      <span className="text-[10px] opacity-60 font-mono tracking-tighter">
-                        -{GENERATION_COSTS[activeMode]} CREDITS
-                      </span>
-                    )}
-                  </div>
-                </button>
+                {(() => {
+                  const isGenerateDisabled = (() => {
+                    if (isGenerating) return true;
+                    const currentPrompt = prompt?.trim() || "";
+                    if (!currentPrompt) return true;
+
+                    if (activeMode === 'image') {
+                      return imageStyles.length === 0;
+                    }
+                    if (activeMode === 'video') {
+                      return false;
+                    }
+                    if (activeMode === 'music') {
+                      return (
+                        sunoStyles.length === 0 ||
+                        (sunoTitle || "").trim() === ""
+                      );
+                    }
+                    return false;
+                  })();
+
+                  return (
+                    <button
+                      onClick={handleGenerate}
+                      disabled={isGenerateDisabled}
+                      className={`w-full p-4 font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-2 ${isGenerateDisabled
+                        ? 'opacity-40 cursor-not-allowed bg-gray-500/20 text-current border-2 border-current/10'
+                        : `bg-gradient-to-r ${getModelBadgeColors(activeMode)} shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-white`
+                        }`}
+                    >
+                      {isGenerating ? (
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-5 h-5" />
+                      )}
+                      <div className="flex flex-col items-center">
+                        <span>{isGenerating ? `Synthesizing ${activeMode}...` : `Generate ${activeMode}`}</span>
+                        {!isGenerating && (
+                          <span className="text-[10px] opacity-60 font-mono tracking-tighter">
+                            {isGenerateDisabled 
+                              ? (activeMode === 'image' 
+                                  ? "Select at least 1 image style" 
+                                  : activeMode === 'music'
+                                    ? "Enter title & select at least 1 genre"
+                                    : "Fill out the prompt")
+                              : `-${GENERATION_COSTS[activeMode]} CREDITS`}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>
