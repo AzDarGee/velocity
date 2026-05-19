@@ -243,6 +243,21 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   );
 };
 
+const parseSongDescriptionAndLyrics = (text: string) => {
+  if (!text) return { description: "", cleanText: "" };
+  
+  const descRegex = /\[Song Description\]\s*([\s\S]*?)(?=\n\s*\[|$)/i;
+  const match = text.match(descRegex);
+  
+  if (match) {
+    const description = match[1].trim();
+    const cleanText = text.replace(descRegex, "").trim();
+    return { description, cleanText };
+  }
+  
+  return { description: "", cleanText: text };
+};
+
 export function MultiModalStudio({
   theme,
   onAddAssetToNarrative,
@@ -290,6 +305,7 @@ export function MultiModalStudio({
   const isGenerating = generatingModes.has(activeMode);
   const isAutoPrompting = autoPromptModes.has(activeMode);
   const [error, setError] = useState<string | null>(null);
+  const [musicSongDescription, setMusicSongDescription] = useState(() => localStorage.getItem("musicSongDescription") || "");
   const [sunoCustomMode, setSunoCustomMode] = useState(() => localStorage.getItem("sunoCustomMode") === "true");
   const [sunoInstrumental, setSunoInstrumental] = useState(() => localStorage.getItem("sunoInstrumental") === "true");
   const [sunoModel, setSunoModel] = useState(() => localStorage.getItem("sunoModel") || "V4_5ALL");
@@ -508,6 +524,10 @@ export function MultiModalStudio({
   }, [activeMode]);
 
   useEffect(() => {
+    localStorage.setItem("musicSongDescription", musicSongDescription);
+  }, [musicSongDescription]);
+
+  useEffect(() => {
     localStorage.setItem("studioPrompts", JSON.stringify(prompts));
   }, [prompts]);
 
@@ -649,6 +669,10 @@ Take into account the following active configurations:
 `;
 
         if (sunoCustomMode) {
+          systemPrompt += `CRITICAL: You MUST begin your output with a "[Song Description]" tag followed by a detailed, rich, full paragraph containing exactly 6 to 8 sentences describing the song. In this paragraph, paint a complete picture describing the overall style, musical influence, instrumentation layers, tone, mood transitions, tempo, and vocal delivery/backing harmonies if applicable. Do not write anything else before this tag.
+
+`;
+
           if (sunoInstrumental) {
             systemPrompt += `Since this is an INSTRUMENTAL track, DO NOT generate any lyrics. Instead, generate a highly detailed instrumental arrangement structure using the following rules:
 1. Section Tags (Use Square Brackets): Place section tags on their own lines without punctuation to tell Suno when to change the melody or arrangement. Examples:
@@ -665,7 +689,21 @@ Take into account the following active configurations:
 (Distorted guitar solo, soulful belt of brass)
 (Fading out with a soft acoustic echo)
 
-3. Structure Layout: Lay it out logically like a full song, with clear spacing between sections.
+3. Structure Layout: Follow this exact template structure:
+[Song Description]
+An atmospheric, cinematic ambient electronic track featuring slow, lush synth pads that create a deep cosmic backdrop. A delicate grand piano plays soft, echoing arpeggios that twinkle like stars. As the arrangement progresses, a soaring melodic acoustic guitar enters to guide the main melody with warmth and intimacy. The track builds slowly, introducing organic percussion and swelling orchestral strings that expand the stereo field. A distorted electric guitar solo adds a powerful emotional release near the peak of the track. Finally, the energy subsides back into a quiet, peaceful space where only a soft piano echo remains.
+
+[Intro]
+(Soft piano arpeggios, distant string swells)
+
+[Verse 1]
+(Acoustic guitar joins, drums maintain a steady rhythmic drive)
+
+[Solo]
+(Soaring, melodic electric guitar solo with heavy delay)
+
+[Outro]
+(Guitar fades out slowly with a soft piano echo)
 `;
           } else {
             systemPrompt += `Since this is a VOCAL track, generate a full, beautiful set of lyrics using the following strict rules:
@@ -687,6 +725,9 @@ Take into account the following active configurations:
 (slow, atmospheric, emotional delivery)
 
 3. Example Lyric Layout: Follow this exact template structure:
+[Song Description]
+A high-energy, modern synthwave track featuring shimmering synthesizer arpeggios and driving retro-futuristic drums. The song is driven by a powerful and emotional female lead vocal that delivers a soulful, soaring performance. A warm baseline pulsed at a steady tempo of 115 BPM, creating a sense of constant forward motion. Delicate background pads add atmospheric depth while retro drum machine fills elevate the transition states. Throughout the track, subtle vocal echoes and stereo backing vocals support the main delivery. The emotional weight of the piece builds continuously through each section, peaking during an energetic chorus. In the final moments, the synthesizers gently fade out with a lingering vocal reverb.
+
 [Intro]
 (Soft piano arpeggios, distant string swells)
 
@@ -727,7 +768,15 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
       });
 
       const newPrompt = response.text?.trim() || "";
-      if (newPrompt) setPrompts(prev => ({ ...prev, [executeMode]: newPrompt }));
+      if (newPrompt) {
+        if (executeMode === 'music' && sunoCustomMode) {
+          const parsed = parseSongDescriptionAndLyrics(newPrompt);
+          setMusicSongDescription(parsed.description);
+          setPrompts(prev => ({ ...prev, [executeMode]: parsed.cleanText }));
+        } else {
+          setPrompts(prev => ({ ...prev, [executeMode]: newPrompt }));
+        }
+      }
     } catch (err: any) {
       console.error("Auto prompt error:", err);
       setError(err.message || "Failed to generate prompt.");
@@ -859,7 +908,14 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 
         const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url;
 
-        finalMetadata = { prompt, task_id: taskId, ...sunoItem };
+        const parsedPrompt = parseSongDescriptionAndLyrics(prompt);
+        finalMetadata = { 
+          prompt: sunoCustomMode ? parsedPrompt.cleanText : prompt, 
+          task_id: taskId, 
+          ...sunoItem,
+          lyrics: sunoCustomMode ? parsedPrompt.cleanText : (sunoItem.lyrics || ""),
+          songDescription: sunoCustomMode ? (musicSongDescription || parsedPrompt.description) : ""
+        };
 
         const audioRes = await fetch(audioUrl);
         if (!audioRes.ok) throw new Error("Failed to download generated audio from Suno URL");
@@ -2661,7 +2717,19 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
             onClick={() => setViewingAssetDetails(null)}
           >
-            <motion.div
+            {(() => {
+              const lyricsText = viewingAssetDetails.metadata?.lyrics || "";
+              const promptText = viewingAssetDetails.metadata?.prompt || "";
+              
+              const parsedLyrics = parseSongDescriptionAndLyrics(lyricsText);
+              const parsedPrompt = parseSongDescriptionAndLyrics(promptText);
+              
+              const songDescription = parsedLyrics.description || parsedPrompt.description || viewingAssetDetails.metadata?.songDescription;
+              const cleanLyrics = parsedLyrics.cleanText;
+              const cleanPrompt = parsedPrompt.cleanText;
+
+              return (
+                <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2724,11 +2792,11 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                       ? 'font-serif text-base md:text-lg leading-relaxed italic whitespace-pre-wrap'
                       : 'font-mono text-[11px] leading-relaxed italic whitespace-pre-wrap'
                       } ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/90' : 'bg-black/5 border-black/10 text-black/90'}`}>
-                      {viewingAssetDetails.metadata?.prompt || 'No prompt recorded.'}
+                      {cleanPrompt || 'No prompt recorded.'}
                     </div>
-                    {viewingAssetDetails.metadata?.prompt && (
+                    {cleanPrompt && (
                       <button
-                        onClick={() => copyToClipboard(viewingAssetDetails.metadata!.prompt!, 'modal-prompt')}
+                        onClick={() => copyToClipboard(cleanPrompt, 'modal-prompt')}
                         className={`absolute top-2 right-2 p-1.5 rounded-md transition-all opacity-0 group-hover/modal-prompt:opacity-100 ${theme === 'dark' ? 'hover:bg-white/10 text-white/40 hover:text-white' : 'hover:bg-black/5 text-black/40 hover:text-black'
                           }`}
                         title="Copy Prompt"
@@ -2761,8 +2829,44 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                   ))}
                 </div>
 
+                {/* Song Description Section */}
+                {songDescription && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-[1px] flex-1 bg-current/10" />
+                      <span className="text-[10px] font-mono uppercase opacity-40 tracking-widest">SONG DESCRIPTION</span>
+                      <div className="h-[1px] flex-1 bg-current/10" />
+                    </div>
+                    <div className="relative group/modal-desc w-full">
+                      <div className={`p-5 pr-12 border-l-4 leading-relaxed font-sans text-xs md:text-sm text-left ${
+                        theme === 'dark' 
+                          ? 'bg-indigo-500/5 border-indigo-500/60 text-white/90' 
+                          : 'bg-indigo-50/50 border-indigo-600/80 text-black/90'
+                      }`}>
+                        {songDescription}
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(songDescription, 'modal-desc')}
+                        className={`absolute top-3 right-3 p-1.5 rounded-md transition-all opacity-0 group-hover/modal-desc:opacity-100 ${
+                          theme === 'dark' 
+                            ? 'hover:bg-white/10 text-white/40 hover:text-white' 
+                            : 'hover:bg-black/5 text-black/40 hover:text-black'
+                        }`}
+                        title="Copy Description"
+                      >
+                        {copiedId === 'modal-desc' ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] font-bold uppercase tracking-tighter text-green-500">Copied</span>
+                            <Check className="w-3 h-3 text-green-500" />
+                          </div>
+                        ) : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Lyrics Section if available */}
-                {viewingAssetDetails.metadata?.lyrics && (
+                {cleanLyrics && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="h-[1px] flex-1 bg-current/10" />
@@ -2771,7 +2875,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                     </div>
                     <div className={`p-6 border text-center whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar italic ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/80' : 'bg-black/5 border-black/10 text-black/80'
                       }`}>
-                      <p className="text-sm md:text-base leading-loose">{viewingAssetDetails.metadata.lyrics}</p>
+                      <p className="text-sm md:text-base leading-loose">{cleanLyrics}</p>
                     </div>
                   </div>
                 )}
@@ -2787,6 +2891,8 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                 </button>
               </div>
             </motion.div>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
