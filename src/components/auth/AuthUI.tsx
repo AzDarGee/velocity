@@ -554,12 +554,25 @@ export function UserButton({
           packName // Pass pack name for better metadata
         })
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        checkoutWindow.close();
+        let parsedError = errorText;
+        try {
+          const jsonErr = JSON.parse(errorText);
+          parsedError = jsonErr.error || jsonErr.message || errorText;
+        } catch {}
+        alert(`Checkout failed (${response.status}): ${parsedError}`);
+        return;
+      }
+
       const data = await response.json();
       if (data.url) {
         checkoutWindow.location.href = data.url;
       } else {
         checkoutWindow.close();
-        alert('Payment initialization failed: ' + data.error);
+        alert('Payment initialization failed: ' + (data.error || 'No checkout URL returned'));
       }
     } catch (err: any) {
       checkoutWindow.close();
