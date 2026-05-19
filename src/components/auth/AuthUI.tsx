@@ -561,9 +561,10 @@ export function UserButton({
         checkoutWindow.close();
         alert('Payment initialization failed: ' + data.error);
       }
-    } catch (err) {
+    } catch (err: any) {
       checkoutWindow.close();
-      console.error(err);
+      console.error("Stripe checkout error:", err);
+      alert('Checkout failed: ' + (err.message || 'Unknown network error. Please try again.'));
     } finally {
       setIsBuying(null);
     }

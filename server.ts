@@ -21,6 +21,19 @@ dotenv.config({ path: envPathDefault });
 
 console.log(`[DEBUG_ENV] Loaded STRIPE_SECRET_KEY: ${process.env.STRIPE_SECRET_KEY ? `${process.env.STRIPE_SECRET_KEY.substring(0, 10)}...` : "undefined"}`);
 
+const getAppUrl = (req?: express.Request) => {
+  let url = process.env.APP_URL;
+  if (!url || url === "MY_APP_URL" || url.trim() === "") {
+    if (req) {
+      url = (req.headers.origin as string) || (req.headers.referer as string);
+    }
+  }
+  if (!url || url === "MY_APP_URL" || url.trim() === "") {
+    url = "http://localhost:3000";
+  }
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+};
+
 // Initialize Firebase Admin
 let firebaseConfig: any = null;
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -168,7 +181,9 @@ async function startServer() {
         configProjectId: firebaseConfig?.projectId,
         databaseId: firebaseConfig?.firestoreDatabaseId,
         nodeEnv: process.env.NODE_ENV,
-        hasFirebaseConfig: !!firebaseConfig
+        hasFirebaseConfig: !!firebaseConfig,
+        hasStripeSecretKey: !!process.env.STRIPE_SECRET_KEY,
+        appUrl: process.env.APP_URL
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -211,7 +226,7 @@ async function startServer() {
       if (!email) return res.status(400).json({ error: "Email is required" });
 
       const link = await getAuth().generateEmailVerificationLink(email, {
-        url: returnUrl || process.env.APP_URL || "http://localhost:3000",
+        url: returnUrl || getAppUrl(req),
       });
 
       const transporter = getTransporter();
@@ -254,7 +269,7 @@ async function startServer() {
       if (!email) return res.status(400).json({ error: "Email is required" });
 
       const link = await getAuth().generatePasswordResetLink(email, {
-        url: returnUrl || process.env.APP_URL || "http://localhost:3000",
+        url: returnUrl || getAppUrl(req),
       });
 
       const transporter = getTransporter();
@@ -470,8 +485,7 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid plan or user identity" });
       }
 
-      const appUrl = process.env.APP_URL || req.headers.origin || req.headers.referer || "http://localhost:3000";
-      const baseUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
+      const baseUrl = getAppUrl(req);
 
       const stripe = getStripe();
       const isSubscription = !!subscription;
@@ -676,8 +690,7 @@ async function startServer() {
       const { payload } = req.body;
       if (!payload) return res.status(400).json({ error: "Missing payload" });
 
-      // Point callBackUrl to our own server (required by Suno API, but we use wait_audio instead)
-      const callbackBaseUrl = process.env.APP_URL || `http://localhost:3000`;
+      const callbackBaseUrl = getAppUrl(req);
       const generationPayload = {
         ...payload,
         callBackUrl: `${callbackBaseUrl}/api/audio/callback`,
