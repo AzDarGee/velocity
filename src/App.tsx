@@ -1729,6 +1729,11 @@ Synthesize the content from these assets into a cohesive narrative. Do not just 
               isAdmin={isAdmin}
               setAppMode={setAppMode}
               onRenameAsset={handleRenameAsset}
+              generations={history}
+              onLoadGeneration={(gen) => {
+                loadGeneration(gen);
+                setAppMode('narrative');
+              }}
             />
           </div>
         ) : (
