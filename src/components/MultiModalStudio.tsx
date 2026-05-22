@@ -91,7 +91,8 @@ const CustomAudioPlayer = ({ asset, theme, badgeContent, children, onRename }: {
   const coverUrl = asset.metadata?.coverUrl || asset.metadata?.imageUrl;
   // Use metadata title, or the file name without extension
   const title = asset.metadata?.title || asset.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ") || 'Unknown Track';
-  const subtitle = asset.metadata?.tags || 'Media Studio AI';
+  const isInstrumentalTrack = asset.metadata?.instrumental === true || asset.metadata?.make_instrumental === true;
+  const subtitle = (isInstrumentalTrack && asset.metadata?.chosenStyles) ? asset.metadata.chosenStyles : (asset.metadata?.tags || 'Media Studio AI');
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -911,7 +912,9 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
           task_id: taskId, 
           ...sunoItem,
           lyrics: sunoCustomMode ? parsedPrompt.cleanText : (sunoItem.lyrics || ""),
-          songDescription: sunoCustomMode ? (musicSongDescription || parsedPrompt.description) : ""
+          songDescription: sunoCustomMode ? (musicSongDescription || parsedPrompt.description) : "",
+          instrumental: sunoInstrumental,
+          chosenStyles: sunoStyles.join(", ") || ""
         };
 
         const audioRes = await fetch(audioUrl);
@@ -2578,21 +2581,28 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                                       </div>
 
                                       {/* Tags under the action buttons and still within the audio player */}
-                                      {asset.metadata?.tags && (
-                                        <div className="flex flex-wrap gap-1 mt-2.5 mb-1">
-                                          {asset.metadata.tags.split(',').map((tag: string, i: number) => (
-                                            <span
-                                              key={`${tag}-${i}`}
-                                              className={`px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm ${theme === 'dark'
-                                                ? 'bg-zinc-800/50 border border-zinc-700/40 text-gray-300'
-                                                : 'bg-gray-100 border border-gray-200 text-gray-600'
-                                                }`}
-                                            >
-                                              {tag.trim()}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
+                                      {(() => {
+                                        const isInstrumental = asset.metadata?.instrumental === true || asset.metadata?.make_instrumental === true;
+                                        const tagSource = isInstrumental && asset.metadata?.chosenStyles
+                                          ? asset.metadata.chosenStyles
+                                          : asset.metadata?.tags;
+                                        if (!tagSource) return null;
+                                        return (
+                                          <div className="flex flex-wrap gap-1 mt-2.5 mb-1">
+                                            {tagSource.split(',').map((tag: string, i: number) => (
+                                              <span
+                                                key={`${tag}-${i}`}
+                                                className={`px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm ${theme === 'dark'
+                                                  ? 'bg-zinc-800/50 border border-zinc-700/40 text-gray-300'
+                                                  : 'bg-gray-100 border border-gray-200 text-gray-600'
+                                                  }`}
+                                              >
+                                                {tag.trim()}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
                                     </CustomAudioPlayer>
                                   </div>
                                 )}
