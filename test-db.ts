@@ -3,15 +3,17 @@ import path from "path";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+import dotenv from "dotenv";
+
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 if (!getApps().length) {
   initializeApp({
-    projectId: firebaseConfig.projectId
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID
   });
 }
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(process.env.VITE_FIREBASE_DATABASE_ID);
 
 async function test() {
   try {

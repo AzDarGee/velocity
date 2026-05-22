@@ -35,17 +35,16 @@ const getAppUrl = (req?: express.Request) => {
 };
 
 // Initialize Firebase Admin
-let firebaseConfig: any = null;
-const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
-if (fs.existsSync(firebaseConfigPath)) {
-  try {
-    firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
-    console.log("Loaded firebase-applet-config.json. Project ID:", firebaseConfig.projectId);
-  } catch (err) {
-    console.error("Error reading firebase-applet-config.json:", err);
-  }
+let firebaseConfig: any = {
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  firestoreDatabaseId: process.env.VITE_FIREBASE_DATABASE_ID
+};
+
+if (!firebaseConfig.projectId) {
+  console.warn("VITE_FIREBASE_PROJECT_ID NOT FOUND in environment variables!");
 } else {
-  console.warn("firebase-applet-config.json NOT FOUND!");
+  console.log("Loaded Firebase config from environment variables. Project ID:", firebaseConfig.projectId);
 }
 
 // Ensure the default app is initialized
