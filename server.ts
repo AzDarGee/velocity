@@ -218,6 +218,36 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // API Route: Proxy audio files to bypass Firebase Storage CORS policy
+  app.get("/api/proxy-audio", async (req, res) => {
+    try {
+      const { url } = req.query;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "URL is required" });
+      }
+
+      const bucketName = process.env.VITE_FIREBASE_STORAGE_BUCKET || "velocity-223d2.firebasestorage.app";
+      const allowedPrefix = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/`;
+      if (!url.startsWith(allowedPrefix)) {
+        return res.status(400).json({ error: "Access denied: URL must be from the allowed Firebase Storage bucket." });
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "audio/mpeg";
+      res.setHeader("Content-Type", contentType);
+      
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      console.error("Proxy audio error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // API Route: Send Verification Email via Resend
   app.post("/api/auth/send-verification", async (req, res) => {
     try {
@@ -315,7 +345,7 @@ async function startServer() {
           isAdmin = true;
         }
       } catch (err: any) {
-        if (err.code !== 7 && !err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+        if (err.code !== 7 && !err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED') && !err.message?.includes('metadata.google.internal')) {
           console.error("Firestore Admin Check Error:", err.message);
         }
       }
@@ -328,7 +358,7 @@ async function startServer() {
             isAdmin = true;
           }
         } catch (err: any) {
-          if (!err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+          if (!err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED') && !err.message?.includes('metadata.google.internal')) {
             console.error("Auth Admin Check Error:", err.message);
           }
         }
@@ -413,7 +443,7 @@ async function startServer() {
           isAdmin = true;
         }
       } catch (err: any) {
-        if (err.code !== 7 && !err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+        if (err.code !== 7 && !err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED') && !err.message?.includes('metadata.google.internal')) {
           console.error("Firestore ListAuth Check Error:", err.message);
         }
       }
@@ -426,7 +456,7 @@ async function startServer() {
             isAdmin = true;
           }
         } catch (err: any) {
-          if (!err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED')) {
+          if (!err.message?.includes('403') && !err.message?.includes('PERMISSION_DENIED') && !err.message?.includes('metadata.google.internal')) {
             console.error("Auth ListAuth Check Error:", err.message);
           }
         }
@@ -454,7 +484,8 @@ async function startServer() {
         // More robust check for permission errors
         const isForbidden = error.code === 'permission-denied' || 
                            error.message?.includes('403') || 
-                           error.message?.includes('Identity Toolkit');
+                           error.message?.includes('Identity Toolkit') ||
+                           error.message?.includes('metadata.google.internal');
         
         if (isForbidden) {
           console.warn("Auth listUsers PERMISSION_DENIED. Returning empty user list.");

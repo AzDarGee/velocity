@@ -567,7 +567,23 @@ export function UserButton({
         return;
       }
 
-      const data = await response.json();
+      const responseClone = response.clone();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        checkoutWindow.close();
+        let errorMsg = `Server returned an invalid response (not JSON).`;
+        const rawText = await responseClone.text().catch(() => '');
+        if (rawText.includes('<!DOCTYPE html>') || rawText.includes('<html')) {
+          errorMsg += ` It appears to be an HTML page (likely a routing redirect or 404 fallback).`;
+        } else if (rawText) {
+          errorMsg += ` Response: ${rawText.substring(0, 100)}`;
+        }
+        alert(`Checkout failed: ${errorMsg}`);
+        return;
+      }
+
       if (data.url) {
         checkoutWindow.location.href = data.url;
       } else {

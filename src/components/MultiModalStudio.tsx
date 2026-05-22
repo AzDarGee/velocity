@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotatingQuotes } from './ui/RotatingQuotes';
-import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil, Search, Layout } from 'lucide-react';
+import { Image as ImageIcon, Video, Music, Wand2, Upload, Settings2, Download, RefreshCw, X, Play, Pause, Sparkles, BookOpen, Trash2, AlertCircle, Check, Square, CheckSquare, FileAudio, Copy, Pencil, Search, Layout, Info } from 'lucide-react';
 
 interface MultiModalStudioProps {
   theme: 'light' | 'dark';
@@ -657,14 +657,32 @@ export function MultiModalStudio({
       if (executeMode === 'image') systemPrompt += "Generate a highly detailed and descriptive prompt for an image generation model. Focus on composition, lighting, subject matter, style, and mood.";
       else if (executeMode === 'video') systemPrompt += "Generate a highly detailed, cinematic prompt for a video generation model (like Veo). Describe the scene, the motion, the camera movement, the lighting, and the overall atmosphere.";
       else if (executeMode === 'music') {
+        const modelDisplayNames: Record<string, string> = {
+          'V5_5': 'V5.5 Customized', 'V5': 'V5 Latest', 'V4_5ALL': 'V4.5 ALL',
+          'V4_5PLUS': 'V4.5 PLUS', 'V4_5': 'V4.5', 'V4': 'V4 Improved'
+        };
         systemPrompt += `Generate a creative master prompt for the Suno music generation model.
-Take into account the following active configurations:
-- Custom Mode: ${sunoCustomMode ? "Enabled" : "Disabled"}
-- Instrumental: ${sunoInstrumental ? "Yes" : "No"}
-- Title/Theme: "${sunoTitle || 'Untitled Track'}"
-- Styles/Genre: "${sunoStyles.join(', ') || 'Any'}"
+Take into account ALL of the following active configurations when crafting the prompt:
+
+## Core Settings
+- Suno Model Version: ${modelDisplayNames[sunoModel] || sunoModel}
+- Custom Mode: ${sunoCustomMode ? "Enabled (generate structured lyrics with section tags)" : "Disabled (generate a concise style description)"}
+- Instrumental: ${sunoInstrumental ? "Yes — NO vocals or lyrics" : "No — include vocals and lyrics"}
+
+## Song Identity
+- Title/Theme: "${sunoTitle || 'Untitled Track'}" — the prompt MUST reflect this title thematically
+- Styles/Genre: "${sunoStyles.join(', ') || 'Any'}" — adhere closely to these styles
 - Vocal Gender: "${sunoVocalGender || 'Any'}"
-- Negative/Excluded Tags: "${sunoNegativeTags || 'None'}"
+- Negative/Excluded Tags: "${sunoNegativeTags || 'None'}" — avoid these elements entirely
+
+## Advanced Parameters
+- Persona ID: ${sunoPersonaId || 'None (default voice)'}
+- Persona Model: ${sunoPersonaModel || 'None'}
+- Style Weight: ${sunoStyleWeight.toFixed(2)} (0=loose, 1=strict adherence to style tags)
+- Weirdness Constraint: ${sunoWeirdnessConstraint.toFixed(2)} (0=conventional, 1=experimental/avant-garde)
+- Audio Weight: ${sunoAudioWeight.toFixed(2)} (balance between prompt fidelity and audio quality)
+
+IMPORTANT: The generated prompt should reflect the style weight — if it is high (>0.7), stay very close to the specified genres/styles. If weirdness is high (>0.7), incorporate unusual, experimental, or avant-garde elements. If a persona is specified, tailor the vocal style and delivery to match.
 
 `;
 
@@ -756,7 +774,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 `;
           }
         } else {
-          systemPrompt += `Since Custom Mode is disabled, generate a concise, highly descriptive prompt (max 200 characters) describing the style, genre, instrumentation, tempo, mood, and vocal attributes matching the active configurations (Genre: ${sunoStyles.join(', ') || 'Any'}, Title: ${sunoTitle || 'Any'}, Instrumental: ${sunoInstrumental ? 'Yes' : 'No'}, Vocals: ${sunoVocalGender || 'Any'}). Describe the composition vividly.`;
+          systemPrompt += `Since Custom Mode is disabled, generate a concise, highly descriptive prompt (max 200 characters) describing the style, genre, instrumentation, tempo, mood, and vocal attributes. Use ALL of the active configurations: Model: ${sunoModel}, Genre: ${sunoStyles.join(', ') || 'Any'}, Title: ${sunoTitle || 'Any'}, Instrumental: ${sunoInstrumental ? 'Yes' : 'No'}, Vocals: ${sunoVocalGender || 'Any'}, Style Weight: ${sunoStyleWeight.toFixed(2)}, Weirdness: ${sunoWeirdnessConstraint.toFixed(2)}. Describe the composition vividly and concisely.`;
         }
       }
 
@@ -834,19 +852,19 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 
     let finalUrl: string | undefined = undefined;
     let modelUsed = "";
-    let finalMetadata: any = { prompt };
+    let finalMetadata: any = { prompt: currentPrompt };
 
     try {
       // Credit deduction moved to after successful generation and save.
 
-      if (activeMode === 'music') {
+      if (executeMode === 'music') {
         const apiKey = (import.meta as any).env.VITE_SUNO_API_KEY;
         if (!apiKey) {
           throw new Error('VITE_SUNO_API_KEY environment variable is required to generate music with Suno AI.');
         }
         modelUsed = "Suno AI";
         const payload: any = {
-          prompt: prompt,
+          prompt: currentPrompt,
           customMode: sunoCustomMode,
           instrumental: sunoInstrumental,
           model: sunoModel,
@@ -886,9 +904,9 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 
         const audioUrl = sunoItem.audioUrl || sunoItem.streamAudioUrl || sunoItem.audio_url || sunoItem.url;
 
-        const parsedPrompt = parseSongDescriptionAndLyrics(prompt);
+        const parsedPrompt = parseSongDescriptionAndLyrics(currentPrompt);
         finalMetadata = { 
-          prompt: sunoCustomMode ? parsedPrompt.cleanText : prompt, 
+          prompt: sunoCustomMode ? parsedPrompt.cleanText : currentPrompt, 
           task_id: taskId, 
           ...sunoItem,
           lyrics: sunoCustomMode ? parsedPrompt.cleanText : (sunoItem.lyrics || ""),
@@ -933,7 +951,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
         }
 
         finalUrl = URL.createObjectURL(blob);
-      } else if (activeMode === 'image' || activeMode === 'video') {
+      } else if (executeMode === 'image' || executeMode === 'video') {
         const { GoogleGenAI } = await import("@google/genai");
 
         // Paid model check
@@ -949,11 +967,11 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
         if (!apiKey) throw new Error("Gemini API Key is required for synthesis.");
         const genAI = new GoogleGenAI({ apiKey });
 
-        if (activeMode === 'image') {
+        if (executeMode === 'image') {
           modelUsed = "Gemini 3.1 Flash Image";
           const response = await genAI.models.generateContent({
             model: "gemini-3.1-flash-image-preview",
-            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Style: ${imageStyles.join(", ")}. Do not output text, only generate the image: ${prompt}` }] }],
+            contents: [{ parts: [{ text: `Generate an image representing the following concept or description. Style: ${imageStyles.join(", ")}. Do not output text, only generate the image: ${currentPrompt}` }] }],
             config: {
               imageConfig: {
                 aspectRatio: aspectRatio as any,
@@ -969,11 +987,11 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
             console.error("Image generation failed, response:", JSON.stringify(response));
             throw new Error(`Failed to generate an image. The model returned: ${response.candidates?.[0]?.content?.parts?.[0]?.text || 'No output.'}`);
           }
-        } else if (activeMode === 'video') {
+        } else if (executeMode === 'video') {
           modelUsed = "Veo 3.1";
           let operation = await genAI.models.generateVideos({
             model: 'veo-3.1-lite-generate-preview',
-            prompt: prompt,
+            prompt: currentPrompt,
             config: {
               numberOfVideos: 1,
               resolution: resolution === '4k' ? '1080p' : (resolution as any),
@@ -1021,7 +1039,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
           try {
             const coverImageResponse = await genAI.models.generateContent({
               model: "gemini-3.1-flash-image-preview",
-              contents: [{ parts: [{ text: `Generate a high quality cover image for the following video concept. No text on the image. Concept: ${prompt}` }] }],
+              contents: [{ parts: [{ text: `Generate a high quality cover image for the following video concept. No text on the image. Concept: ${currentPrompt}` }] }],
               config: {
                 imageConfig: {
                   aspectRatio: aspectRatio as any,
@@ -1041,8 +1059,8 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
       const endTime = Date.now();
       finalMetadata.generationTimeMs = endTime - startTime;
 
-      let assetName = `${activeMode}_generation_${prompt.substring(0, 10).replace(/[^a-zA-Z0-9_\-]/g, "")}.${activeMode === 'music' ? 'mp3' : activeMode === 'image' ? 'png' : 'mp4'}`;
-      if (activeMode === 'music') {
+      let assetName = `${executeMode}_generation_${currentPrompt.substring(0, 10).replace(/[^a-zA-Z0-9_\-]/g, "")}.${executeMode === 'music' ? 'mp3' : executeMode === 'image' ? 'png' : 'mp4'}`;
+      if (executeMode === 'music') {
         const titleToUse = sunoTitle || finalMetadata.title;
         if (titleToUse && titleToUse !== 'Generated Track') {
           assetName = `${titleToUse.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, "_")}.mp3`;
@@ -1051,7 +1069,7 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 
       const newAsset: MediaAsset = {
         id: `gen-${Math.random().toString(36).substr(2, 9)}`,
-        type: activeMode === 'music' ? 'audio' : activeMode,
+        type: executeMode === 'music' ? 'audio' : executeMode,
         source: 'generated',
         name: assetName,
         model: modelUsed,
@@ -1118,12 +1136,12 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
 
             const activityRef = doc(collection(db, 'users', userId, 'activity'));
             transaction.set(activityRef, {
-              type: `${activeMode}_generation`,
-              description: `${activeMode.charAt(0).toUpperCase() + activeMode.slice(1)} Synthesis`,
+              type: `${executeMode}_generation`,
+              description: `${executeMode.charAt(0).toUpperCase() + executeMode.slice(1)} Synthesis`,
               cost: cost,
               timestamp: serverTimestamp(),
               metadata: {
-                prompt: prompt.substring(0, 500)
+                prompt: currentPrompt.substring(0, 500)
               }
             });
           }).catch(err => {
@@ -1205,11 +1223,18 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
       // Now attach cover to the actual MP3 file using browser-id3-writer
       if (asset.url) {
         try {
-          const { getBytes, uploadBytes } = await import('firebase/storage');
+          const { uploadBytes } = await import('firebase/storage');
 
           // asset.url is the download URL which can be parsed by `ref` directly
           const audioStorageRef = ref(storage, asset.url);
-          const audioBuffer = await getBytes(audioStorageRef);
+
+          // Fetch the audio file through the server proxy to avoid cross-origin (CORS) blocks
+          const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(asset.url)}`;
+          const response = await fetch(proxyUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch audio from proxy: ${response.statusText}`);
+          }
+          const audioBuffer = await response.arrayBuffer();
 
           // Convert base64 to ArrayBuffer for ID3Writer
           const binaryString = window.atob(imagePart.inlineData.data);
@@ -2041,7 +2066,22 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
               <div className="space-y-4 pt-4 border-t border-current/10">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt ({activeMode})</label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] md:text-xs font-mono uppercase opacity-60 font-bold block">Master Prompt ({activeMode})</label>
+                      {activeMode === 'music' && sunoCustomMode && (
+                        <div className="relative group">
+                          <Info 
+                            className={`w-3.5 h-3.5 cursor-help transition-colors ${theme === 'dark' ? 'text-orange-500/60 hover:text-orange-500' : 'text-orange-600/60 hover:text-orange-600'}`}
+                            title="Custom Mode Active: Auto-generate will produce Suno-formatted lyrics with section tags like [Verse], [Chorus], vocal cues in (parentheses), and a [Song Description] block. All your model configs are factored into generation."
+                          />
+                          <div className={`absolute bottom-full left-0 mb-2 px-3 py-2 text-[10px] font-mono leading-relaxed w-64 border pointer-events-none opacity-0 scale-95 translate-y-1 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-y-0 transition-all duration-300 ease-out z-50 ${theme === 'dark' ? 'bg-[#1A1A1A] border-orange-500 text-orange-500 shadow-[0_4px_20px_rgba(249,115,22,0.25)]' : 'bg-[#FFF7ED] border-orange-500 text-orange-700 shadow-[0_4px_20px_rgba(249,115,22,0.15)]'}`}>
+                            <p className="font-bold uppercase tracking-wider mb-1">Custom Mode Active</p>
+                            <p>Auto-generate will produce <strong>Suno-formatted lyrics</strong> with section tags like [Verse], [Chorus], vocal cues in (parentheses), and a [Song Description] block. All your model configs (model, song title, style, persona, weights) are factored into generation.</p>
+                            <div className={`absolute top-full left-2 w-2 h-2 rotate-45 border-b border-r border-orange-500 ${theme === 'dark' ? 'bg-[#1A1A1A]' : 'bg-[#FFF7ED]'}`} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       {prompt.length > 200 && (
                         <button
@@ -2559,59 +2599,6 @@ Make sure the lyrics match the Title/Theme ("${sunoTitle || 'Untitled Track'}"),
                                 {/* Asset Actions */}
                                 {asset.type !== 'audio' && (
                                   <div className="flex flex-wrap gap-2 mb-4">
-                                    {false && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleGenerateCover(asset); }}
-                                        disabled={coverGeneratingAssets.has(asset.id)}
-                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-white' : 'border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white'
-                                          } ${coverGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="Generate Song Cover"
-                                      >
-                                        {coverGeneratingAssets.has(asset.id) ? (
-                                          <RefreshCw className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          <Sparkles className="w-4 h-4" />
-                                        )}
-                                      </button>
-                                    )}
-                                    {asset.source === 'generated' && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleConvertToWav(asset); }}
-                                        disabled={wavGeneratingAssets.has(asset.id)}
-                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark'
-                                          ? asset.metadata?.wavUrl
-                                            ? 'border-green-500/30 text-green-500 hover:bg-green-600 hover:text-white'
-                                            : 'border-sky-500/30 text-sky-500 hover:bg-sky-600 hover:text-white'
-                                          : asset.metadata?.wavUrl
-                                            ? 'border-green-500/30 text-green-600 hover:bg-green-600 hover:text-white'
-                                            : 'border-sky-500/30 text-sky-600 hover:bg-sky-600 hover:text-white'
-                                          } ${wavGeneratingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title={asset.metadata?.wavUrl ? "Download WAV" : "Generate WAV"}
-                                      >
-                                        {wavGeneratingAssets.has(asset.id) ? (
-                                          <RefreshCw className="w-4 h-4 animate-spin" />
-                                        ) : asset.metadata?.wavUrl ? (
-                                          <Download className="w-4 h-4" />
-                                        ) : (
-                                          <FileAudio className="w-4 h-4" />
-                                        )}
-                                      </button>
-                                    )}
-                                    {false && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleFetchTimestampedLyrics(asset); }}
-                                        disabled={lyricsLoadingAssets.has(asset.id)}
-                                        className={`w-8 h-8 flex items-center justify-center border-2 transition-colors ${theme === 'dark' ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-black' : 'border-indigo-500/30 text-indigo-600 hover:bg-indigo-500 hover:text-white'
-                                          } ${lyricsLoadingAssets.has(asset.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="View Temporal Lyrics"
-                                      >
-                                        {lyricsLoadingAssets.has(asset.id) ? (
-                                          <RefreshCw className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          <Wand2 className="w-4 h-4" />
-                                        )}
-                                      </button>
-                                    )}
                                     {asset.source === 'generated' && (
                                       <button
                                         onClick={() => onAddAssetToNarrative?.(asset)}
