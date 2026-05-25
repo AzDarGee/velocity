@@ -1,6 +1,48 @@
+# Dependencies (will be installed fresh in Docker)
 node_modules
+
+# Build output (will be built fresh in Docker)
 dist
+build
+
+# Environment files (secrets injected via build args)
 .env
+.env.local
+.env.production
+
+# Version control
 .git
 .gitignore
+
+# Documentation
 README.md
+AGENTS.md
+*.md
+!.env.example
+
+# IDE / Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+coverage
+__tests__
+*.test.*
+*.spec.*
+
+# Misc
+.antigravityignore
+or_models.json
+test-db.ts
+cors.json

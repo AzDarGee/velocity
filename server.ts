@@ -2,11 +2,11 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import tmp from 'tmp';
+
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
-import { GoogleGenAI } from "@google/genai";
+
 import dotenv from "dotenv";
 
 import { getFirestore } from "firebase-admin/firestore";

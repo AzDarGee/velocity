@@ -1,42 +1,78 @@
-# Use an official Node runtime as a parent image
-FROM node:22-alpine
+# =========================================================
+# Stage 1: Install ALL dependencies (build + runtime)
+# =========================================================
+FROM node:20-alpine AS deps
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json to the workspace
-COPY package*.json ./
+# Copy dependency configuration files
+COPY package.json package-lock.json* ./
 
-# Install application dependencies
-# We use --legacy-peer-deps to ignore peer dependency conflicts (common with React 19)
+# Install ALL packages (including devDependencies for build)
 RUN npm install --legacy-peer-deps
 
-# Copy the rest of the application source code
-COPY . .
+# =========================================================
+# Stage 2: Build Phase (Compile frontend + server)
+# =========================================================
+FROM node:20-alpine AS builder
 
-# Set environment variable to ensure production mode
-ENV NODE_ENV=production
+WORKDIR /app
 
-# The start command assumes port 3000, explicitly set it for clarity
-ENV PORT=3000
+# Copy installed node_modules from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json ./package.json
+COPY --from=deps /app/package-lock.json* ./
 
-# Expose Gemini API key at build time for Vite static injection
+# Declare Build Arguments (Vite embeds VITE_* variables during build)
 ARG GEMINI_API_KEY
-ENV GEMINI_API_KEY=$GEMINI_API_KEY
-
 ARG VITE_STRIPE_PUBLISHABLE_KEY
-ENV VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY
-
 ARG STRIPE_SECRET_KEY
+
+# Set arguments as system envs in the build container
+ENV GEMINI_API_KEY=$GEMINI_API_KEY
+ENV VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY
 ENV STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY
 
-# Build the Vite frontend and compile the Express server backend
-# Note: This will produce dist/index.html and dist/server.js based on your package.json
+# Copy all codebase files, configs, and assets
+COPY . .
+
+# Build Vite frontend (dist/) AND compile server.ts → dist/server.mjs
 RUN npm run build
 
-# Expose the application port
-EXPOSE 3000
+# =========================================================
+# Stage 3: Production Runner (Lean image with nginx + node)
+# =========================================================
+FROM node:20-alpine AS runner
 
-# Start the Node Express server. 
-# This runs the compiled server built by the 'npm run build' step
-CMD ["npm", "run", "start"]
+# Install nginx
+RUN apk add --no-cache nginx
+
+WORKDIR /app
+
+# Copy ONLY production dependencies
+COPY --from=deps /app/package.json ./package.json
+COPY --from=deps /app/package-lock.json* ./
+RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
+
+# Copy compiled assets from builder
+COPY --from=builder /app/dist ./dist
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/http.d/default.conf
+
+# Copy environment config files
+COPY .env.example ./
+COPY .env.local* ./
+
+# Copy and set up entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set production mode
+ENV NODE_ENV=production
+
+# Expose port 80 (nginx serves everything)
+EXPOSE 80
+
+# Start both nginx and the Node.js API server
+CMD ["/entrypoint.sh"]
